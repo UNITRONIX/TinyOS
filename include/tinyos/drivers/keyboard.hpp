@@ -1,0 +1,21 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+
+namespace tinyos::drivers::keyboard
+{
+    void initialize();
+    void enable_interrupt_input();
+    bool interrupt_input_enabled();
+    void handle_irq();
+    char read_char();
+    void read_line(char* buffer, size_t max_length);
+    size_t buffered_character_count();
+    uint64_t irq_scancode_count();
+    uint64_t polled_scancode_count();
+    uint64_t ignored_scancode_count();
+    uint64_t dropped_character_count();
+    bool has_seen_scancode();
+    uint8_t last_scancode();
+}

@@ -1,0 +1,2 @@
+TinyOS initrd placeholder module
+This file proves the boot-module pipeline is present.

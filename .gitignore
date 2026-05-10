@@ -1,0 +1,60 @@
+# Local editor and IDE state
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+ipch/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Build outputs
+/tinyos.kernel
+/build/*
+!/build/linker.ld
+!/build/grub/
+!/build/grub/grub.cfg
+!/build/initrd/
+!/build/initrd/initrd-placeholder.txt
+*.o
+*.obj
+*.elf
+*.bin
+*.img
+*.iso
+*.map
+*.log
+
+# Generated packages, signatures, checksums and deploy artifacts
+/security/*.iso
+/security/*.iso.*
+/security/*.age
+/security/*.sig
+*.sig
+*.sig.receipt
+*.sha256
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.agekey
+*.agekey.*
+*private*
+*secret*
+
+# Tool caches
+.cache/
+.pytest_cache/

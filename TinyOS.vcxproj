@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>MakeFileProj</Keyword>
+    <ProjectGuid>{AB9C8A34-3A2D-47E7-88A2-D7D7C596B001}</ProjectGuid>
+    <RootNamespace>TinyOS</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NMakeBuildCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task iso</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task clean; powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task iso</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task clean</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)build\tinyos.iso</NMakeOutput>
+    <IncludePath>$(ProjectDir)include;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)build\vs\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\vs\obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NMakeBuildCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task iso</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task clean; powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task iso</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Task clean</NMakeCleanCommandLine>
+    <NMakeOutput>$(ProjectDir)build\tinyos.iso</NMakeOutput>
+    <IncludePath>$(ProjectDir)include;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)build\vs\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\vs\obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClInclude Include="include\tinyos\api\system_api.hpp" />
+    <ClInclude Include="include\tinyos\arch\context.hpp" />
+    <ClInclude Include="include\tinyos\boot\multiboot.hpp" />
+    <ClInclude Include="include\tinyos\arch\interrupts.hpp" />
+    <ClInclude Include="include\tinyos\arch\hal.hpp" />
+    <ClInclude Include="include\tinyos\arch\io.hpp" />
+    <ClInclude Include="include\tinyos\config.hpp" />
+    <ClInclude Include="include\tinyos\core\memory.hpp" />
+    <ClInclude Include="include\tinyos\core\string.hpp" />
+    <ClInclude Include="include\tinyos\drivers\input.hpp" />
+    <ClInclude Include="include\tinyos\drivers\keyboard.hpp" />
+    <ClInclude Include="include\tinyos\drivers\pic.hpp" />
+    <ClInclude Include="include\tinyos\drivers\pit.hpp" />
+    <ClInclude Include="include\tinyos\drivers\serial.hpp" />
+    <ClInclude Include="include\tinyos\drivers\vga.hpp" />
+    <ClInclude Include="include\tinyos\kernel\kernel.hpp" />
+    <ClInclude Include="include\tinyos\kernel\elf\loader.hpp" />
+    <ClInclude Include="include\tinyos\kernel\initrd\modules.hpp" />
+    <ClInclude Include="include\tinyos\kernel\klog.hpp" />
+    <ClInclude Include="include\tinyos\kernel\interrupts.hpp" />
+    <ClInclude Include="include\tinyos\kernel\memory\frame_allocator.hpp" />
+    <ClInclude Include="include\tinyos\kernel\memory\heap.hpp" />
+    <ClInclude Include="include\tinyos\kernel\memory\memory_map.hpp" />
+    <ClInclude Include="include\tinyos\kernel\memory\paging.hpp" />
+    <ClInclude Include="include\tinyos\kernel\panic.hpp" />
+    <ClInclude Include="include\tinyos\shell\shell.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="api\system_api.cpp" />
+    <ClCompile Include="arch\i686\arch.cpp" />
+    <ClCompile Include="arch\i686\context.cpp" />
+    <ClCompile Include="arch\i686\interrupts.cpp" />
+    <ClCompile Include="arch\i686\io.cpp" />
+    <ClCompile Include="core\memory.cpp" />
+    <ClCompile Include="core\string.cpp" />
+    <ClCompile Include="drivers\input.cpp" />
+    <ClCompile Include="drivers\keyboard.cpp" />
+    <ClCompile Include="drivers\pic.cpp" />
+    <ClCompile Include="drivers\pit.cpp" />
+    <ClCompile Include="drivers\serial.cpp" />
+    <ClCompile Include="drivers\vga.cpp" />
+    <ClCompile Include="kernel\kernel.cpp" />
+    <ClCompile Include="kernel\elf\loader.cpp" />
+    <ClCompile Include="kernel\initrd\modules.cpp" />
+    <ClCompile Include="kernel\interrupts.cpp" />
+    <ClCompile Include="kernel\klog.cpp" />
+    <ClCompile Include="kernel\memory\address_space.cpp" />
+    <ClCompile Include="kernel\memory\frame_allocator.cpp" />
+    <ClCompile Include="kernel\memory\heap.cpp" />
+    <ClCompile Include="kernel\memory\memory_map.cpp" />
+    <ClCompile Include="kernel\memory\paging.cpp" />
+    <ClCompile Include="kernel\panic.cpp" />
+    <ClCompile Include="kernel\sched\scheduler.cpp" />
+    <ClCompile Include="kernel\security\integrity.cpp" />
+    <ClCompile Include="kernel\syscall\syscall.cpp" />
+    <ClCompile Include="kernel\task\task.cpp" />
+    <ClCompile Include="kernel\user\transition.cpp" />
+    <ClCompile Include="kernel\vfs\ramfs.cpp" />
+    <ClCompile Include="kernel\vfs\vfs.cpp" />
+    <ClCompile Include="shell\shell.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="boot\multiboot.asm" />
+    <None Include="arch\i686\interrupt_stubs.asm" />
+    <None Include="build\grub\grub.cfg" />
+    <None Include="build\initrd\initrd-placeholder.txt" />
+    <None Include="build\linker.ld" />
+    <None Include="docs\implementation-roadmap.md" />
+    <None Include="docs\os-roadmap.md" />
+    <None Include="docs\security-roadmap.md" />
+    <None Include="docs\testing.md" />
+    <None Include="Makefile" />
+    <None Include="README.md" />
+    <None Include="scripts\build.ps1" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

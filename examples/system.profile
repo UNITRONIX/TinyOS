@@ -1,0 +1,17 @@
+profile.name=developer-secure-image
+profile.version=0
+target.arch=i686
+target.boot=grub-multiboot-iso
+image.boot=iso
+image.minimum_ram_mib=32
+apps.required=system-shell
+apps.planned=example-system-tool,desktop-shell,web-gui-host,selfhost-toolchain
+apps.packages=examples/example-system-tool.tapp
+files.include=/system,/apps,/users
+security.signing=required
+security.app_signing=required
+security.trust_store=development-only
+security.encryption=recommended
+security.capabilities=least-privilege
+deploy.transport=ssh-scp-now,tinylink-later
+deploy.rollback=planned
