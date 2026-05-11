@@ -43,6 +43,8 @@ make iso
 make run
 ```
 
+The default boot path starts the TinyOS terminal. The framebuffer desktop remains an optional preview through `make run-framebuffer-preview`.
+
 ## Roadmaps
 
 - `docs/os-roadmap.md` - staged plan for growing TinyOS into a real OS.

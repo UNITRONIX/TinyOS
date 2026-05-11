@@ -5,6 +5,7 @@
 #include <tinyos/config.hpp>
 #include <tinyos/drivers/input.hpp>
 #include <tinyos/drivers/keyboard.hpp>
+#include <tinyos/drivers/mouse.hpp>
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
@@ -212,6 +213,23 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::memory::paging::is_runtime_enabled(), "Runtime paging did not enable.");
     TINYOS_ASSERT(tinyos::kernel::memory::paging::active_page_directory_address() == tinyos::kernel::memory::paging::page_directory_address(), "Runtime paging CR3 mismatch.");
 
+    if (const auto* linear = tinyos::kernel::device::framebuffer::linear_surface(); linear != nullptr)
+    {
+        const size_t fb_bytes = static_cast<size_t>(linear->pitch) * static_cast<size_t>(linear->height);
+        const size_t mapped = tinyos::kernel::memory::paging::map_identity_range(
+            linear->address,
+            fb_bytes,
+            tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite);
+        if (mapped == 0)
+        {
+            tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Warn, "Linear framebuffer identity mapping failed.");
+        }
+        else
+        {
+            tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Linear framebuffer identity-mapped for GUI rendering.");
+        }
+    }
+
     tinyos::kernel::device::block::initialize();
     TINYOS_ASSERT(tinyos::kernel::device::block::validation_self_test(), "Block device scaffold validation failed.");
     register_device_or_panic("ram-block0", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagVirtual | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
@@ -294,6 +312,13 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::drivers::keyboard::initialize();
     register_device_or_panic("keyboard-ps2", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 1, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
     debug_boot_checkpoint("keyboard driver ready");
+    TINYOS_ASSERT(tinyos::drivers::mouse::packet_decoder_self_test(), "PS/2 mouse packet decoder validation failed.");
+    tinyos::drivers::mouse::initialize();
+    if (tinyos::drivers::mouse::is_ready())
+    {
+        register_device_or_panic("mouse-ps2", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 3, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
+        debug_boot_checkpoint("mouse driver ready");
+    }
 
     TINYOS_ASSERT(tinyos::kernel::device::count() >= 9, "Device registry core devices missing.");
     TINYOS_ASSERT(tinyos::kernel::device::ready_count() == tinyos::kernel::device::count(), "Device registry contains non-ready core devices.");
@@ -307,10 +332,15 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::drivers::pic::clear_mask(0);
     tinyos::drivers::keyboard::enable_interrupt_input();
     tinyos::drivers::pic::clear_mask(1);
+    if (tinyos::drivers::mouse::is_ready())
+    {
+        tinyos::drivers::pic::clear_mask(12);
+    }
     tinyos::arch::interrupts::enable();
     tinyos::kernel::interrupts::set_hardware_irq_enabled(true);
     TINYOS_ASSERT(!tinyos::drivers::pic::is_masked(0), "PIT IRQ0 is still masked after rollout.");
     TINYOS_ASSERT(!tinyos::drivers::pic::is_masked(1), "Keyboard IRQ1 is still masked after rollout.");
+    TINYOS_ASSERT(!tinyos::drivers::mouse::is_ready() || !tinyos::drivers::pic::is_masked(12), "Mouse IRQ12 is still masked after rollout.");
     TINYOS_ASSERT(wait_for_timer_stability(), "PIT IRQ0 stability check failed.");
     debug_boot_checkpoint("pit irq0 stability check complete");
 
@@ -373,9 +403,21 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PIT IRQ0 stable at 100 Hz.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Keyboard IRQ1 enabled with polling fallback.");
+    if (tinyos::drivers::mouse::is_ready())
+    {
+        tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PS/2 mouse IRQ12 enabled for graphical desktop.");
+    }
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch ABI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
+    #if defined(TINYOS_GRAPHICAL_AUTOSTART)
+        if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
+        {
+            (void)tinyos::ui::graphical_desktop::run_session();
+            tinyos::ui::renderer::initialize();
+            tinyos::ui::terminal::initialize();
+        }
+    #endif
     tinyos::api::print("Architecture: ");
     tinyos::api::print(tinyos::config::Architecture);
     tinyos::api::print("\n");

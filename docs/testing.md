@@ -78,13 +78,13 @@ make run-gui
 
 This uses the safe text console boot path. Start the desktop with `desktop`; use `q` to return to the terminal.
 
-The experimental framebuffer preview is kept separate because TinyOS does not yet have a full framebuffer text console:
+The framebuffer desktop preview is kept separate because TinyOS does not yet have a full framebuffer text console:
 
 ```sh
 make run-framebuffer-preview
 ```
 
-That target is for renderer development only until terminal output can be drawn on the linear framebuffer.
+That target boots the linear framebuffer build and autostarts the graphical desktop directly. It is the current path for the pixel renderer, PS/2 mouse cursor, dock, draggable windows and clickable app launchers. Use `q` to leave the graphical session; the normal `make run-gui` path remains the safe terminal-first boot.
 
 Run the graphical boot smoke test:
 

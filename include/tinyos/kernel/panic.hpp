@@ -16,11 +16,14 @@ namespace tinyos::kernel
         } \
     } while (false)
 
-#define TINYOS_WARN_ON(condition, message) \
+#define TINYOS_WARN_ON_CATEGORY(condition, category, message) \
     do \
     { \
         if (condition) \
         { \
-            ::tinyos::kernel::klog::write_line(::tinyos::kernel::klog::Level::Warn, message); \
+            ::tinyos::kernel::klog::write_warning(category, message); \
         } \
     } while (false)
+
+#define TINYOS_WARN_ON(condition, message) \
+    TINYOS_WARN_ON_CATEGORY(condition, ::tinyos::kernel::klog::WarningCategory::Generic, message)

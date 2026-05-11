@@ -1,19 +1,55 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <tinyos/drivers/mouse.hpp>
+#include <tinyos/ui/events.hpp>
 #include <tinyos/ui/graphical_desktop.hpp>
-#include <tinyos/drivers/keyboard.hpp>
 #include <tinyos/ui/renderer.hpp>
 
 namespace
 {
     constexpr size_t AppCount = 4;
+    constexpr uint32_t MinWidth = 320;
+    constexpr uint32_t MinHeight = 200;
+
+    struct Rect
+    {
+        uint32_t x;
+        uint32_t y;
+        uint32_t width;
+        uint32_t height;
+    };
+
     uint64_t g_renders = 0;
     uint64_t g_handled_keys = 0;
     uint64_t g_launches = 0;
+    uint64_t g_pointer_events = 0;
     size_t g_selected_app = 0;
     size_t g_focused_app = 0;
     bool g_open_apps[AppCount] = {};
+    bool g_window_initialized[AppCount] = {};
+    uint32_t g_window_x[AppCount] = {};
+    uint32_t g_window_y[AppCount] = {};
+    uint32_t g_window_w[AppCount] = {};
+    uint32_t g_window_h[AppCount] = {};
+    uint32_t g_pointer_x = 120;
+    uint32_t g_pointer_y = 120;
+    bool g_dragging = false;
+    size_t g_dragged_app = 0;
+    uint32_t g_drag_offset_x = 0;
+    uint32_t g_drag_offset_y = 0;
+
+    const char* app_name(size_t index)
+    {
+        switch (index)
+        {
+        case 0: return "Terminal";
+        case 1: return "Files";
+        case 2: return "Browser";
+        case 3: return "Settings";
+        default: return "App";
+        }
+    }
 
     tinyos::ui::renderer::Color color(uint8_t red, uint8_t green, uint8_t blue)
     {
@@ -25,9 +61,14 @@ namespace
         return value;
     }
 
-    uint32_t scale(uint32_t value, uint32_t source, uint32_t target)
+    uint32_t scale_x(uint32_t value, const tinyos::ui::renderer::State* state)
     {
-        return target == 0 ? 0 : (value * source) / target;
+        return state->width == 0 ? 0 : (value * state->width) / 1024;
+    }
+
+    uint32_t scale_y(uint32_t value, const tinyos::ui::renderer::State* state)
+    {
+        return state->height == 0 ? 0 : (value * state->height) / 768;
     }
 
     bool fill(uint32_t x, uint32_t y, uint32_t width, uint32_t height, tinyos::ui::renderer::Color fill_color)
@@ -35,151 +76,412 @@ namespace
         return tinyos::ui::renderer::fill_pixels(x, y, width, height, fill_color);
     }
 
-    bool draw_frame(uint32_t x, uint32_t y, uint32_t width, uint32_t height, tinyos::ui::renderer::Color edge, tinyos::ui::renderer::Color body)
+    bool contains(Rect rect, uint32_t x, uint32_t y)
     {
-        if (width < 2 || height < 2)
+        return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+    }
+
+    const uint8_t* glyph_for(char character)
+    {
+        if (character >= 'a' && character <= 'z')
+        {
+            character = static_cast<char>(character - 32);
+        }
+
+        static constexpr uint8_t A[5] = { 0x7E, 0x09, 0x09, 0x09, 0x7E };
+        static constexpr uint8_t B[5] = { 0x7F, 0x49, 0x49, 0x49, 0x36 };
+        static constexpr uint8_t C[5] = { 0x3E, 0x41, 0x41, 0x41, 0x22 };
+        static constexpr uint8_t D[5] = { 0x7F, 0x41, 0x41, 0x22, 0x1C };
+        static constexpr uint8_t E[5] = { 0x7F, 0x49, 0x49, 0x49, 0x41 };
+        static constexpr uint8_t F[5] = { 0x7F, 0x09, 0x09, 0x09, 0x01 };
+        static constexpr uint8_t G[5] = { 0x3E, 0x41, 0x49, 0x49, 0x7A };
+        static constexpr uint8_t H[5] = { 0x7F, 0x08, 0x08, 0x08, 0x7F };
+        static constexpr uint8_t I[5] = { 0x00, 0x41, 0x7F, 0x41, 0x00 };
+        static constexpr uint8_t J[5] = { 0x20, 0x40, 0x41, 0x3F, 0x01 };
+        static constexpr uint8_t K[5] = { 0x7F, 0x08, 0x14, 0x22, 0x41 };
+        static constexpr uint8_t L[5] = { 0x7F, 0x40, 0x40, 0x40, 0x40 };
+        static constexpr uint8_t M[5] = { 0x7F, 0x02, 0x0C, 0x02, 0x7F };
+        static constexpr uint8_t N[5] = { 0x7F, 0x04, 0x08, 0x10, 0x7F };
+        static constexpr uint8_t O[5] = { 0x3E, 0x41, 0x41, 0x41, 0x3E };
+        static constexpr uint8_t P[5] = { 0x7F, 0x09, 0x09, 0x09, 0x06 };
+        static constexpr uint8_t Q[5] = { 0x3E, 0x41, 0x51, 0x21, 0x5E };
+        static constexpr uint8_t R[5] = { 0x7F, 0x09, 0x19, 0x29, 0x46 };
+        static constexpr uint8_t S[5] = { 0x46, 0x49, 0x49, 0x49, 0x31 };
+        static constexpr uint8_t T[5] = { 0x01, 0x01, 0x7F, 0x01, 0x01 };
+        static constexpr uint8_t U[5] = { 0x3F, 0x40, 0x40, 0x40, 0x3F };
+        static constexpr uint8_t V[5] = { 0x1F, 0x20, 0x40, 0x20, 0x1F };
+        static constexpr uint8_t W[5] = { 0x7F, 0x20, 0x18, 0x20, 0x7F };
+        static constexpr uint8_t X[5] = { 0x63, 0x14, 0x08, 0x14, 0x63 };
+        static constexpr uint8_t Y[5] = { 0x03, 0x04, 0x78, 0x04, 0x03 };
+        static constexpr uint8_t Z[5] = { 0x61, 0x51, 0x49, 0x45, 0x43 };
+        static constexpr uint8_t N0[5] = { 0x3E, 0x51, 0x49, 0x45, 0x3E };
+        static constexpr uint8_t N1[5] = { 0x00, 0x42, 0x7F, 0x40, 0x00 };
+        static constexpr uint8_t N2[5] = { 0x42, 0x61, 0x51, 0x49, 0x46 };
+        static constexpr uint8_t N3[5] = { 0x21, 0x41, 0x45, 0x4B, 0x31 };
+        static constexpr uint8_t N4[5] = { 0x18, 0x14, 0x12, 0x7F, 0x10 };
+        static constexpr uint8_t N5[5] = { 0x27, 0x45, 0x45, 0x45, 0x39 };
+        static constexpr uint8_t N6[5] = { 0x3C, 0x4A, 0x49, 0x49, 0x30 };
+        static constexpr uint8_t N7[5] = { 0x01, 0x71, 0x09, 0x05, 0x03 };
+        static constexpr uint8_t N8[5] = { 0x36, 0x49, 0x49, 0x49, 0x36 };
+        static constexpr uint8_t N9[5] = { 0x06, 0x49, 0x49, 0x29, 0x1E };
+        static constexpr uint8_t Colon[5] = { 0x00, 0x36, 0x36, 0x00, 0x00 };
+        static constexpr uint8_t Dot[5] = { 0x00, 0x40, 0x60, 0x00, 0x00 };
+        static constexpr uint8_t Dash[5] = { 0x08, 0x08, 0x08, 0x08, 0x08 };
+        static constexpr uint8_t Slash[5] = { 0x20, 0x10, 0x08, 0x04, 0x02 };
+        static constexpr uint8_t Greater[5] = { 0x41, 0x22, 0x14, 0x08, 0x00 };
+        static constexpr uint8_t Dollar[5] = { 0x24, 0x2A, 0x7F, 0x2A, 0x12 };
+        static constexpr uint8_t Space[5] = { 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+        switch (character)
+        {
+        case 'A': return A; case 'B': return B; case 'C': return C; case 'D': return D; case 'E': return E;
+        case 'F': return F; case 'G': return G; case 'H': return H; case 'I': return I; case 'J': return J;
+        case 'K': return K; case 'L': return L; case 'M': return M; case 'N': return N; case 'O': return O;
+        case 'P': return P; case 'Q': return Q; case 'R': return R; case 'S': return S; case 'T': return T;
+        case 'U': return U; case 'V': return V; case 'W': return W; case 'X': return X; case 'Y': return Y;
+        case 'Z': return Z; case '0': return N0; case '1': return N1; case '2': return N2; case '3': return N3;
+        case '4': return N4; case '5': return N5; case '6': return N6; case '7': return N7; case '8': return N8;
+        case '9': return N9; case ':': return Colon; case '.': return Dot; case '-': return Dash; case '_': return Dash;
+        case '/': return Slash; case '>': return Greater; case '$': return Dollar; case ' ': return Space;
+        default: return Space;
+        }
+    }
+
+    bool draw_char(uint32_t x, uint32_t y, char character, tinyos::ui::renderer::Color ink, uint32_t pixel_size)
+    {
+        const uint8_t* glyph = glyph_for(character);
+        bool ok = true;
+        for (uint32_t column = 0; column < 5; ++column)
+        {
+            for (uint32_t row = 0; row < 7; ++row)
+            {
+                if ((glyph[column] & (1u << row)) != 0)
+                {
+                    ok = fill(x + column * pixel_size, y + row * pixel_size, pixel_size, pixel_size, ink) && ok;
+                }
+            }
+        }
+
+        return ok;
+    }
+
+    bool draw_text(uint32_t x, uint32_t y, const char* text, tinyos::ui::renderer::Color ink, uint32_t pixel_size)
+    {
+        if (text == nullptr)
         {
             return false;
         }
 
-        return fill(x, y, width, height, body) &&
-            fill(x, y, width, 2, edge) &&
-            fill(x, y + height - 2, width, 2, edge) &&
-            fill(x, y, 2, height, edge) &&
-            fill(x + width - 2, y, 2, height, edge);
-    }
-
-    bool draw_panel(const tinyos::ui::renderer::State* state)
-    {
-        const uint32_t panel_height = scale(34, state->height, 768);
-        const uint32_t button_size = scale(24, state->height, 768);
-        const uint32_t top = 0;
-        const uint32_t pad = scale(8, state->width, 1024);
-        const tinyos::ui::renderer::Color panel = color(27, 36, 48);
-        const tinyos::ui::renderer::Color active = color(54, 134, 201);
-        const tinyos::ui::renderer::Color light = color(216, 229, 238);
-
-        bool ok = fill(0, top, state->width, panel_height, panel);
-        for (uint32_t index = 0; index < 5; ++index)
+        bool ok = true;
+        uint32_t cursor = x;
+        for (size_t index = 0; text[index] != '\0'; ++index)
         {
-            const uint32_t left = pad + index * (button_size + pad);
-            ok = ok && fill(left, top + 5, button_size, button_size, index == 0 ? active : color(43, 54, 70));
-            ok = ok && fill(left + 7, top + 11, button_size - 14, button_size - 14, light);
+            ok = draw_char(cursor, y, text[index], ink, pixel_size) && ok;
+            cursor += 6 * pixel_size;
         }
 
-        const uint32_t clock_width = scale(68, state->width, 1024);
-        ok = ok && fill(state->width - clock_width - pad, top + 7, clock_width, panel_height - 14, color(38, 48, 62));
         return ok;
+    }
+
+    bool draw_frame(Rect rect, tinyos::ui::renderer::Color edge, tinyos::ui::renderer::Color body)
+    {
+        if (rect.width < 2 || rect.height < 2)
+        {
+            return false;
+        }
+
+        return fill(rect.x, rect.y, rect.width, rect.height, body) &&
+            fill(rect.x, rect.y, rect.width, 2, edge) &&
+            fill(rect.x, rect.y + rect.height - 2, rect.width, 2, edge) &&
+            fill(rect.x, rect.y, 2, rect.height, edge) &&
+            fill(rect.x + rect.width - 2, rect.y, 2, rect.height, edge);
+    }
+
+    Rect dock_icon_rect(size_t index, const tinyos::ui::renderer::State* state)
+    {
+        Rect rect;
+        rect.x = scale_x(11, state);
+        rect.y = scale_y(70, state) + static_cast<uint32_t>(index) * scale_y(78, state);
+        rect.width = scale_x(52, state);
+        rect.height = scale_y(52, state);
+        if (rect.width < 34) rect.width = 34;
+        if (rect.height < 34) rect.height = 34;
+        return rect;
+    }
+
+    Rect window_rect(size_t index)
+    {
+        Rect rect;
+        rect.x = g_window_x[index];
+        rect.y = g_window_y[index];
+        rect.width = g_window_w[index];
+        rect.height = g_window_h[index];
+        return rect;
+    }
+
+    uint32_t title_height(const tinyos::ui::renderer::State* state)
+    {
+        uint32_t value = scale_y(34, state);
+        return value < 22 ? 22 : value;
+    }
+
+    Rect close_rect(size_t index, const tinyos::ui::renderer::State* state)
+    {
+        const Rect window = window_rect(index);
+        const uint32_t button = scale_y(16, state) < 10 ? 10 : scale_y(16, state);
+        Rect rect;
+        rect.x = window.x + window.width - button - scale_x(12, state);
+        rect.y = window.y + (title_height(state) - button) / 2;
+        rect.width = button;
+        rect.height = button;
+        return rect;
+    }
+
+    Rect title_rect(size_t index, const tinyos::ui::renderer::State* state)
+    {
+        const Rect window = window_rect(index);
+        Rect rect;
+        rect.x = window.x;
+        rect.y = window.y;
+        rect.width = window.width;
+        rect.height = title_height(state);
+        return rect;
+    }
+
+    void ensure_window_defaults(const tinyos::ui::renderer::State* state)
+    {
+        for (size_t index = 0; index < AppCount; ++index)
+        {
+            if (g_window_initialized[index])
+            {
+                continue;
+            }
+
+            g_window_x[index] = scale_x(120 + static_cast<uint32_t>(index) * 38, state);
+            g_window_y[index] = scale_y(76 + static_cast<uint32_t>(index) * 30, state);
+            g_window_w[index] = scale_x(760 - static_cast<uint32_t>(index) * 28, state);
+            g_window_h[index] = scale_y(510 - static_cast<uint32_t>(index) * 22, state);
+            if (g_window_w[index] < 230) g_window_w[index] = 230;
+            if (g_window_h[index] < 145) g_window_h[index] = 145;
+            g_window_initialized[index] = true;
+        }
     }
 
     bool draw_wallpaper(const tinyos::ui::renderer::State* state)
     {
-        const uint32_t panel_height = scale(34, state->height, 768);
         bool ok = true;
-        for (uint32_t row = panel_height; row < state->height; ++row)
+        for (uint32_t row = 0; row < state->height; ++row)
         {
-            const uint8_t blue = static_cast<uint8_t>(70 + ((row - panel_height) * 88) / (state->height - panel_height));
-            const uint8_t green = static_cast<uint8_t>(86 + ((state->height - row) * 52) / state->height);
-            const uint8_t red = static_cast<uint8_t>(12 + (row * 18) / state->height);
-            ok = ok && fill(0, row, state->width, 1, color(red, green, blue));
+            const uint8_t red = static_cast<uint8_t>(28 + (row * 42) / state->height);
+            const uint8_t green = static_cast<uint8_t>(42 + (row * 52) / state->height);
+            const uint8_t blue = static_cast<uint8_t>(72 + (row * 82) / state->height);
+            ok = fill(0, row, state->width, 1, color(red, green, blue)) && ok;
         }
 
-        const uint32_t glow_x = scale(290, state->width, 1024);
-        const uint32_t glow_y = scale(170, state->height, 768);
-        ok = ok && fill(glow_x, glow_y, scale(430, state->width, 1024), scale(14, state->height, 768), color(21, 112, 151));
-        ok = ok && fill(glow_x + scale(80, state->width, 1024), glow_y + scale(70, state->height, 768), scale(420, state->width, 1024), scale(12, state->height, 768), color(20, 92, 128));
+        ok = fill(scale_x(230, state), scale_y(148, state), scale_x(470, state), scale_y(6, state), color(58, 152, 200)) && ok;
+        ok = fill(scale_x(330, state), scale_y(224, state), scale_x(410, state), scale_y(4, state), color(39, 116, 171)) && ok;
         return ok;
     }
 
-    bool draw_icon(uint32_t x, uint32_t y, uint32_t size, tinyos::ui::renderer::Color base, tinyos::ui::renderer::Color accent, bool selected, bool open)
+    bool draw_top_panel(const tinyos::ui::renderer::State* state)
     {
-        const tinyos::ui::renderer::Color edge = selected ? color(248, 210, 74) : color(232, 238, 244);
-        bool ok = draw_frame(x, y, size, size, edge, base);
-        ok = ok && fill(x + size / 4, y + size / 4, size / 2, size / 2, accent);
+        const uint32_t panel = scale_y(34, state) < 24 ? 24 : scale_y(34, state);
+        bool ok = fill(0, 0, state->width, panel, color(20, 26, 36));
+        ok = draw_text(scale_x(16, state), scale_y(10, state), "TinyOS Plasma", color(234, 241, 247), 2) && ok;
+        ok = draw_text(scale_x(232, state), scale_y(10, state), "Apps  Places  System", color(190, 204, 216), 2) && ok;
+        ok = draw_text(state->width - scale_x(104, state), scale_y(10, state), "11:45", color(234, 241, 247), 2) && ok;
+        return ok;
+    }
+
+    bool draw_dock_icon(Rect rect, size_t index)
+    {
+        const bool selected = g_selected_app == index;
+        const bool open = g_open_apps[index];
+        const tinyos::ui::renderer::Color edge = selected ? color(90, 182, 255) : color(80, 94, 112);
+        const tinyos::ui::renderer::Color base = open ? color(36, 56, 76) : color(26, 36, 50);
+        bool ok = draw_frame(rect, edge, base);
+        const uint32_t pad = rect.width / 5;
+        const tinyos::ui::renderer::Color accent = index == 0 ? color(111, 220, 139) : (index == 1 ? color(246, 183, 74) : (index == 2 ? color(94, 156, 238) : color(210, 126, 239)));
+        ok = fill(rect.x + pad, rect.y + pad, rect.width - pad * 2, rect.height - pad * 2, accent) && ok;
         if (open)
         {
-            ok = ok && fill(x + size + scale(8, size, 42), y + size / 3, scale(8, size, 42), size / 3, color(113, 219, 132));
+            ok = fill(rect.x + rect.width - 6, rect.y + rect.height / 2 - 4, 5, 8, color(97, 224, 130)) && ok;
         }
         return ok;
     }
 
-    bool draw_icons(const tinyos::ui::renderer::State* state)
+    bool draw_dock(const tinyos::ui::renderer::State* state)
     {
-        const uint32_t icon_size = scale(42, state->height, 768);
-        const uint32_t x = scale(28, state->width, 1024);
-        uint32_t y = scale(58, state->height, 768);
-        bool ok = draw_icon(x, y, icon_size, color(238, 241, 244), color(55, 66, 78), g_selected_app == 0, g_open_apps[0]);
-        y += scale(96, state->height, 768);
-        ok = ok && draw_icon(x, y, icon_size, color(242, 244, 247), color(69, 128, 207), g_selected_app == 1, g_open_apps[1]);
-        y += scale(96, state->height, 768);
-        ok = ok && draw_icon(x, y, icon_size, color(236, 240, 244), color(82, 153, 230), g_selected_app == 2, g_open_apps[2]);
-        y += scale(96, state->height, 768);
-        ok = ok && draw_icon(x, y, icon_size, color(240, 240, 234), color(185, 190, 196), g_selected_app == 3, g_open_apps[3]);
+        const uint32_t width = scale_x(76, state) < 54 ? 54 : scale_x(76, state);
+        bool ok = fill(0, 0, width, state->height, color(17, 22, 32));
+        for (size_t index = 0; index < AppCount; ++index)
+        {
+            const Rect icon = dock_icon_rect(index, state);
+            ok = draw_dock_icon(icon, index) && ok;
+        }
+
         return ok;
     }
 
-    bool draw_terminal_window(const tinyos::ui::renderer::State* state, size_t app_index, bool focused)
+    bool draw_taskbar(const tinyos::ui::renderer::State* state)
     {
-        const uint32_t x = scale(110 + static_cast<uint32_t>(app_index) * 34, state->width, 1024);
-        const uint32_t y = scale(70 + static_cast<uint32_t>(app_index) * 28, state->height, 768);
-        const uint32_t width = scale(805 - static_cast<uint32_t>(app_index) * 42, state->width, 1024);
-        const uint32_t height = scale(520 - static_cast<uint32_t>(app_index) * 36, state->height, 768);
-        const uint32_t title = scale(32, state->height, 768);
-        const uint32_t menu = scale(28, state->height, 768);
-        const tinyos::ui::renderer::Color chrome = focused ? color(36, 96, 148) : color(26, 35, 46);
-        const tinyos::ui::renderer::Color dark = color(31 + static_cast<uint8_t>(app_index) * 4, 41 + static_cast<uint8_t>(app_index) * 4, 52 + static_cast<uint8_t>(app_index) * 4);
-        const tinyos::ui::renderer::Color paper = color(232, 238, 244);
-        const tinyos::ui::renderer::Color ink = color(214, 224, 230);
-        bool ok = draw_frame(x, y, width, height, color(12, 18, 24), dark);
-        ok = ok && fill(x + 2, y + 2, width - 4, title, chrome);
-        ok = ok && fill(x + 2, y + title + 2, width - 4, menu, paper);
-        ok = ok && fill(x + 2, y + title + menu + 2, width - 4, height - title - menu - 4, color(32, 43, 54));
+        const uint32_t height = scale_y(42, state) < 28 ? 28 : scale_y(42, state);
+        const uint32_t y = state->height - height;
+        bool ok = fill(0, y, state->width, height, color(18, 24, 34));
+        uint32_t x = scale_x(96, state);
+        for (size_t index = 0; index < AppCount; ++index)
+        {
+            if (!g_open_apps[index])
+            {
+                continue;
+            }
 
-        const uint32_t close_size = scale(14, state->height, 768);
-        ok = ok && fill(x + width - scale(28, state->width, 1024), y + scale(9, state->height, 768), close_size, close_size, color(196, 72, 72));
+            const uint32_t width = scale_x(132, state) < 78 ? 78 : scale_x(132, state);
+            const tinyos::ui::renderer::Color base = index == g_focused_app ? color(47, 98, 146) : color(34, 44, 58);
+            ok = fill(x, y + 6, width, height - 12, base) && ok;
+            ok = draw_text(x + 10, y + 13, app_name(index), color(231, 238, 244), 1) && ok;
+            x += width + scale_x(10, state);
+        }
+        return ok;
+    }
 
-        const uint32_t text_x = x + scale(34, state->width, 1024);
-        uint32_t text_y = y + title + menu + scale(22, state->height, 768);
+    bool draw_terminal_body(Rect window, const tinyos::ui::renderer::State* state)
+    {
+        const uint32_t title = title_height(state);
+        const uint32_t y = window.y + title + scale_y(22, state);
+        bool ok = draw_text(window.x + scale_x(28, state), y, "tinyos@desktop:~$ ls", color(119, 238, 150), 2);
+        ok = draw_text(window.x + scale_x(28, state), y + scale_y(34, state), "apps  docs  devices  system", color(214, 224, 230), 2) && ok;
+        ok = draw_text(window.x + scale_x(28, state), y + scale_y(76, state), "tinyos@desktop:~$ run app", color(119, 238, 150), 2) && ok;
+        ok = fill(window.x + scale_x(292, state), y + scale_y(78, state), scale_x(12, state), scale_y(22, state), color(228, 235, 240)) && ok;
+        return ok;
+    }
+
+    bool draw_files_body(Rect window, const tinyos::ui::renderer::State* state)
+    {
+        const uint32_t title = title_height(state);
+        bool ok = fill(window.x + 2, window.y + title, scale_x(150, state), window.height - title - 2, color(42, 50, 64));
+        ok = draw_text(window.x + scale_x(20, state), window.y + title + scale_y(24, state), "Home", color(238, 242, 246), 2) && ok;
+        ok = draw_text(window.x + scale_x(20, state), window.y + title + scale_y(58, state), "Apps", color(170, 184, 199), 2) && ok;
+        ok = draw_text(window.x + scale_x(20, state), window.y + title + scale_y(92, state), "System", color(170, 184, 199), 2) && ok;
+        for (uint32_t item = 0; item < 4; ++item)
+        {
+            const uint32_t x = window.x + scale_x(190 + item * 116, state);
+            const uint32_t y = window.y + title + scale_y(34, state);
+            ok = draw_frame({ x, y, scale_x(74, state), scale_y(68, state) }, color(188, 202, 216), color(222, 230, 238)) && ok;
+        }
+        ok = draw_text(window.x + scale_x(190, state), window.y + title + scale_y(128, state), "kernel  docs  tapp  keys", color(55, 66, 78), 2) && ok;
+        return ok;
+    }
+
+    bool draw_browser_body(Rect window, const tinyos::ui::renderer::State* state)
+    {
+        const uint32_t title = title_height(state);
+        bool ok = fill(window.x + scale_x(22, state), window.y + title + scale_y(18, state), window.width - scale_x(44, state), scale_y(28, state), color(232, 238, 244));
+        ok = draw_text(window.x + scale_x(36, state), window.y + title + scale_y(26, state), "https://tinyos.local", color(45, 58, 72), 1) && ok;
+        ok = draw_text(window.x + scale_x(42, state), window.y + title + scale_y(86, state), "TinyOS Control Center", color(232, 238, 244), 2) && ok;
+        ok = fill(window.x + scale_x(42, state), window.y + title + scale_y(130, state), scale_x(220, state), scale_y(86, state), color(50, 86, 122)) && ok;
+        ok = fill(window.x + scale_x(286, state), window.y + title + scale_y(130, state), scale_x(220, state), scale_y(86, state), color(67, 104, 84)) && ok;
+        ok = draw_text(window.x + scale_x(62, state), window.y + title + scale_y(160, state), "Devices", color(232, 238, 244), 2) && ok;
+        ok = draw_text(window.x + scale_x(306, state), window.y + title + scale_y(160, state), "Security", color(232, 238, 244), 2) && ok;
+        return ok;
+    }
+
+    bool draw_settings_body(Rect window, const tinyos::ui::renderer::State* state)
+    {
+        const uint32_t title = title_height(state);
+        bool ok = draw_text(window.x + scale_x(28, state), window.y + title + scale_y(28, state), "System Settings", color(232, 238, 244), 2);
         for (uint32_t row = 0; row < 2; ++row)
         {
-            ok = ok && fill(text_x, text_y, scale(180 + row * 58, state->width, 1024), scale(8, state->height, 768), ink);
-            text_y += scale(28, state->height, 768);
+            for (uint32_t col = 0; col < 3; ++col)
+            {
+                const uint32_t x = window.x + scale_x(30 + col * 168, state);
+                const uint32_t y = window.y + title + scale_y(78 + row * 96, state);
+                ok = draw_frame({ x, y, scale_x(138, state), scale_y(72, state) }, color(76, 96, 118), color(42, 54, 68)) && ok;
+            }
         }
-
-        const uint32_t bottom = y + height - scale(64, state->height, 768);
-        for (uint32_t index = 0; index < 6; ++index)
-        {
-            const uint32_t left = x + scale(34 + index * 118, state->width, 1024);
-            ok = ok && fill(left, bottom, scale(58, state->width, 1024), scale(18, state->height, 768), paper);
-            ok = ok && fill(left + scale(66, state->width, 1024), bottom + scale(5, state->height, 768), scale(62, state->width, 1024), scale(8, state->height, 768), ink);
-        }
-
-        const uint32_t cursor_x = text_x + scale(236, state->width, 1024);
-        const uint32_t cursor_y = y + title + menu + scale(48, state->height, 768);
-        ok = ok && fill(cursor_x, cursor_y, scale(12, state->width, 1024), scale(24, state->height, 768), paper);
+        ok = draw_text(window.x + scale_x(48, state), window.y + title + scale_y(105, state), "Display", color(220, 230, 238), 1) && ok;
+        ok = draw_text(window.x + scale_x(216, state), window.y + title + scale_y(105, state), "Input", color(220, 230, 238), 1) && ok;
+        ok = draw_text(window.x + scale_x(384, state), window.y + title + scale_y(105, state), "Users", color(220, 230, 238), 1) && ok;
         return ok;
     }
 
-    bool draw_open_windows(const tinyos::ui::renderer::State* state)
+    bool draw_window(size_t index, const tinyos::ui::renderer::State* state)
+    {
+        const Rect window = window_rect(index);
+        const uint32_t title = title_height(state);
+        const tinyos::ui::renderer::Color edge = index == g_focused_app ? color(94, 178, 238) : color(42, 54, 68);
+        bool ok = draw_frame(window, edge, color(28, 36, 48));
+        ok = fill(window.x + 2, window.y + 2, window.width - 4, title - 2, index == g_focused_app ? color(35, 95, 150) : color(31, 42, 56)) && ok;
+        ok = draw_text(window.x + scale_x(16, state), window.y + scale_y(11, state), app_name(index), color(238, 244, 248), 2) && ok;
+        const Rect close = close_rect(index, state);
+        ok = fill(close.x, close.y, close.width, close.height, color(206, 78, 78)) && ok;
+        ok = draw_text(close.x + 3, close.y + 3, "X", color(35, 24, 24), 1) && ok;
+        ok = fill(window.x + 2, window.y + title, window.width - 4, window.height - title - 2, color(30, 40, 52)) && ok;
+
+        if (index == 0) ok = draw_terminal_body(window, state) && ok;
+        else if (index == 1) ok = draw_files_body(window, state) && ok;
+        else if (index == 2) ok = draw_browser_body(window, state) && ok;
+        else ok = draw_settings_body(window, state) && ok;
+        return ok;
+    }
+
+    bool draw_windows(const tinyos::ui::renderer::State* state)
     {
         bool ok = true;
         bool any_open = false;
         for (size_t index = 0; index < AppCount; ++index)
         {
-            if (g_open_apps[index])
+            if (g_open_apps[index] && index != g_focused_app)
             {
                 any_open = true;
-                ok = ok && draw_terminal_window(state, index, index == g_focused_app);
+                ok = draw_window(index, state) && ok;
             }
         }
-
+        if (g_open_apps[g_focused_app])
+        {
+            any_open = true;
+            ok = draw_window(g_focused_app, state) && ok;
+        }
         if (!any_open)
         {
-            ok = ok && fill(scale(155, state->width, 1024), scale(150, state->height, 768), scale(260, state->width, 1024), scale(18, state->height, 768), color(217, 227, 235));
-            ok = ok && fill(scale(155, state->width, 1024), scale(184, state->height, 768), scale(210, state->width, 1024), scale(12, state->height, 768), color(151, 205, 228));
+            ok = draw_text(scale_x(160, state), scale_y(160, state), "Open an app from the dock", color(226, 235, 242), 2) && ok;
+        }
+        return ok;
+    }
+
+    bool draw_cursor()
+    {
+        bool ok = true;
+        const tinyos::ui::renderer::Color white = color(245, 248, 252);
+        const tinyos::ui::renderer::Color black = color(10, 12, 14);
+        for (uint32_t row = 0; row < 18; ++row)
+        {
+            const uint32_t width = row < 10 ? row + 1 : 6;
+            ok = fill(g_pointer_x, g_pointer_y + row, width, 1, black) && ok;
+            if (width > 2)
+            {
+                ok = fill(g_pointer_x + 1, g_pointer_y + row, width - 2, 1, white) && ok;
+            }
+        }
+        ok = fill(g_pointer_x + 6, g_pointer_y + 12, 8, 3, black) && ok;
+        ok = fill(g_pointer_x + 7, g_pointer_y + 12, 5, 2, white) && ok;
+        return ok;
+    }
+
+    void open_app(size_t index)
+    {
+        if (index >= AppCount)
+        {
+            return;
         }
 
-        return ok;
+        if (!g_open_apps[index])
+        {
+            ++g_launches;
+        }
+        g_open_apps[index] = true;
+        g_selected_app = index;
+        g_focused_app = index;
     }
 
     bool focus_next_open_window()
@@ -197,6 +499,122 @@ namespace
 
         return false;
     }
+
+    bool handle_mouse_button(const tinyos::ui::events::Event& event, const tinyos::ui::renderer::State* state)
+    {
+        if (event.button != 1)
+        {
+            return false;
+        }
+
+        if (!event.pressed)
+        {
+            g_dragging = false;
+            return true;
+        }
+
+        for (size_t index = 0; index < AppCount; ++index)
+        {
+            if (contains(dock_icon_rect(index, state), event.column, event.row))
+            {
+                open_app(index);
+                return true;
+            }
+        }
+
+        for (size_t reverse = 0; reverse < AppCount; ++reverse)
+        {
+            const size_t index = (g_focused_app + AppCount - reverse) % AppCount;
+            if (!g_open_apps[index])
+            {
+                continue;
+            }
+
+            if (contains(close_rect(index, state), event.column, event.row))
+            {
+                g_open_apps[index] = false;
+                g_dragging = false;
+                (void)focus_next_open_window();
+                return true;
+            }
+
+            if (contains(title_rect(index, state), event.column, event.row))
+            {
+                g_focused_app = index;
+                g_selected_app = index;
+                g_dragging = true;
+                g_dragged_app = index;
+                g_drag_offset_x = event.column - g_window_x[index];
+                g_drag_offset_y = event.row - g_window_y[index];
+                return true;
+            }
+
+            if (contains(window_rect(index), event.column, event.row))
+            {
+                g_focused_app = index;
+                g_selected_app = index;
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    bool handle_pointer(const tinyos::ui::events::Event& event, const tinyos::ui::renderer::State* state)
+    {
+        g_pointer_x = event.column;
+        g_pointer_y = event.row;
+        ++g_pointer_events;
+        if (g_dragging && g_dragged_app < AppCount)
+        {
+            const uint32_t panel = title_height(state);
+            uint32_t x = event.column > g_drag_offset_x ? event.column - g_drag_offset_x : 0;
+            uint32_t y = event.row > g_drag_offset_y ? event.row - g_drag_offset_y : panel;
+            if (x + g_window_w[g_dragged_app] >= state->width)
+            {
+                x = state->width > g_window_w[g_dragged_app] ? state->width - g_window_w[g_dragged_app] - 1 : 0;
+            }
+            if (y + g_window_h[g_dragged_app] >= state->height)
+            {
+                y = state->height > g_window_h[g_dragged_app] ? state->height - g_window_h[g_dragged_app] - 1 : panel;
+            }
+            g_window_x[g_dragged_app] = x;
+            g_window_y[g_dragged_app] = y;
+        }
+
+        return true;
+    }
+
+    bool handle_event(const tinyos::ui::events::Event& event)
+    {
+        const auto* state = tinyos::ui::renderer::state();
+        if (state == nullptr || !state->ready || !state->pixel_output)
+        {
+            return false;
+        }
+
+        if (event.type == tinyos::ui::events::EventType::Key && event.pressed)
+        {
+            if (event.character == 27 || event.character == 'q' || event.character == 'Q')
+            {
+                return false;
+            }
+
+            return tinyos::ui::graphical_desktop::handle_key(event.character);
+        }
+
+        if (event.type == tinyos::ui::events::EventType::Pointer)
+        {
+            return handle_pointer(event, state) && tinyos::ui::graphical_desktop::render();
+        }
+
+        if (event.type == tinyos::ui::events::EventType::MouseButton)
+        {
+            return handle_mouse_button(event, state) && tinyos::ui::graphical_desktop::render();
+        }
+
+        return false;
+    }
 }
 
 namespace tinyos::ui::graphical_desktop
@@ -205,9 +623,20 @@ namespace tinyos::ui::graphical_desktop
     {
         g_selected_app = 0;
         g_focused_app = 0;
+        g_pointer_x = tinyos::drivers::mouse::cursor_x();
+        g_pointer_y = tinyos::drivers::mouse::cursor_y();
+        g_dragging = false;
+        g_dragged_app = 0;
+        g_drag_offset_x = 0;
+        g_drag_offset_y = 0;
         for (size_t index = 0; index < AppCount; ++index)
         {
             g_open_apps[index] = false;
+            g_window_initialized[index] = false;
+            g_window_x[index] = 0;
+            g_window_y[index] = 0;
+            g_window_w[index] = 0;
+            g_window_h[index] = 0;
         }
         g_open_apps[0] = true;
     }
@@ -220,15 +649,25 @@ namespace tinyos::ui::graphical_desktop
         }
 
         const auto* state = tinyos::ui::renderer::state();
-        if (state == nullptr || !state->ready || !state->pixel_output || state->width < 320 || state->height < 200)
+        if (state == nullptr || !state->ready || !state->pixel_output || state->width < MinWidth || state->height < MinHeight)
         {
             return false;
         }
 
+        tinyos::drivers::mouse::set_bounds(state->width, state->height);
+        if (tinyos::drivers::mouse::is_ready())
+        {
+            g_pointer_x = tinyos::drivers::mouse::cursor_x();
+            g_pointer_y = tinyos::drivers::mouse::cursor_y();
+        }
+        ensure_window_defaults(state);
+
         const bool ok = draw_wallpaper(state) &&
-            draw_panel(state) &&
-            draw_icons(state) &&
-            draw_open_windows(state);
+            draw_top_panel(state) &&
+            draw_dock(state) &&
+            draw_windows(state) &&
+            draw_taskbar(state) &&
+            draw_cursor();
         if (ok)
         {
             ++g_renders;
@@ -256,9 +695,7 @@ namespace tinyos::ui::graphical_desktop
         }
         else if (key == '\n' || key == ' ')
         {
-            g_open_apps[g_selected_app] = true;
-            g_focused_app = g_selected_app;
-            ++g_launches;
+            open_app(g_selected_app);
         }
         else if (key == 'c' || key == 'x')
         {
@@ -297,13 +734,35 @@ namespace tinyos::ui::graphical_desktop
 
         for (;;)
         {
-            const char key = tinyos::drivers::keyboard::read_char();
-            if (key == 27 || key == 'q' || key == 'Q')
+            tinyos::ui::events::pump_from_input(16);
+            bool processed = false;
+            tinyos::ui::events::Event event;
+            event.type = tinyos::ui::events::EventType::None;
+            event.source = tinyos::ui::events::Source::None;
+            event.character = 0;
+            event.pressed = false;
+            event.column = 0;
+            event.row = 0;
+            event.delta_column = 0;
+            event.delta_row = 0;
+            event.button = 0;
+            event.sequence = 0;
+
+            while (tinyos::ui::events::poll_event(event))
             {
-                return true;
+                if (event.type == tinyos::ui::events::EventType::Key && event.pressed && (event.character == 27 || event.character == 'q' || event.character == 'Q'))
+                {
+                    return true;
+                }
+
+                (void)handle_event(event);
+                processed = true;
             }
 
-            (void)handle_key(key);
+            if (!processed)
+            {
+                asm volatile ("hlt");
+            }
         }
     }
 
@@ -328,12 +787,12 @@ namespace tinyos::ui::graphical_desktop
         const bool initial_state_valid = g_open_apps[0] && g_selected_app == 0 && g_focused_app == 0;
         g_selected_app = (g_selected_app + 1) % AppCount;
         const bool navigation_valid = g_selected_app == 1;
-        g_open_apps[g_selected_app] = true;
-        g_focused_app = g_selected_app;
-        const bool launch_valid = g_open_apps[1] && g_focused_app == 1;
+        open_app(g_selected_app);
+        const bool launch_valid = g_open_apps[1] && g_focused_app == 1 && g_launches > 0;
         return tinyos::ui::renderer::pack_color(color(1, 2, 3)) == 0xFF010203 &&
             initial_state_valid &&
             navigation_valid &&
-            launch_valid;
+            launch_valid &&
+            glyph_for('A') != nullptr;
     }
 }

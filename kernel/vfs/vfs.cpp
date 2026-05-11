@@ -192,4 +192,39 @@ namespace tinyos::kernel::vfs
 
         return blockfs::find(path) != nullptr ? blockfs::write_file(path, data, size) : ramfs::write_file(path, data, size);
     }
+
+    bool create_directory(const char* path)
+    {
+        if (!g_ready || !validate_path(path) || blockfs::find(path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::create_directory(path);
+    }
+
+    uint16_t access_mode(const Node* node)
+    {
+        if (!g_ready || node == nullptr)
+        {
+            return 0;
+        }
+
+        if (blockfs::owns(node))
+        {
+            return node->directory ? 0555 : 0444;
+        }
+
+        return ramfs::access_mode(node);
+    }
+
+    bool set_access_mode(const char* path, uint16_t mode)
+    {
+        if (!g_ready || !validate_path(path) || mode > 0777 || blockfs::find(path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::set_access_mode(path, mode);
+    }
 }

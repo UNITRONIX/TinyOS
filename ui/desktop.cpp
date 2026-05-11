@@ -8,18 +8,40 @@ namespace
 {
     constexpr size_t MaxLauncherItems = 4;
     constexpr size_t MaxAppWindows = 3;
-    constexpr uint8_t WallpaperAttribute = 0x17;
-    constexpr uint8_t TopPanelAttribute = 0x1F;
+    // Ubuntu/Unity-inspired aubergine-red theme. Attribute = (bg<<4)|fg, VGA palette.
+    constexpr uint8_t WallpaperAttribute = 0x44;            // solid red wallpaper
+    constexpr uint8_t WallpaperAccentAttribute = 0x4C;      // red bg, light red highlights
+    constexpr uint8_t TopPanelAttribute = 0x4F;             // red bg, white fg
+    constexpr uint8_t TopPanelSubAttribute = 0x4E;          // red bg, yellow accent
+    constexpr uint8_t SidebarAttribute = 0x40;              // red bg, black fg
+    constexpr uint8_t SidebarIconAttribute = 0x4F;          // red bg, white fg
+    constexpr uint8_t SidebarSelectedAttribute = 0x6F;      // brown/orange bg, white fg
+    constexpr uint8_t SearchBarAttribute = 0x70;            // gray card bg, black fg
+    constexpr uint8_t SearchBarHintAttribute = 0x78;        // gray bg, dim fg
+    constexpr uint8_t SectionHeaderAttribute = 0x4F;        // red bg, white fg
+    constexpr uint8_t SectionSubAttribute = 0x4E;           // red bg, yellow link
+    constexpr uint8_t IconAttribute = 0x70;                 // tile card: gray bg, black fg
+    constexpr uint8_t IconGlyphAttribute = 0x74;            // tile glyph: gray bg, red fg
+    constexpr uint8_t IconLabelAttribute = 0x4F;            // label below tile on wallpaper
+    constexpr uint8_t SelectedIconAttribute = 0x60;         // orange bg, black fg
+    constexpr uint8_t SelectedIconGlyphAttribute = 0x64;    // orange bg, red fg
+    constexpr uint8_t SelectedIconLabelAttribute = 0x6F;    // orange bg, white fg
+    constexpr uint8_t FileTileAttribute = 0x70;             // gray bg, black fg
+    constexpr uint8_t FileTileGlyphAttribute = 0x71;        // gray bg, blue fg
+    constexpr uint8_t AppWindowAttribute = 0x4F;            // window title bar
+    constexpr uint8_t FocusedAppWindowAttribute = 0x4F;     // focused window title bar (same red)
+    constexpr uint8_t AppWindowBodyAttribute = 0x0F;        // black bg, white fg (terminal body)
+    constexpr uint8_t AppWindowPromptAttribute = 0x0A;      // black bg, green fg (prompt)
+    constexpr uint8_t AppWindowDimAttribute = 0x08;         // black bg, dim gray fg
     constexpr uint8_t MenuAttribute = 0x70;
-    constexpr uint8_t IconAttribute = 0x1E;
-    constexpr uint8_t SelectedIconAttribute = 0x2E;
-    constexpr uint8_t AppWindowAttribute = 0x1F;
-    constexpr uint8_t FocusedAppWindowAttribute = 0x2F;
     constexpr uint8_t StatusAttribute = 0x70;
+    constexpr uint8_t HintAttribute = 0x40;                 // red bg, black fg footer
+    constexpr uint32_t SidebarWidth = 5;
     constexpr uint32_t IconWidth = 14;
     constexpr uint32_t IconHeight = 3;
-    constexpr uint32_t FullscreenIconColumn = 2;
-    constexpr uint32_t FullscreenIconFirstRow = 3;
+    constexpr uint32_t FullscreenIconColumn = 8;
+    constexpr uint32_t FullscreenIconFirstRow = 7;
+    constexpr uint32_t FullscreenIconStep = 16;             // 14 wide + 2 gap
 
     tinyos::ui::desktop::State g_state = {};
     tinyos::ui::desktop::LauncherItem g_items[MaxLauncherItems] = {};
@@ -106,26 +128,143 @@ namespace
             return false;
         }
 
-        const uint8_t attribute = icon.selected ? SelectedIconAttribute : IconAttribute;
-        bool ok = tinyos::ui::renderer::fill_rect(icon.column, icon.row, IconWidth, IconHeight, ' ', attribute);
-        ok = tinyos::ui::renderer::draw_text(icon.column + 5, icon.row, "[]", attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(icon.column + 1, icon.row + 1, icon.title, attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(icon.column + 1, icon.row + 2, icon.command, attribute) && ok;
+        const bool selected = icon.selected;
+        const uint8_t tile_attr = selected ? SelectedIconAttribute : IconAttribute;
+        const uint8_t glyph_attr = selected ? SelectedIconGlyphAttribute : IconGlyphAttribute;
+        const uint8_t label_attr = selected ? SelectedIconLabelAttribute : IconLabelAttribute;
+
+        // 14x3 card tile that looks like a launcher icon.
+        bool ok = tinyos::ui::renderer::fill_rect(icon.column, icon.row, IconWidth, IconHeight, ' ', tile_attr);
+        ok = tinyos::ui::renderer::draw_text(icon.column + 1, icon.row, ".------------.", tile_attr) && ok;
+        ok = tinyos::ui::renderer::draw_text(icon.column + 1, icon.row + 1, "|            |", tile_attr) && ok;
+        ok = tinyos::ui::renderer::draw_text(icon.column + 1, icon.row + 2, "`------------'", tile_attr) && ok;
+        // Pick a short glyph based on first character of title.
+        const char first = icon.title[0];
+        const char* glyph = "[ ]";
+        if (first == 'T' || first == 't') glyph = ">_ ";
+        else if (first == 'D' || first == 'd') glyph = "(o)";
+        else if (first == 'S' || first == 's') glyph = "<#>";
+        else if (first == 'F' || first == 'f') glyph = "[D]";
+        else if (first == 'B' || first == 'b') glyph = "(W)";
+        else if (first == 'E' || first == 'e') glyph = "/ \\";
+        ok = tinyos::ui::renderer::draw_text(icon.column + 6, icon.row + 1, glyph, glyph_attr) && ok;
+        // Label below the tile on the wallpaper.
+        if (icon.row + IconHeight < g_state.rows)
+        {
+            const uint32_t label_width = IconWidth;
+            ok = tinyos::ui::renderer::fill_rect(icon.column, icon.row + IconHeight, label_width, 1, ' ', label_attr) && ok;
+            ok = tinyos::ui::renderer::draw_text(icon.column + 2, icon.row + IconHeight, icon.title, label_attr) && ok;
+        }
         return ok;
     }
 
     bool draw_top_panel()
     {
         bool ok = tinyos::ui::renderer::fill_rect(0, 0, g_state.columns, 1, ' ', TopPanelAttribute);
-        ok = tinyos::ui::renderer::draw_text(1, 0, "TinyOS", TopPanelAttribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(12, 0, "1  2  3  4", TopPanelAttribute) && ok;
-        if (g_state.columns > 68)
+        // Left cluster: window controls + brand.
+        ok = tinyos::ui::renderer::draw_text(1, 0, "o x -", TopPanelSubAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(8, 0, "TinyOS", TopPanelAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(16, 0, "Activities", TopPanelAttribute) && ok;
+        if (g_state.columns > 50)
         {
-            ok = tinyos::ui::renderer::draw_text(55, 0, "desktop mode", TopPanelAttribute) && ok;
+            ok = tinyos::ui::renderer::draw_text(30, 0, "Files  Edit  View  Help", TopPanelAttribute) && ok;
         }
         if (g_state.columns > 8)
         {
-            ok = tinyos::ui::renderer::draw_text(g_state.columns - 8, 0, "11:45", TopPanelAttribute) && ok;
+            ok = tinyos::ui::renderer::draw_text(g_state.columns - 7, 0, "11:45", TopPanelAttribute) && ok;
+        }
+        return ok;
+    }
+
+    bool draw_sidebar()
+    {
+        if (g_state.columns < SidebarWidth + 1 || g_state.rows < 3)
+        {
+            return true;
+        }
+
+        const uint32_t start_row = 1;
+        const uint32_t end_row = g_state.rows > 1 ? g_state.rows - 1 : g_state.rows;
+        bool ok = tinyos::ui::renderer::fill_rect(0, start_row, SidebarWidth, end_row - start_row, ' ', SidebarAttribute);
+
+        struct DockEntry { const char* glyph; bool highlight; };
+        const DockEntry entries[] = {
+            { "(O)", true },   // home/Ubuntu mark
+            { "[D]", false },  // files
+            { "(F)", false },  // browser
+            { "[T]", false },  // text editor
+            { "[X]", false },  // spreadsheet
+            { ">_ ", false },  // terminal
+            { "<#>", false },  // settings
+            { "[?]", false },  // help
+        };
+        const uint32_t entry_height = 2;
+        const uint32_t available = end_row > start_row + 1 ? end_row - start_row - 1 : 0;
+        const uint32_t count = sizeof(entries) / sizeof(entries[0]);
+        const uint32_t max_entries = available / entry_height;
+        const uint32_t shown = count < max_entries ? count : max_entries;
+        for (uint32_t i = 0; i < shown; ++i)
+        {
+            const uint32_t row = start_row + 1 + i * entry_height;
+            const uint8_t attr = entries[i].highlight ? SidebarSelectedAttribute : SidebarIconAttribute;
+            ok = tinyos::ui::renderer::fill_rect(0, row, SidebarWidth, 1, ' ', attr) && ok;
+            ok = tinyos::ui::renderer::draw_text(1, row, entries[i].glyph, attr) && ok;
+        }
+        return ok;
+    }
+
+    bool draw_search_bar()
+    {
+        if (g_state.columns < SidebarWidth + 12 || g_state.rows < 4)
+        {
+            return true;
+        }
+        const uint32_t col = SidebarWidth + 1;
+        const uint32_t row = 2;
+        const uint32_t width = g_state.columns - col - 1;
+        bool ok = tinyos::ui::renderer::fill_rect(col, row, width, 1, ' ', SearchBarAttribute);
+        ok = tinyos::ui::renderer::draw_text(col + 1, row, "Q", SearchBarAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(col + 3, row, "Search", SearchBarHintAttribute) && ok;
+        return ok;
+    }
+
+    bool draw_sections()
+    {
+        if (g_state.columns < SidebarWidth + 20 || g_state.rows < 12)
+        {
+            return true;
+        }
+        const uint32_t col = SidebarWidth + 1;
+        bool ok = tinyos::ui::renderer::draw_text(col, 4, "|||  Recent Apps", SectionHeaderAttribute);
+        ok = tinyos::ui::renderer::draw_text(col + 18, 4, "see 5 more results >", SectionSubAttribute) && ok;
+
+        const uint32_t files_row = g_state.rows > 15 ? 12 : 11;
+        ok = tinyos::ui::renderer::draw_text(col, files_row, "|||  Recent Files", SectionHeaderAttribute) && ok;
+
+        // Decorative recent-file tiles.
+        if (g_state.rows > files_row + 4)
+        {
+            struct FileTile { const char* glyph; const char* label; };
+            const FileTile tiles[] = {
+                { "(.)", "boot.log" },
+                { "[M]", "notes.md" },
+                { "[T]", "report.odt" },
+            };
+            const uint32_t base = files_row + 2;
+            for (uint32_t i = 0; i < 3; ++i)
+            {
+                const uint32_t tcol = col + 1 + i * 16;
+                if (tcol + IconWidth > g_state.columns) break;
+                ok = tinyos::ui::renderer::fill_rect(tcol, base, IconWidth, IconHeight, ' ', FileTileAttribute) && ok;
+                ok = tinyos::ui::renderer::draw_text(tcol + 1, base, ".------------.", FileTileAttribute) && ok;
+                ok = tinyos::ui::renderer::draw_text(tcol + 1, base + 1, "|            |", FileTileAttribute) && ok;
+                ok = tinyos::ui::renderer::draw_text(tcol + 1, base + 2, "`------------'", FileTileAttribute) && ok;
+                ok = tinyos::ui::renderer::draw_text(tcol + 6, base + 1, tiles[i].glyph, FileTileGlyphAttribute) && ok;
+                if (base + IconHeight < g_state.rows)
+                {
+                    ok = tinyos::ui::renderer::draw_text(tcol + 2, base + IconHeight, tiles[i].label, IconLabelAttribute) && ok;
+                }
+            }
         }
         return ok;
     }
@@ -133,9 +272,15 @@ namespace
     bool draw_desktop_background()
     {
         bool ok = tinyos::ui::renderer::fill_rect(0, 0, g_state.columns, g_state.rows, ' ', WallpaperAttribute);
+        // Subtle wallpaper texture using accent attribute on a few rows.
+        for (uint32_t r = 1; r < g_state.rows; r += 3)
+        {
+            ok = tinyos::ui::renderer::draw_text(SidebarWidth + 1, r, " ", WallpaperAccentAttribute) && ok;
+        }
         ok = draw_top_panel() && ok;
-        ok = tinyos::ui::renderer::draw_text(28, 8, "TinyOS", WallpaperAttribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(24, 10, "low-resource desktop", WallpaperAttribute) && ok;
+        ok = draw_sidebar() && ok;
+        ok = draw_search_bar() && ok;
+        ok = draw_sections() && ok;
         return ok;
     }
 
@@ -146,19 +291,51 @@ namespace
             return false;
         }
 
-        const uint8_t attribute = window.focused ? FocusedAppWindowAttribute : AppWindowAttribute;
-        bool ok = tinyos::ui::renderer::fill_rect(window.column, window.row, window.width, 1, ' ', attribute);
-        ok = tinyos::ui::renderer::fill_rect(window.column, window.row + window.height - 1, window.width, 1, '-', attribute) && ok;
-        ok = tinyos::ui::renderer::fill_rect(window.column, window.row, 1, window.height, '|', attribute) && ok;
-        ok = tinyos::ui::renderer::fill_rect(window.column + window.width - 1, window.row, 1, window.height, '|', attribute) && ok;
-        ok = tinyos::ui::renderer::fill_rect(window.column + 1, window.row + 1, window.width - 2, window.height - 2, ' ', attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 2, window.row, window.title, attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + window.width - 6, window.row, "[_][x]", attribute) && ok;
-        ok = tinyos::ui::renderer::fill_rect(window.column + 1, window.row + 1, window.width - 2, 1, ' ', MenuAttribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 2, window.row + 1, "File  Actions  View  Help", MenuAttribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 3, "Application window", attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 4, window.command, attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + window.height - 2, "Tab: select  Enter: open  q: shell", attribute) && ok;
+        const uint8_t title_attr = window.focused ? FocusedAppWindowAttribute : AppWindowAttribute;
+        // Title bar
+        bool ok = tinyos::ui::renderer::fill_rect(window.column, window.row, window.width, 1, ' ', title_attr);
+        ok = tinyos::ui::renderer::draw_text(window.column + 1, window.row, "o x -", title_attr) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 8, window.row, window.title, title_attr) && ok;
+        if (window.width > 10)
+        {
+            ok = tinyos::ui::renderer::draw_text(window.column + window.width - 9, window.row, "[_][O][x]", title_attr) && ok;
+        }
+        // Menu strip
+        ok = tinyos::ui::renderer::fill_rect(window.column, window.row + 1, window.width, 1, ' ', MenuAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 1, window.row + 1, "File  Edit  View  Terminal  Help", MenuAttribute) && ok;
+        // Body (terminal-style)
+        ok = tinyos::ui::renderer::fill_rect(window.column, window.row + 2, window.width, window.height - 3, ' ', AppWindowBodyAttribute) && ok;
+        const uint32_t body_col = window.column + 2;
+        uint32_t line = window.row + 3;
+        if (line < window.row + window.height - 2)
+        {
+            ok = tinyos::ui::renderer::draw_text(body_col, line, "tinyos@host:~$ ", AppWindowPromptAttribute) && ok;
+            ok = tinyos::ui::renderer::draw_text(body_col + 15, line, window.command, AppWindowBodyAttribute) && ok;
+            ++line;
+        }
+        if (line < window.row + window.height - 2)
+        {
+            ok = tinyos::ui::renderer::draw_text(body_col, line, " apps  build  docs  modules  README.md", AppWindowDimAttribute) && ok;
+            ++line;
+        }
+        if (line < window.row + window.height - 2)
+        {
+            ok = tinyos::ui::renderer::draw_text(body_col, line, "tinyos@host:~$ uname -a", AppWindowPromptAttribute) && ok;
+            ++line;
+        }
+        if (line < window.row + window.height - 2)
+        {
+            ok = tinyos::ui::renderer::draw_text(body_col, line, " TinyOS 0.1 i686 desktop modular kernel", AppWindowDimAttribute) && ok;
+            ++line;
+        }
+        if (line < window.row + window.height - 2)
+        {
+            ok = tinyos::ui::renderer::draw_text(body_col, line, "tinyos@host:~$ _", AppWindowPromptAttribute) && ok;
+        }
+        // Footer status bar inside window
+        const uint32_t footer = window.row + window.height - 1;
+        ok = tinyos::ui::renderer::fill_rect(window.column, footer, window.width, 1, ' ', StatusAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 1, footer, "Tab: select  Enter: open  q: shell", StatusAttribute) && ok;
         return ok;
     }
 
@@ -314,10 +491,20 @@ namespace tinyos::ui::desktop
         set_launcher_item(1, "Devices", "devices", true);
         set_launcher_item(2, "Security", "securityinfo", true);
         set_launcher_item(3, "Settings", "desktopinfo", true);
-        set_icon(0, "Terminal", "wmtest", icon_column, icon_row, true);
-        set_icon(1, "Devices", "devices", icon_column, icon_row + 3, false);
-        set_icon(2, "Security", "securityinfo", icon_column, icon_row + 6, false);
-        set_icon(3, "Settings", "desktopinfo", icon_column, icon_row + 9, false);
+        if (g_state.columns >= 72)
+        {
+            set_icon(0, "Terminal", "wmtest", icon_column + 0 * FullscreenIconStep, icon_row, true);
+            set_icon(1, "Devices", "devices", icon_column + 1 * FullscreenIconStep, icon_row, false);
+            set_icon(2, "Security", "securityinfo", icon_column + 2 * FullscreenIconStep, icon_row, false);
+            set_icon(3, "Settings", "desktopinfo", icon_column + 3 * FullscreenIconStep, icon_row, false);
+        }
+        else
+        {
+            set_icon(0, "Terminal", "wmtest", icon_column, icon_row, true);
+            set_icon(1, "Devices", "devices", icon_column, icon_row + 4, false);
+            set_icon(2, "Security", "securityinfo", icon_column, icon_row + 8, false);
+            set_icon(3, "Settings", "desktopinfo", icon_column, icon_row + 12, false);
+        }
         for (size_t index = 0; index < MaxAppWindows; ++index)
         {
             close_app_window(index);

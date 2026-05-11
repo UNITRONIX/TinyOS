@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdint.h>
 
 #include <tinyos/arch/context.hpp>
 #include <tinyos/arch/hal.hpp>
@@ -24,6 +25,7 @@
 #include <tinyos/kernel/elf/loader.hpp>
 #include <tinyos/kernel/initrd/modules.hpp>
 #include <tinyos/kernel/interrupts.hpp>
+#include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/memory/address_space.hpp>
 #include <tinyos/kernel/memory/frame_allocator.hpp>
 #include <tinyos/kernel/memory/heap.hpp>
@@ -56,6 +58,7 @@ namespace
 {
     constexpr size_t MaxInputLength = 128;
     constexpr size_t MaxPathLength = 96;
+    char g_current_directory[MaxPathLength] = "/";
 
     void debug_shell_checkpoint(const char* stage)
     {
@@ -83,6 +86,43 @@ namespace
         tinyos::drivers::vga::write(&buffer[index + 1]);
     }
 
+    void write_octal_mode(uint16_t mode)
+    {
+        tinyos::drivers::vga::put_char(static_cast<char>('0' + ((mode >> 6) & 7)));
+        tinyos::drivers::vga::put_char(static_cast<char>('0' + ((mode >> 3) & 7)));
+        tinyos::drivers::vga::put_char(static_cast<char>('0' + (mode & 7)));
+    }
+
+    bool parse_octal_mode(const char* text, uint16_t& mode)
+    {
+        text = tinyos::core::string::skip_spaces(text);
+        if (text == nullptr || text[0] == '\0')
+        {
+            return false;
+        }
+
+        uint16_t value = 0;
+        size_t digits = 0;
+        while (text[digits] != '\0' && text[digits] != ' ')
+        {
+            if (text[digits] < '0' || text[digits] > '7' || digits >= 4)
+            {
+                return false;
+            }
+
+            value = static_cast<uint16_t>((value << 3) + static_cast<uint16_t>(text[digits] - '0'));
+            ++digits;
+        }
+
+        if (digits == 0 || value > 0777)
+        {
+            return false;
+        }
+
+        mode = value;
+        return true;
+    }
+
     bool copy_argument(const char* text, char* destination, size_t destination_size, const char*& rest)
     {
         text = tinyos::core::string::skip_spaces(text);
@@ -108,6 +148,159 @@ namespace
         destination[index] = '\0';
         rest = tinyos::core::string::skip_spaces(text + index);
         return true;
+    }
+
+    bool copy_path_string(char* destination, size_t destination_size, const char* source)
+    {
+        if (destination == nullptr || destination_size == 0 || source == nullptr)
+        {
+            return false;
+        }
+
+        size_t index = 0;
+        while (source[index] != '\0')
+        {
+            if (index + 1 >= destination_size)
+            {
+                destination[0] = '\0';
+                return false;
+            }
+
+            destination[index] = source[index];
+            ++index;
+        }
+
+        destination[index] = '\0';
+        return true;
+    }
+
+    bool pop_path_segment(char* path)
+    {
+        if (path == nullptr || path[0] != '/')
+        {
+            return false;
+        }
+
+        if (path[1] == '\0')
+        {
+            return true;
+        }
+
+        size_t length = tinyos::core::string::length(path);
+        while (length > 1 && path[length - 1] == '/')
+        {
+            path[length - 1] = '\0';
+            --length;
+        }
+
+        size_t slash = length - 1;
+        while (slash > 0 && path[slash] != '/')
+        {
+            --slash;
+        }
+
+        if (slash == 0)
+        {
+            path[1] = '\0';
+            return true;
+        }
+
+        path[slash] = '\0';
+        return true;
+    }
+
+    bool append_path_segment(char* path, size_t path_size, const char* segment, size_t segment_length)
+    {
+        if (path == nullptr || path_size == 0 || segment == nullptr)
+        {
+            return false;
+        }
+
+        if (segment_length == 0 || (segment_length == 1 && segment[0] == '.'))
+        {
+            return true;
+        }
+
+        if (segment_length == 2 && segment[0] == '.' && segment[1] == '.')
+        {
+            return pop_path_segment(path);
+        }
+
+        size_t path_length = tinyos::core::string::length(path);
+        if (path_length == 0 || path[0] != '/')
+        {
+            return false;
+        }
+
+        const bool need_separator = !(path_length == 1 && path[0] == '/');
+        if (path_length + (need_separator ? 1 : 0) + segment_length >= path_size)
+        {
+            return false;
+        }
+
+        if (need_separator)
+        {
+            path[path_length] = '/';
+            ++path_length;
+        }
+
+        for (size_t index = 0; index < segment_length; ++index)
+        {
+            path[path_length + index] = segment[index];
+        }
+
+        path[path_length + segment_length] = '\0';
+        return true;
+    }
+
+    bool resolve_shell_path(const char* input, char* output, size_t output_size)
+    {
+        input = tinyos::core::string::skip_spaces(input);
+        if (input == nullptr || output == nullptr || output_size == 0)
+        {
+            return false;
+        }
+
+        if (input[0] == '/')
+        {
+            if (!copy_path_string(output, output_size, "/"))
+            {
+                return false;
+            }
+        }
+        else if (!copy_path_string(output, output_size, g_current_directory))
+        {
+            return false;
+        }
+
+        const char* cursor = input;
+        while (*cursor == '/')
+        {
+            ++cursor;
+        }
+
+        while (*cursor != '\0')
+        {
+            const char* segment = cursor;
+            size_t segment_length = 0;
+            while (cursor[segment_length] != '\0' && cursor[segment_length] != '/')
+            {
+                ++segment_length;
+            }
+
+            if (!append_path_segment(output, output_size, segment, segment_length))
+            {
+                return false;
+            }
+
+            cursor += segment_length;
+            while (*cursor == '/')
+            {
+                ++cursor;
+            }
+        }
+
+        return tinyos::kernel::vfs::validate_path(output);
     }
 
     void write_buffer(const char* data, size_t size)
@@ -220,6 +413,9 @@ namespace
         tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Writable : ");
         tinyos::drivers::vga::write_line(node->writable ? "yes" : "no");
+        tinyos::drivers::vga::write("Mode     : ");
+        write_octal_mode(tinyos::kernel::vfs::access_mode(node));
+        tinyos::drivers::vga::put_char('\n');
         if (node->directory)
         {
             tinyos::drivers::vga::write("Children : ");
@@ -1348,6 +1544,10 @@ namespace
         tinyos::drivers::vga::write_line("Available commands:");
         tinyos::drivers::vga::write_line("  help     - show this help");
         tinyos::drivers::vga::write_line("  clear    - clear the screen");
+        tinyos::drivers::vga::write_line("  pwd      - show current directory");
+        tinyos::drivers::vga::write_line("  cd       - change current directory");
+        tinyos::drivers::vga::write_line("  mkdir    - create RAMFS directory");
+        tinyos::drivers::vga::write_line("  chmod    - change RAMFS access mode");
         tinyos::drivers::vga::write_line("  files    - list TinyOS RAMFS path");
         tinyos::drivers::vga::write_line("  fsmap    - show TinyOS RAMFS tree");
         tinyos::drivers::vga::write_line("  show     - print TinyOS RAMFS file");
@@ -1466,7 +1666,104 @@ namespace tinyos::shell
 
         if (core::string::compare(command, "files") == 0 || core::string::compare(command, "ls") == 0)
         {
-            list_path("/");
+            list_path(g_current_directory);
+            return;
+        }
+
+        if (core::string::compare(command, "pwd") == 0)
+        {
+            drivers::vga::write_line(g_current_directory);
+            return;
+        }
+
+        if (core::string::compare(command, "cd") == 0)
+        {
+            (void)copy_path_string(g_current_directory, sizeof(g_current_directory), "/");
+            return;
+        }
+
+        if (core::string::starts_with(command, "cd "))
+        {
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(command + 2, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            const auto* node = kernel::vfs::find(resolved);
+            if (node == nullptr || !node->directory)
+            {
+                drivers::vga::write_line("Directory not found.");
+                return;
+            }
+
+            (void)copy_path_string(g_current_directory, sizeof(g_current_directory), resolved);
+            return;
+        }
+
+        if (core::string::starts_with(command, "mkdir "))
+        {
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(command + 5, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::create_directory(resolved) ? "Directory created." : "Directory create failed.");
+            return;
+        }
+
+        if (core::string::starts_with(command, "chmod "))
+        {
+            char mode_text[8];
+            const char* path_text = nullptr;
+            if (!copy_argument(command + 5, mode_text, sizeof(mode_text), path_text))
+            {
+                drivers::vga::write_line("Usage: chmod <mode> <path>");
+                return;
+            }
+
+            uint16_t mode = 0;
+            if (!parse_octal_mode(mode_text, mode))
+            {
+                drivers::vga::write_line("Invalid mode.");
+                return;
+            }
+
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(path_text, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::set_access_mode(resolved, mode) ? "Mode updated." : "Mode update failed.");
             return;
         }
 
@@ -1481,7 +1778,14 @@ namespace tinyos::shell
                 return;
             }
 
-            list_path(path);
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            list_path(resolved);
             return;
         }
 
@@ -1502,7 +1806,14 @@ namespace tinyos::shell
                 return;
             }
 
-            print_tree(kernel::vfs::find(path), 0);
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            print_tree(kernel::vfs::find(resolved), 0);
             return;
         }
 
@@ -1517,7 +1828,14 @@ namespace tinyos::shell
                 return;
             }
 
-            show_file(path);
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            show_file(resolved);
             return;
         }
 
@@ -1532,7 +1850,14 @@ namespace tinyos::shell
                 return;
             }
 
-            show_file_info(path);
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            show_file_info(resolved);
             return;
         }
 
@@ -1547,7 +1872,14 @@ namespace tinyos::shell
                 return;
             }
 
-            edit_file(path, text);
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            edit_file(resolved, text);
             return;
         }
 
@@ -1558,6 +1890,9 @@ namespace tinyos::shell
             drivers::vga::write_line("  tree     -> fsmap");
             drivers::vga::write_line("  cat/view -> show");
             drivers::vga::write_line("  fileinfo -> describe");
+            drivers::vga::write_line("  pwd/cd   -> shell directory navigation");
+            drivers::vga::write_line("  mkdir    -> create RAMFS directory");
+            drivers::vga::write_line("  chmod    -> change RAMFS access mode");
             drivers::vga::write_line("  edit     -> write");
             drivers::vga::write_line("  devlist  -> devices");
             return;
@@ -2077,6 +2412,21 @@ namespace tinyos::shell
         {
             drivers::vga::write("Integrity ready: ");
             drivers::vga::write_line(kernel::security::integrity::is_ready() ? "yes" : "no");
+            drivers::vga::write("Kernel warnings: ");
+            write_uint64(kernel::klog::warning_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Memory warnings: ");
+            write_uint64(kernel::klog::warning_count(kernel::klog::WarningCategory::Memory));
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Driver warnings: ");
+            write_uint64(kernel::klog::warning_count(kernel::klog::WarningCategory::Driver));
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Generic warnings: ");
+            write_uint64(kernel::klog::warning_count(kernel::klog::WarningCategory::Generic));
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Kernel errors  : ");
+            write_uint64(kernel::klog::error_count());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Checks run     : ");
             write_uint64(kernel::security::integrity::checks_run());
             drivers::vga::put_char('\n');

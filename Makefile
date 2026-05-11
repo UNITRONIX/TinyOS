@@ -4,6 +4,7 @@ ISO_DIR := build/isodir
 OBJ_DIR := build/obj
 DEBUG_BOOT ?= 0
 GRAPHICAL_BOOT ?= 0
+GRAPHICAL_AUTOSTART ?= 0
 BOOT_TEST_TIMEOUT ?= 8s
 STABILITY_TEST_TIMEOUT ?= 20s
 MINIMAL_TEST_MEMORY ?= 32M
@@ -63,6 +64,10 @@ ifeq ($(GRAPHICAL_BOOT),1)
 	ASFLAGS += -DTINYOS_GRAPHICAL_BOOT=1
 endif
 
+ifeq ($(GRAPHICAL_AUTOSTART),1)
+	CXXFLAGS += -DTINYOS_GRAPHICAL_AUTOSTART
+endif
+
 CPP_SOURCES := \
 	arch/i686/arch.cpp \
 	arch/i686/context.cpp \
@@ -77,6 +82,7 @@ CPP_SOURCES := \
  drivers/serial.cpp \
 	drivers/vga.cpp \
 	drivers/keyboard.cpp \
+	drivers/mouse.cpp \
 	 kernel/admin/tools.cpp \
  kernel/device/block.cpp \
  kernel/device/framebuffer.cpp \
@@ -186,7 +192,7 @@ run: check-test-tools iso
 run-gui: run
 
 run-framebuffer-preview:
-	$(MAKE) GRAPHICAL_BOOT=1 TARGET=tinyos-gui.kernel ISO=build/tinyos-gui.iso ISO_DIR=build/isodir-gui OBJ_DIR=build/obj-gui run
+	$(MAKE) GRAPHICAL_BOOT=1 GRAPHICAL_AUTOSTART=1 TARGET=tinyos-desktop.kernel ISO=build/tinyos-desktop.iso ISO_DIR=build/isodir-desktop OBJ_DIR=build/obj-gui-autostart run
 
 run-headless: check-test-tools iso
 	$(QEMU) -cdrom $(ISO) -serial stdio -display none
@@ -391,6 +397,6 @@ debug-run:
 	$(MAKE) DEBUG_BOOT=1 TARGET=tinyos-debug.kernel ISO=build/tinyos-debug.iso ISO_DIR=build/isodir-debug OBJ_DIR=build/obj-debug run
 
 clean:
-	rm -rf build/obj build/obj-debug build/obj-gui build/isodir build/isodir-debug build/isodir-gui build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel
+	rm -rf build/obj build/obj-debug build/obj-gui build/obj-gui-autostart build/isodir build/isodir-debug build/isodir-gui build/isodir-desktop build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/tinyos-desktop.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel tinyos-desktop.kernel
 
 -include $(DEPFILES)

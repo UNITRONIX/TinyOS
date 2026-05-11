@@ -65,6 +65,8 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 ## Current TinyOS security status
 
 - [x] unified logger and serial output
+- [x] kernel warning/error counters exposed through `securityinfo`
+- [x] categorized `WARN_ON` diagnostics for memory warnings
 - [x] `panic()` and `ASSERT`
 - [x] CPU exception diagnostics
 - [x] frame allocator and kernel heap scaffold
@@ -91,7 +93,7 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 ## Near-term security priorities
 
 1. add safe memory helper functions
-2. add `WARN_ON` diagnostics
+2. add more `WARN_ON` categories for drivers and security policy checks
 3. add allocator misuse checks
 4. keep paging preparation out of boot path until validated
 5. validate syscall boundary inputs before real userspace arrives

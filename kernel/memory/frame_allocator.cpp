@@ -246,7 +246,7 @@ namespace tinyos::kernel::memory::frames
         if ((address % FrameSize) != 0)
         {
             ++g_invalid_free_count;
-            TINYOS_WARN_ON(true, "Frame allocator rejected an unaligned free address.");
+            TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Frame allocator rejected an unaligned free address.");
             return;
         }
 
@@ -257,14 +257,14 @@ namespace tinyos::kernel::memory::frames
             if (frame >= g_total_frames)
             {
                 ++g_invalid_free_count;
-                TINYOS_WARN_ON(true, "Frame allocator rejected an out-of-range free address.");
+                TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Frame allocator rejected an out-of-range free address.");
                 continue;
             }
 
             if (!is_used(frame))
             {
                 ++g_double_free_count;
-                TINYOS_WARN_ON(true, "Frame allocator rejected a double free.");
+                TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Frame allocator rejected a double free.");
                 continue;
             }
 

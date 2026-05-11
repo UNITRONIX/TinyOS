@@ -270,6 +270,64 @@ namespace tinyos::kernel::memory::paging
         return updated_pages;
     }
 
+    size_t map_identity_range(uintptr_t physical_base, size_t size, uint32_t flags)
+    {
+        if (!g_ready || g_page_directory == nullptr || size == 0)
+        {
+            return 0;
+        }
+
+        const uint32_t effective_flags = (flags & PageFlagRead) != 0 ? flags : (PageFlagRead | PageFlagWrite);
+        const uint32_t entry_bits = flags_to_entry_bits(effective_flags);
+        const uintptr_t aligned_base = physical_base & ~static_cast<uintptr_t>(PageOffsetMask);
+        const uintptr_t aligned_end = (physical_base + size + PageOffsetMask) & ~static_cast<uintptr_t>(PageOffsetMask);
+
+        size_t mapped = 0;
+        for (uintptr_t address = aligned_base; address < aligned_end; address += frames::FrameSize)
+        {
+            const size_t directory_index = static_cast<size_t>(address >> 22);
+            const size_t table_index = static_cast<size_t>((address >> 12) & 0x3FF);
+            if (directory_index >= EntriesPerTable)
+            {
+                break;
+            }
+
+            uint32_t directory_entry = g_page_directory[directory_index];
+            uint32_t* table = nullptr;
+            if ((directory_entry & PagePresent) == 0)
+            {
+                const uintptr_t table_address = frames::allocate_pages(1);
+                if (table_address == 0)
+                {
+                    break;
+                }
+
+                table = reinterpret_cast<uint32_t*>(table_address);
+                zero_page(table);
+                g_page_directory[directory_index] = static_cast<uint32_t>(table_address) | entry_bits;
+            }
+            else
+            {
+                table = reinterpret_cast<uint32_t*>(directory_entry & EntryAddressMask);
+            }
+
+            const uint32_t previous = table[table_index];
+            table[table_index] = static_cast<uint32_t>(address) | entry_bits;
+            if ((previous & PagePresent) == 0)
+            {
+                ++g_mapped_pages;
+            }
+            ++mapped;
+        }
+
+        if (mapped != 0 && g_runtime_enabled)
+        {
+            arch::load_page_directory(page_directory_address());
+        }
+
+        return mapped;
+    }
+
     bool is_bootstrap_identity_mapped(uintptr_t virtual_address)
     {
         PageMapping mapping;

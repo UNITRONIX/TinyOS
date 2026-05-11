@@ -58,7 +58,7 @@ namespace
             if (!block_header_valid(block))
             {
                 ++g_corrupt_block_count;
-                TINYOS_WARN_ON(true, "Kernel heap metadata corruption detected.");
+                TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap metadata corruption detected.");
                 return nullptr;
             }
 
@@ -106,7 +106,7 @@ namespace
             if (!block_header_valid(tail))
             {
                 ++g_corrupt_block_count;
-                TINYOS_WARN_ON(true, "Kernel heap metadata corruption detected while growing heap.");
+                TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap metadata corruption detected while growing heap.");
                 return nullptr;
             }
 
@@ -146,7 +146,7 @@ namespace
             if (!block_header_valid(block) || !block_header_valid(block->next))
             {
                 ++g_corrupt_block_count;
-                TINYOS_WARN_ON(true, "Kernel heap metadata corruption detected during coalesce.");
+                TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap metadata corruption detected during coalesce.");
                 return;
             }
 
@@ -204,7 +204,7 @@ namespace tinyos::kernel::memory::heap
                 if (!block_header_valid(block))
                 {
                     ++g_corrupt_block_count;
-                    TINYOS_WARN_ON(true, "Kernel heap metadata corruption detected during allocation.");
+                    TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap metadata corruption detected during allocation.");
                     return nullptr;
                 }
 
@@ -236,7 +236,7 @@ namespace tinyos::kernel::memory::heap
         if ((reinterpret_cast<uintptr_t>(pointer) & (Alignment - 1)) != 0)
         {
             ++g_invalid_free_count;
-            TINYOS_WARN_ON(true, "Kernel heap rejected an unaligned free pointer.");
+            TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected an unaligned free pointer.");
             return;
         }
 
@@ -244,14 +244,14 @@ namespace tinyos::kernel::memory::heap
         if (block == nullptr)
         {
             ++g_invalid_free_count;
-            TINYOS_WARN_ON(true, "Kernel heap rejected an unknown free pointer.");
+            TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected an unknown free pointer.");
             return;
         }
 
         if (block->is_free)
         {
             ++g_double_free_count;
-            TINYOS_WARN_ON(true, "Kernel heap rejected a double free.");
+            TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected a double free.");
             return;
         }
 

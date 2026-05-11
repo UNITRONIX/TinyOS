@@ -2,6 +2,7 @@
 
 #include <tinyos/arch/hal.hpp>
 #include <tinyos/drivers/keyboard.hpp>
+#include <tinyos/drivers/mouse.hpp>
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
@@ -186,6 +187,9 @@ extern "C" void irq_dispatch(uint32_t irq)
         break;
     case 1:
         tinyos::drivers::keyboard::handle_irq();
+        break;
+    case 12:
+        tinyos::drivers::mouse::handle_irq();
         break;
     default:
         break;

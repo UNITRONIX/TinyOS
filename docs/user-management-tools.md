@@ -5,7 +5,7 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 ## Ready tools
 
 - Shell: `help`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
-- Files: `files`, `fsmap`, `show`, `describe`, `write`, `ramfsinfo`, `vfsinfo`
+- Files: `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `mkdir`, `chmod`, `write`, `ramfsinfo`, `vfsinfo`
 - Storage and devices: `blockinfo`, `storageinfo`, `devices`, `device`, `fbinfo`
 - Memory: `meminfo`, `frameinfo`, `heapinfo`, `heaptest`, `paginginfo`, `addrspaceinfo`
 - Runtime and apps: `runtimeinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `sysinfo`, `userinfo`, `elfinfo`, `modulesinfo`
@@ -16,10 +16,10 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 
 ## Planned tools
 
-- Files: `copy`, `remove`, `mkdir`
+- Files: `copy`, `remove`
 - Storage: `mount`
 - Processes and services: `ps`, `kill`, `service`
-- Security identities and policy: `useradd`, `chmod`
+- Security identities and policy: `useradd`
 - Development and distribution: `package`, `tappinstall`, `tappremove`, `imagebuild`, `imagesign`, `imageencrypt`, `keygen`, `deploy`, `provision`, `rollback`
 - Networking: `netinfo`
 
