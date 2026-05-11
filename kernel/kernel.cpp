@@ -144,8 +144,11 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::memory::paging::initialize();
     debug_boot_checkpoint("paging structures prepared");
     TINYOS_ASSERT(tinyos::kernel::memory::address_space::is_ready(), "Address space scaffold did not initialize.");
+    TINYOS_ASSERT(tinyos::kernel::memory::address_space::validation_self_test(), "Address space protection flag self-test failed.");
+    TINYOS_ASSERT(tinyos::kernel::memory::address_space::boot_module_region_count() == tinyos::kernel::initrd::modules::count(), "Boot module address-space tracking mismatch.");
     TINYOS_ASSERT(tinyos::kernel::memory::paging::is_ready(), "Paging structures did not initialize.");
     TINYOS_ASSERT(tinyos::kernel::memory::paging::page_directory_address() != 0, "Paging directory address missing.");
+    TINYOS_ASSERT(tinyos::kernel::memory::paging::validation_self_test(), "Paging protection flag self-test failed.");
 
     tinyos::kernel::device::block::initialize();
     TINYOS_ASSERT(tinyos::kernel::device::block::validation_self_test(), "Block device scaffold validation failed.");
@@ -274,7 +277,10 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System requirements manifest ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Device RAMFS metadata scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address space scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address space protection flag scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Boot module address-space regions ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging structures prepared for bootstrap identity map.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PIT IRQ0 stable at 100 Hz.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Keyboard IRQ1 enabled with polling fallback.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");

@@ -1880,15 +1880,31 @@ namespace tinyos::shell
             drivers::vga::write("Region count      : ");
             write_uint64(kernel::memory::address_space::region_count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Boot modules      : ");
+            write_uint64(kernel::memory::address_space::boot_module_region_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Rejected regions  : ");
+            write_uint64(kernel::memory::address_space::rejected_region_count());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Mapped total MiB : ");
             write_uint64(kernel::memory::address_space::total_mapped_bytes() / (1024 * 1024));
             drivers::vga::put_char('\n');
+            drivers::vga::write("Self-test        : ");
+            drivers::vga::write_line(kernel::memory::address_space::validation_self_test() ? "ok" : "failed");
 
             for (size_t index = 0; index < kernel::memory::address_space::region_count(); ++index)
             {
                 const auto* region = kernel::memory::address_space::region_at(index);
                 drivers::vga::write("  - ");
                 drivers::vga::write(region != nullptr && region->name != nullptr ? region->name : "unnamed");
+                drivers::vga::write(" type=");
+                drivers::vga::write(region != nullptr ? kernel::memory::address_space::region_type_name(region->type) : "unknown");
+                drivers::vga::write(" flags=");
+                const uint32_t flags = region != nullptr ? region->flags : 0;
+                drivers::vga::write((flags & kernel::memory::paging::PageFlagRead) != 0 ? "r" : "-");
+                drivers::vga::write((flags & kernel::memory::paging::PageFlagWrite) != 0 ? "w" : "-");
+                drivers::vga::write((flags & kernel::memory::paging::PageFlagUser) != 0 ? "u" : "k");
+                drivers::vga::write((flags & kernel::memory::paging::PageFlagExecute) != 0 ? "x" : "-");
                 drivers::vga::write(" (");
                 write_uint64(region != nullptr ? region->size : 0);
                 drivers::vga::write_line(" bytes)");
@@ -1977,6 +1993,18 @@ namespace tinyos::shell
             drivers::vga::write("Mapped pages: ");
             write_uint64(kernel::memory::paging::mapped_pages());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Identity MiB: ");
+            write_uint64(kernel::memory::paging::bootstrap_identity_bytes() / (1024 * 1024));
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Flags      : ");
+            const uint32_t flags = kernel::memory::paging::bootstrap_page_flags();
+            drivers::vga::write((flags & kernel::memory::paging::PageFlagRead) != 0 ? "r" : "-");
+            drivers::vga::write((flags & kernel::memory::paging::PageFlagWrite) != 0 ? "w" : "-");
+            drivers::vga::write((flags & kernel::memory::paging::PageFlagUser) != 0 ? "u" : "k");
+            drivers::vga::write((flags & kernel::memory::paging::PageFlagExecute) != 0 ? "x" : "-");
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Self-test  : ");
+            drivers::vga::write_line(kernel::memory::paging::validation_self_test() ? "ok" : "failed");
             return;
         }
 

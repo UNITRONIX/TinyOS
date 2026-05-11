@@ -105,6 +105,9 @@ TinyOS currently provides:
 4. [x] add page-sized allocation helpers
 5. [x] add small kernel heap allocator
 6. [x] prepare paging interfaces without enabling userspace yet
+7. [x] add bootstrap page protection flag query and validation self-test
+8. [x] connect address-space region rights to paging protection flags
+9. [x] track boot modules as read-only kernel address-space regions
 
 ### Phase 4 - tasking
 - [x] add task descriptor

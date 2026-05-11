@@ -6,9 +6,27 @@
 
 namespace tinyos::kernel::memory::paging
 {
+    inline constexpr uint32_t PageFlagRead = 1u << 0;
+    inline constexpr uint32_t PageFlagWrite = 1u << 1;
+    inline constexpr uint32_t PageFlagUser = 1u << 2;
+    inline constexpr uint32_t PageFlagExecute = 1u << 3;
+
+    struct PageMapping
+    {
+        uintptr_t virtual_address;
+        uintptr_t physical_address;
+        uint32_t flags;
+        bool present;
+    };
+
     void initialize();
     bool is_ready();
     uintptr_t page_directory_address();
+    size_t bootstrap_identity_bytes();
     size_t mapped_pages();
     size_t mapped_bytes();
+    uint32_t bootstrap_page_flags();
+    bool mapping_for(uintptr_t virtual_address, PageMapping& mapping);
+    bool is_bootstrap_identity_mapped(uintptr_t virtual_address);
+    bool validation_self_test();
 }
