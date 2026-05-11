@@ -118,6 +118,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::ui::desktop::validation_self_test(), "Desktop shell prototype validation failed.");
     TINYOS_ASSERT(tinyos::ui::desktop::launcher_validation_self_test(), "Desktop launcher validation failed.");
     TINYOS_ASSERT(tinyos::ui::desktop::interaction_validation_self_test(), "Desktop launcher interaction validation failed.");
+    TINYOS_ASSERT(tinyos::ui::desktop::fullscreen_validation_self_test(), "Fullscreen desktop validation failed.");
     register_device_or_panic("serial-com1", tinyos::kernel::device::Class::Diagnostics, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagDiagnostics);
     debug_boot_checkpoint("device registry ready");
 
@@ -303,6 +304,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Window manager scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop shell prototype ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Fullscreen desktop mode ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop input interactions ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget event bridge ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "UI event queue scaffold ready.");

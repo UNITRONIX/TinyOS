@@ -46,6 +46,7 @@ namespace tinyos::ui::desktop
         size_t app_window_count;
         uint32_t pointer_column;
         uint32_t pointer_row;
+        bool fullscreen;
     };
 
     void initialize();
@@ -60,7 +61,9 @@ namespace tinyos::ui::desktop
     const AppWindow* app_window_at(size_t index);
     size_t open_app_window_count();
     bool select_next();
+    bool select_previous();
     bool render_home();
+    bool render_fullscreen();
     bool launch_selected();
     bool render_demo();
     bool handle_event(const tinyos::ui::events::Event& event);
@@ -74,5 +77,6 @@ namespace tinyos::ui::desktop
     bool validation_self_test();
     bool launcher_validation_self_test();
     bool interaction_validation_self_test();
+    bool fullscreen_validation_self_test();
     bool input_validation_self_test();
 }

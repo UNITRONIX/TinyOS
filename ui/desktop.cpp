@@ -7,7 +7,9 @@ namespace
 {
     constexpr size_t MaxLauncherItems = 4;
     constexpr size_t MaxAppWindows = 3;
-    constexpr uint8_t HeaderAttribute = 0x1F;
+    constexpr uint8_t WallpaperAttribute = 0x17;
+    constexpr uint8_t TopPanelAttribute = 0x1F;
+    constexpr uint8_t MenuAttribute = 0x70;
     constexpr uint8_t IconAttribute = 0x1E;
     constexpr uint8_t SelectedIconAttribute = 0x2E;
     constexpr uint8_t AppWindowAttribute = 0x1F;
@@ -15,6 +17,8 @@ namespace
     constexpr uint8_t StatusAttribute = 0x70;
     constexpr uint32_t IconWidth = 14;
     constexpr uint32_t IconHeight = 3;
+    constexpr uint32_t FullscreenIconColumn = 2;
+    constexpr uint32_t FullscreenIconFirstRow = 3;
 
     tinyos::ui::desktop::State g_state = {};
     tinyos::ui::desktop::LauncherItem g_items[MaxLauncherItems] = {};
@@ -109,6 +113,31 @@ namespace
         return ok;
     }
 
+    bool draw_top_panel()
+    {
+        bool ok = tinyos::ui::renderer::fill_rect(0, 0, g_state.columns, 1, ' ', TopPanelAttribute);
+        ok = tinyos::ui::renderer::draw_text(1, 0, "TinyOS", TopPanelAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(12, 0, "1  2  3  4", TopPanelAttribute) && ok;
+        if (g_state.columns > 68)
+        {
+            ok = tinyos::ui::renderer::draw_text(55, 0, "desktop mode", TopPanelAttribute) && ok;
+        }
+        if (g_state.columns > 8)
+        {
+            ok = tinyos::ui::renderer::draw_text(g_state.columns - 8, 0, "11:45", TopPanelAttribute) && ok;
+        }
+        return ok;
+    }
+
+    bool draw_desktop_background()
+    {
+        bool ok = tinyos::ui::renderer::fill_rect(0, 0, g_state.columns, g_state.rows, ' ', WallpaperAttribute);
+        ok = draw_top_panel() && ok;
+        ok = tinyos::ui::renderer::draw_text(28, 8, "TinyOS", WallpaperAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(24, 10, "low-resource desktop", WallpaperAttribute) && ok;
+        return ok;
+    }
+
     bool draw_app_window(const tinyos::ui::desktop::AppWindow& window)
     {
         if (!window.open || window.title == nullptr || window.command == nullptr || window.width < 16 || window.height < 5)
@@ -117,14 +146,18 @@ namespace
         }
 
         const uint8_t attribute = window.focused ? FocusedAppWindowAttribute : AppWindowAttribute;
-        bool ok = tinyos::ui::renderer::fill_rect(window.column, window.row, window.width, 1, '-', attribute);
+        bool ok = tinyos::ui::renderer::fill_rect(window.column, window.row, window.width, 1, ' ', attribute);
         ok = tinyos::ui::renderer::fill_rect(window.column, window.row + window.height - 1, window.width, 1, '-', attribute) && ok;
         ok = tinyos::ui::renderer::fill_rect(window.column, window.row, 1, window.height, '|', attribute) && ok;
         ok = tinyos::ui::renderer::fill_rect(window.column + window.width - 1, window.row, 1, window.height, '|', attribute) && ok;
         ok = tinyos::ui::renderer::fill_rect(window.column + 1, window.row + 1, window.width - 2, window.height - 2, ' ', attribute) && ok;
         ok = tinyos::ui::renderer::draw_text(window.column + 2, window.row, window.title, attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 2, "Application window", attribute) && ok;
-        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 3, window.command, attribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + window.width - 6, window.row, "[_][x]", attribute) && ok;
+        ok = tinyos::ui::renderer::fill_rect(window.column + 1, window.row + 1, window.width - 2, 1, ' ', MenuAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 2, window.row + 1, "File  Actions  View  Help", MenuAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 3, "Application window", attribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + 4, window.command, attribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(window.column + 3, window.row + window.height - 2, "Tab: select  Enter: open  q: shell", attribute) && ok;
         return ok;
     }
 
@@ -132,12 +165,6 @@ namespace
     {
         const auto* icon = tinyos::ui::desktop::icon_at(g_state.selected_index);
         if (icon == nullptr || icon->title == nullptr || icon->command == nullptr)
-        {
-            return false;
-        }
-
-        const auto* shell = shell_window();
-        if (shell == nullptr || shell->width < 42 || shell->height < 12)
         {
             return false;
         }
@@ -170,12 +197,76 @@ namespace
         const uint32_t offset = static_cast<uint32_t>(slot * 2);
         g_app_windows[slot].title = icon->title;
         g_app_windows[slot].command = icon->command;
-        g_app_windows[slot].column = shell->column + 25 + offset;
-        g_app_windows[slot].row = shell->row + 3 + offset;
-        g_app_windows[slot].width = 34;
-        g_app_windows[slot].height = 8;
+        g_app_windows[slot].column = 18 + offset;
+        g_app_windows[slot].row = 4 + offset;
+        g_app_windows[slot].width = g_state.columns > 58 ? 56 : 34;
+        g_app_windows[slot].height = g_state.rows > 20 ? 15 : 8;
         g_app_windows[slot].open = true;
         g_app_windows[slot].focused = true;
+        return true;
+    }
+
+    bool render_workspace(bool fullscreen)
+    {
+        if (!g_state.ready)
+        {
+            ++g_rejected_operations;
+            return false;
+        }
+
+        bool ok = false;
+        uint32_t status_column = 0;
+        uint32_t status_row = 0;
+
+        g_state.fullscreen = fullscreen;
+        if (fullscreen)
+        {
+            ok = draw_desktop_background();
+            status_column = 1;
+            status_row = g_state.rows > 0 ? g_state.rows - 1 : 0;
+        }
+        else
+        {
+            if (!tinyos::ui::window_manager::compose())
+            {
+                ++g_rejected_operations;
+                return false;
+            }
+
+            const auto* shell = shell_window();
+            if (shell == nullptr || shell->width < 40 || shell->height < 10)
+            {
+                ++g_rejected_operations;
+                return false;
+            }
+
+            ok = true;
+            status_column = shell->column + 3;
+            status_row = shell->row + shell->height - 2;
+        }
+
+        for (size_t index = 0; index < g_state.icon_count; ++index)
+        {
+            ok = draw_desktop_icon(g_icons[index]) && ok;
+        }
+        for (size_t index = 0; index < g_state.app_window_count; ++index)
+        {
+            if (g_app_windows[index].open)
+            {
+                ok = draw_app_window(g_app_windows[index]) && ok;
+            }
+        }
+
+        ok = tinyos::ui::renderer::fill_rect(status_column, status_row, g_state.columns > status_column ? g_state.columns - status_column : 1, 1, ' ', StatusAttribute) && ok;
+        ok = tinyos::ui::renderer::draw_text(status_column, status_row, "Tab/n: select  Enter/Space: open  q: shell", StatusAttribute) && ok;
+
+        if (!ok)
+        {
+            ++g_rejected_operations;
+            return false;
+        }
+
+        ++g_renders;
         return true;
     }
 }
@@ -196,6 +287,7 @@ namespace tinyos::ui::desktop
             g_state.app_window_count = 0;
             g_state.pointer_column = 0;
             g_state.pointer_row = 0;
+            g_state.fullscreen = false;
             return;
         }
 
@@ -208,10 +300,10 @@ namespace tinyos::ui::desktop
         g_state.app_window_count = MaxAppWindows;
         g_state.pointer_column = 0;
         g_state.pointer_row = 0;
+        g_state.fullscreen = false;
 
-        const auto* shell = shell_window();
-        const uint32_t icon_column = shell != nullptr ? shell->column + 3 : 6;
-        const uint32_t icon_row = shell != nullptr ? shell->row + 3 : 6;
+        const uint32_t icon_column = FullscreenIconColumn;
+        const uint32_t icon_row = FullscreenIconFirstRow;
 
         set_launcher_item(0, "Terminal", "wmtest", true);
         set_launcher_item(1, "Devices", "devices", true);
@@ -316,52 +408,29 @@ namespace tinyos::ui::desktop
         return true;
     }
 
+    bool select_previous()
+    {
+        if (!g_state.ready || g_state.icon_count == 0)
+        {
+            ++g_rejected_operations;
+            return false;
+        }
+
+        g_icons[g_state.selected_index].selected = false;
+        g_state.selected_index = g_state.selected_index == 0 ? g_state.icon_count - 1 : g_state.selected_index - 1;
+        g_icons[g_state.selected_index].selected = true;
+        ++g_selection_changes;
+        return true;
+    }
+
     bool render_home()
     {
-        if (!g_state.ready)
-        {
-            ++g_rejected_operations;
-            return false;
-        }
+        return render_workspace(false);
+    }
 
-        if (!tinyos::ui::window_manager::compose())
-        {
-            ++g_rejected_operations;
-            return false;
-        }
-
-        const auto* shell = shell_window();
-        if (shell == nullptr || shell->width < 40 || shell->height < 10)
-        {
-            ++g_rejected_operations;
-            return false;
-        }
-
-        const uint32_t column = shell->column + 3;
-        const uint32_t row = shell->row + 2;
-        bool ok = tinyos::ui::renderer::draw_text(column, row, "TinyOS desktop", HeaderAttribute);
-        ok = tinyos::ui::renderer::draw_text(column, row + 1, "Tab selects, Enter opens, mouse click opens icons", HeaderAttribute) && ok;
-        for (size_t index = 0; index < g_state.icon_count; ++index)
-        {
-            ok = draw_desktop_icon(g_icons[index]) && ok;
-        }
-        for (size_t index = 0; index < g_state.app_window_count; ++index)
-        {
-            if (g_app_windows[index].open)
-            {
-                ok = draw_app_window(g_app_windows[index]) && ok;
-            }
-        }
-        ok = tinyos::ui::renderer::draw_text(column, shell->row + shell->height - 2, "desktoptest | desktopnext | desktoplaunch | desktopmousetest", StatusAttribute) && ok;
-
-        if (!ok)
-        {
-            ++g_rejected_operations;
-            return false;
-        }
-
-        ++g_renders;
-        return true;
+    bool render_fullscreen()
+    {
+        return render_workspace(true);
     }
 
     bool launch_selected()
@@ -379,22 +448,23 @@ namespace tinyos::ui::desktop
             return false;
         }
 
-        if (!render_home())
+        if (g_state.fullscreen)
+        {
+            if (!render_fullscreen())
+            {
+                ++g_rejected_operations;
+                return false;
+            }
+        }
+        else if (!render_home())
         {
             ++g_rejected_operations;
             return false;
         }
 
-        const auto* shell = shell_window();
-        if (shell == nullptr)
-        {
-            ++g_rejected_operations;
-            return false;
-        }
-
-        const uint32_t column = shell->column + 3;
-        const uint32_t row = shell->row + shell->height - 3;
-        bool ok = tinyos::ui::renderer::fill_rect(column, row, shell->width - 6, 1, ' ', StatusAttribute);
+        const uint32_t column = g_state.fullscreen ? 1 : 6;
+        const uint32_t row = g_state.rows > 1 ? g_state.rows - 2 : 0;
+        bool ok = tinyos::ui::renderer::fill_rect(column, row, g_state.columns > column ? g_state.columns - column : 1, 1, ' ', StatusAttribute);
         ok = tinyos::ui::renderer::draw_text(column, row, "Opened:", StatusAttribute) && ok;
         ok = tinyos::ui::renderer::draw_text(column + 9, row, item->title, StatusAttribute) && ok;
         ok = tinyos::ui::renderer::draw_text(column + 22, row, item->command, StatusAttribute) && ok;
@@ -410,7 +480,7 @@ namespace tinyos::ui::desktop
 
     bool render_demo()
     {
-        return render_home();
+        return render_fullscreen();
     }
 
     bool handle_event(const tinyos::ui::events::Event& event)
@@ -424,9 +494,14 @@ namespace tinyos::ui::desktop
         if (event.type == tinyos::ui::events::EventType::Key && event.pressed)
         {
             ++g_handled_events;
-            if (event.character == '\t')
+            if (event.character == '\t' || event.character == 'n' || event.character == 's' || event.character == 'j')
             {
-                return select_next() && render_home();
+                return select_next() && (g_state.fullscreen ? render_fullscreen() : render_home());
+            }
+
+            if (event.character == 'p' || event.character == 'w' || event.character == 'k')
+            {
+                return select_previous() && (g_state.fullscreen ? render_fullscreen() : render_home());
             }
 
             if (event.character == '\n' || event.character == ' ')
@@ -434,7 +509,7 @@ namespace tinyos::ui::desktop
                 return launch_selected();
             }
 
-            return render_home();
+            return g_state.fullscreen ? render_fullscreen() : render_home();
         }
 
         if (event.type == tinyos::ui::events::EventType::Pointer)
@@ -443,7 +518,7 @@ namespace tinyos::ui::desktop
             g_state.pointer_row = event.row;
             ++g_pointer_events;
             ++g_handled_events;
-            return render_home();
+            return g_state.fullscreen ? render_fullscreen() : render_home();
         }
 
         if (event.type == tinyos::ui::events::EventType::MouseButton && event.pressed)
@@ -454,7 +529,7 @@ namespace tinyos::ui::desktop
             ++g_handled_events;
             if (!select_icon_at(event.column, event.row))
             {
-                return render_home();
+                return g_state.fullscreen ? render_fullscreen() : render_home();
             }
 
             return launch_selected();
@@ -570,6 +645,32 @@ namespace tinyos::ui::desktop
         }
         const bool restored = launched && render_home();
         return selected && drawn && launched && restored;
+    }
+
+    bool fullscreen_validation_self_test()
+    {
+        if (!validation_self_test())
+        {
+            return false;
+        }
+
+        const size_t original_index = g_state.selected_index;
+        const bool rendered = render_fullscreen();
+        const bool selected = rendered && select_next();
+        const bool navigated = selected && render_fullscreen();
+        const bool launched = navigated && launch_selected();
+        g_state.selected_index = original_index;
+        for (size_t index = 0; index < g_state.icon_count; ++index)
+        {
+            g_icons[index].selected = index == original_index;
+        }
+        for (size_t index = 0; index < g_state.app_window_count; ++index)
+        {
+            close_app_window(index);
+        }
+        g_state.fullscreen = false;
+        const bool restored = render_home();
+        return rendered && selected && navigated && launched && restored;
     }
 
     bool input_validation_self_test()

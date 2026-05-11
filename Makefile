@@ -240,6 +240,11 @@ test-boot: check-test-tools iso
 		echo "Boot smoke test failed: desktop shell marker not found."; \
 		exit 1; \
 	fi; \
+	if ! grep -q "Fullscreen desktop mode ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Boot smoke test failed: fullscreen desktop marker not found."; \
+		exit 1; \
+	fi; \
 	if ! grep -q "Desktop input interactions ready" $(BOOT_TEST_LOG); then \
 		cat $(BOOT_TEST_LOG); \
 		echo "Boot smoke test failed: desktop input marker not found."; \
@@ -280,6 +285,11 @@ test-existing-iso: check-qemu-tools
 		echo "Existing ISO boot smoke test failed: desktop shell marker not found."; \
 		exit 1; \
 	fi; \
+	if ! grep -q "Fullscreen desktop mode ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Existing ISO boot smoke test failed: fullscreen desktop marker not found."; \
+		exit 1; \
+	fi; \
 	if ! grep -q "Desktop input interactions ready" $(BOOT_TEST_LOG); then \
 		cat $(BOOT_TEST_LOG); \
 		echo "Existing ISO boot smoke test failed: desktop input marker not found."; \
@@ -309,7 +319,7 @@ test-minimal: check-test-tools iso
 		echo "Minimal requirement test failed: QEMU exited before timeout with status $$status."; \
 		exit 1; \
 	fi; \
-	if grep -q "TinyOS booted successfully" $(MINIMAL_TEST_LOG) && grep -q "System requirements manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Language runtime manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "System management tools manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Window manager scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop shell prototype ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop input interactions ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget event bridge ready" $(MINIMAL_TEST_LOG) && grep -q "UI event queue scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(MINIMAL_TEST_LOG); then \
+	if grep -q "TinyOS booted successfully" $(MINIMAL_TEST_LOG) && grep -q "System requirements manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Language runtime manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "System management tools manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Window manager scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop shell prototype ready" $(MINIMAL_TEST_LOG) && grep -q "Fullscreen desktop mode ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop input interactions ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget event bridge ready" $(MINIMAL_TEST_LOG) && grep -q "UI event queue scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(MINIMAL_TEST_LOG); then \
 		echo "Minimal requirement test passed. Log: $(MINIMAL_TEST_LOG)"; \
 	else \
 		cat $(MINIMAL_TEST_LOG); \

@@ -1176,6 +1176,8 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::desktop::launcher_validation_self_test() ? "ok" : "failed");
         tinyos::drivers::vga::write("Interaction   : ");
         tinyos::drivers::vga::write_line(tinyos::ui::desktop::interaction_validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Fullscreen    : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::fullscreen_validation_self_test() ? "ok" : "failed");
         tinyos::drivers::vga::write("Input         : ");
         tinyos::drivers::vga::write_line(tinyos::ui::desktop::input_validation_self_test() ? "ok" : "failed");
         for (size_t index = 0; index < tinyos::ui::desktop::icon_count(); ++index)
@@ -1201,6 +1203,41 @@ namespace
                 tinyos::drivers::vga::write(" -> ");
                 tinyos::drivers::vga::write_line(window->command != nullptr ? window->command : "none");
             }
+        }
+    }
+
+    void run_desktop_mode()
+    {
+        if (!tinyos::ui::desktop::render_fullscreen())
+        {
+            tinyos::drivers::vga::write_line("Desktop mode failed.");
+            return;
+        }
+
+        for (;;)
+        {
+            const char character = tinyos::drivers::keyboard::read_char();
+            if (character == 27 || character == 'q' || character == 'Q')
+            {
+                tinyos::drivers::vga::clear();
+                tinyos::ui::terminal::initialize();
+                tinyos::ui::terminal::clear_content();
+                tinyos::drivers::vga::write_line("Returned from desktop mode.");
+                return;
+            }
+
+            tinyos::ui::events::Event event;
+            event.type = tinyos::ui::events::EventType::Key;
+            event.source = tinyos::ui::events::Source::Keyboard;
+            event.character = character;
+            event.pressed = true;
+            event.column = 0;
+            event.row = 0;
+            event.delta_column = 0;
+            event.delta_row = 0;
+            event.button = 0;
+            event.sequence = 0;
+            tinyos::ui::desktop::handle_event(event);
         }
     }
 
@@ -1264,7 +1301,8 @@ namespace
         tinyos::drivers::vga::write_line("  wmtest   - draw window manager demo");
         tinyos::drivers::vga::write_line("  wmfocus  - cycle window focus");
         tinyos::drivers::vga::write_line("  desktopinfo - show desktop shell prototype state");
-        tinyos::drivers::vga::write_line("  desktoptest - draw desktop shell prototype");
+        tinyos::drivers::vga::write_line("  desktop   - enter fullscreen desktop mode");
+        tinyos::drivers::vga::write_line("  desktoptest - draw fullscreen desktop prototype");
         tinyos::drivers::vga::write_line("  desktopnext - select next desktop launcher item");
         tinyos::drivers::vga::write_line("  desktoplaunch - render selected launch request");
         tinyos::drivers::vga::write_line("  desktopdispatch - dispatch desktop input events");
@@ -1575,16 +1613,22 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::compare(command, "desktop") == 0)
+        {
+            run_desktop_mode();
+            return;
+        }
+
         if (core::string::compare(command, "desktoptest") == 0)
         {
-            drivers::vga::write_line(tinyos::ui::desktop::render_demo() ? "Desktop shell demo drawn." : "Desktop shell demo failed.");
+            drivers::vga::write_line(tinyos::ui::desktop::render_demo() ? "Fullscreen desktop demo drawn." : "Fullscreen desktop demo failed.");
             return;
         }
 
         if (core::string::compare(command, "desktopnext") == 0)
         {
             const bool selected = tinyos::ui::desktop::select_next();
-            const bool drawn = selected && tinyos::ui::desktop::render_home();
+            const bool drawn = selected && tinyos::ui::desktop::render_fullscreen();
             drivers::vga::write_line(selected && drawn ? "Desktop launcher selection changed." : "Desktop launcher selection failed.");
             return;
         }

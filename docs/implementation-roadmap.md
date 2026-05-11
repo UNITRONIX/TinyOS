@@ -123,6 +123,7 @@ TinyOS currently provides:
 22. [x] add text-grid window manager scaffold
 23. [x] add desktop shell prototype over text-grid window manager
 24. [x] add desktop icons, app windows and keyboard/mouse event dispatch scaffold
+25. [x] add fullscreen desktop mode with keyboard navigation
 
 ### Phase 4 - tasking
 - [x] add task descriptor
@@ -202,6 +203,7 @@ TinyOS currently provides:
 - [x] add desktop shell prototype
 - [x] add desktop icons and app windows
 - [x] add keyboard and mouse event dispatch for desktop mode
+- [x] add fullscreen desktop mode with top panel and desktop-only navigation
 - add reusable GUI widgets
 - add PS/2 mouse hardware driver
 
