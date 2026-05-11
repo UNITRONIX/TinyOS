@@ -30,6 +30,7 @@
 #include <tinyos/kernel/memory/memory_map.hpp>
 #include <tinyos/kernel/memory/paging.hpp>
 #include <tinyos/kernel/panic.hpp>
+#include <tinyos/kernel/platform/pc.hpp>
 #include <tinyos/kernel/platform/requirements.hpp>
 #include <tinyos/kernel/provision/image.hpp>
 #include <tinyos/kernel/sched/scheduler.hpp>
@@ -1161,6 +1162,9 @@ namespace
         tinyos::drivers::vga::write_line("  provisioninfo - show provisioning workflow");
         tinyos::drivers::vga::write_line("  deployinfo - show remote deployment plan");
         tinyos::drivers::vga::write_line("  requirements - show minimum system requirements");
+        tinyos::drivers::vga::write_line("  platforminfo - show platform compatibility manifest");
+        tinyos::drivers::vga::write_line("  pcinfo - show PC platform initialization contract");
+        tinyos::drivers::vga::write_line("  archinfo - show architecture capability manifest");
         tinyos::drivers::vga::write_line("  contextinfo - show i686 context ABI scaffold state");
         tinyos::drivers::vga::write_line("  version  - show TinyOS version");
         tinyos::drivers::vga::write_line("  echo     - print text");
@@ -1738,8 +1742,21 @@ namespace tinyos::shell
             drivers::vga::write("Max buffer   : ");
             write_uint64(kernel::syscall::max_user_buffer_bytes());
             drivers::vga::put_char('\n');
+            const auto& policy = kernel::syscall::boundary_policy();
+            drivers::vga::write("Max args     : ");
+            write_uint64(policy.max_argument_count);
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Null guard   : ");
+            write_uint64(policy.null_guard_bytes);
+            drivers::vga::write_line(" bytes");
+            drivers::vga::write("Unknown nums : ");
+            drivers::vga::write_line(policy.reject_unknown_numbers ? "reject" : "allow");
+            drivers::vga::write("Access mode  : ");
+            drivers::vga::write_line(policy.require_explicit_buffer_access ? "explicit" : "implicit");
             drivers::vga::write("Validation   : ");
             drivers::vga::write_line(kernel::syscall::validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Policy test  : ");
+            drivers::vga::write_line(kernel::syscall::boundary_policy_validation_self_test() ? "ok" : "failed");
             drivers::vga::write("Bad buffers  : ");
             write_uint64(kernel::syscall::validation_failure_count());
             drivers::vga::put_char('\n');
@@ -1993,6 +2010,11 @@ namespace tinyos::shell
             drivers::vga::write("Page dir  : ");
             write_uint64(kernel::memory::paging::page_directory_address());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Runtime   : ");
+            drivers::vga::write_line(kernel::memory::paging::is_runtime_enabled() ? "enabled" : "prepared");
+            drivers::vga::write("Active dir: ");
+            write_uint64(kernel::memory::paging::active_page_directory_address());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Mapped MiB: ");
             write_uint64(kernel::memory::paging::mapped_bytes() / (1024 * 1024));
             drivers::vga::put_char('\n');
@@ -2011,6 +2033,100 @@ namespace tinyos::shell
             drivers::vga::put_char('\n');
             drivers::vga::write("Self-test  : ");
             drivers::vga::write_line(kernel::memory::paging::validation_self_test() ? "ok" : "failed");
+            return;
+        }
+
+        if (core::string::compare(command, "platforminfo") == 0)
+        {
+            const auto& platform = kernel::platform::requirements::platform();
+            drivers::vga::write("Platform : ");
+            drivers::vga::write_line(platform.name);
+            drivers::vga::write("Machine  : ");
+            drivers::vga::write_line(platform.machine_class);
+            drivers::vga::write("Boot     : ");
+            drivers::vga::write_line(platform.boot_media);
+            drivers::vga::write("Console  : ");
+            drivers::vga::write_line(platform.console_device);
+            drivers::vga::write("Input    : ");
+            drivers::vga::write_line(platform.input_device);
+            drivers::vga::write("Timer    : ");
+            drivers::vga::write_line(platform.timer_device);
+            drivers::vga::write("IRQ ctrl : ");
+            drivers::vga::write_line(platform.interrupt_controller);
+            drivers::vga::write("Storage  : ");
+            drivers::vga::write_line(platform.storage_model);
+            drivers::vga::write("Drivers  : ");
+            drivers::vga::write_line(platform.static_driver_model ? "static" : "dynamic-planned");
+            drivers::vga::write("Emulator : ");
+            drivers::vga::write_line(platform.emulator_first ? "first" : "optional");
+            drivers::vga::write("Self-test: ");
+            drivers::vga::write_line(kernel::platform::requirements::platform_validation_self_test() ? "ok" : "failed");
+            return;
+        }
+
+        if (core::string::compare(command, "pcinfo") == 0)
+        {
+            drivers::vga::write("PC phases    : ");
+            write_uint64(kernel::platform::pc::phase_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Boot critical: ");
+            write_uint64(kernel::platform::pc::boot_critical_phase_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Self-test    : ");
+            drivers::vga::write_line(kernel::platform::pc::validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Device cover : ");
+            write_uint64(kernel::platform::pc::ready_required_device_class_count());
+            drivers::vga::write("/");
+            write_uint64(kernel::platform::pc::required_device_class_count());
+            drivers::vga::put_char('\n');
+
+            for (size_t index = 0; index < kernel::platform::pc::phase_count(); ++index)
+            {
+                const auto* phase = kernel::platform::pc::phase_at(index);
+                drivers::vga::write("  - ");
+                drivers::vga::write(phase != nullptr && phase->name != nullptr ? phase->name : "invalid");
+                drivers::vga::write(" class=");
+                drivers::vga::write(phase != nullptr && phase->required_device_class != nullptr ? phase->required_device_class : "unknown");
+                drivers::vga::write(" critical=");
+                drivers::vga::write(phase != nullptr && phase->boot_critical ? "yes" : "no");
+                drivers::vga::put_char('\n');
+            }
+            drivers::vga::write_line("Required device classes:");
+            for (size_t index = 0; index < kernel::platform::pc::required_device_class_count(); ++index)
+            {
+                const auto* device_class = kernel::platform::pc::required_device_class_at(index);
+                drivers::vga::write("  - ");
+                drivers::vga::write(device_class != nullptr ? kernel::device::class_name(*device_class) : "invalid");
+                drivers::vga::write(" ready=");
+                drivers::vga::write(device_class != nullptr && kernel::device::has_ready_class(*device_class) ? "yes" : "no");
+                drivers::vga::put_char('\n');
+            }
+            return;
+        }
+
+        if (core::string::compare(command, "archinfo") == 0)
+        {
+            const auto& arch_info = arch::info();
+            drivers::vga::write("Arch name : ");
+            drivers::vga::write_line(arch_info.name);
+            drivers::vga::write("CPU family: ");
+            drivers::vga::write_line(arch_info.cpu_family);
+            drivers::vga::write("Pointer   : ");
+            write_uint64(arch_info.pointer_bits);
+            drivers::vga::write_line(" bits");
+            drivers::vga::write("Page size : ");
+            write_uint64(arch_info.page_size);
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Protected : ");
+            drivers::vga::write_line(arch_info.protected_mode ? "yes" : "no");
+            drivers::vga::write("Paging    : ");
+            drivers::vga::write_line(arch_info.paging_supported ? "yes" : "no");
+            drivers::vga::write("NX        : ");
+            drivers::vga::write_line(arch_info.nx_supported ? "yes" : "no");
+            drivers::vga::write("Endian    : ");
+            drivers::vga::write_line(arch_info.little_endian ? "little" : "big/unknown");
+            drivers::vga::write("Self-test : ");
+            drivers::vga::write_line(arch::validation_self_test() ? "ok" : "failed");
             return;
         }
 

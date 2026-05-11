@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include <tinyos/arch/hal.hpp>
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/memory/frame_allocator.hpp>
 #include <tinyos/kernel/memory/paging.hpp>
@@ -19,6 +20,7 @@ namespace
     alignas(4096) uint32_t* g_page_directory = nullptr;
     size_t g_mapped_pages = 0;
     bool g_ready = false;
+    bool g_runtime_enabled = false;
 
     void zero_page(uint32_t* page)
     {
@@ -120,9 +122,42 @@ namespace tinyos::kernel::memory::paging
         return g_ready;
     }
 
+    void enable_runtime()
+    {
+        if (!g_ready || g_page_directory == nullptr)
+        {
+            kernel::panic("Cannot enable paging before paging structures are ready.");
+        }
+
+        if (g_runtime_enabled)
+        {
+            return;
+        }
+
+        arch::load_page_directory(page_directory_address());
+        arch::enable_paging();
+        g_runtime_enabled = arch::paging_enabled() && arch::active_page_directory() == page_directory_address();
+        if (!g_runtime_enabled)
+        {
+            kernel::panic("Failed to enable runtime paging.");
+        }
+
+        kernel::klog::write_line(kernel::klog::Level::Info, "Runtime paging enabled.");
+    }
+
+    bool is_runtime_enabled()
+    {
+        return g_runtime_enabled && arch::paging_enabled();
+    }
+
     uintptr_t page_directory_address()
     {
         return reinterpret_cast<uintptr_t>(g_page_directory);
+    }
+
+    uintptr_t active_page_directory_address()
+    {
+        return arch::active_page_directory();
     }
 
     size_t bootstrap_identity_bytes()

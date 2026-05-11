@@ -21,7 +21,10 @@ namespace tinyos::kernel::memory::paging
 
     void initialize();
     bool is_ready();
+    void enable_runtime();
+    bool is_runtime_enabled();
     uintptr_t page_directory_address();
+    uintptr_t active_page_directory_address();
     size_t bootstrap_identity_bytes();
     size_t mapped_pages();
     size_t mapped_bytes();

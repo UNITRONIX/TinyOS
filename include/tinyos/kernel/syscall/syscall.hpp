@@ -48,15 +48,26 @@ namespace tinyos::kernel::syscall
         uint32_t value;
     };
 
+    struct BoundaryPolicy
+    {
+        size_t max_argument_count;
+        size_t max_user_buffer_bytes;
+        uintptr_t null_guard_bytes;
+        bool reject_unknown_numbers;
+        bool require_explicit_buffer_access;
+    };
+
     void initialize();
     bool is_ready();
     uint32_t count();
     size_t max_user_buffer_bytes();
+    const BoundaryPolicy& boundary_policy();
     bool is_known(Number number);
     bool is_known_number(uint32_t number);
     bool validate_user_buffer(uintptr_t address, size_t length, BufferAccess access);
     Result dispatch(const Request& request);
     bool validation_self_test();
+    bool boundary_policy_validation_self_test();
     size_t validation_failure_count();
     size_t rejected_call_count();
     const char* status_name(Status status);

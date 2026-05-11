@@ -31,6 +31,7 @@
 #include <tinyos/kernel/memory/memory_map.hpp>
 #include <tinyos/kernel/memory/paging.hpp>
 #include <tinyos/kernel/panic.hpp>
+#include <tinyos/kernel/platform/pc.hpp>
 #include <tinyos/kernel/platform/requirements.hpp>
 #include <tinyos/kernel/provision/image.hpp>
 #include <tinyos/kernel/sched/scheduler.hpp>
@@ -87,12 +88,14 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     (void)multiboot_info_addr;
 
     tinyos::arch::initialize();
+    TINYOS_ASSERT(tinyos::arch::validation_self_test(), "Architecture capability manifest validation failed.");
     tinyos::drivers::vga::initialize();
     tinyos::drivers::serial::initialize();
     debug_boot_checkpoint("serial ready");
     tinyos::kernel::klog::initialize();
     debug_boot_checkpoint("kernel logger ready");
     TINYOS_ASSERT(tinyos::kernel::platform::requirements::validation_self_test(), "System requirements manifest validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::platform::pc::validation_self_test(), "PC platform initialization contract validation failed.");
     tinyos::kernel::device::initialize();
     register_device_or_panic("vga-text", tinyos::kernel::device::Class::Console, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware);
     tinyos::kernel::device::framebuffer::initialize_text_grid("vga-text-grid", 80, 25, 0xB8000, 2);
@@ -153,6 +156,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::memory::address_space::paging_policy_gap_count() > 0, "Paging policy gap diagnostics did not detect bootstrap broad mapping.");
     TINYOS_ASSERT(tinyos::kernel::memory::address_space::apply_paging_policy() > 0, "Address-space paging policy did not update bootstrap tables.");
     TINYOS_ASSERT(tinyos::kernel::memory::address_space::paging_policy_gap_count() == 0, "Address-space paging policy still has enforceable gaps.");
+    tinyos::kernel::memory::paging::enable_runtime();
+    TINYOS_ASSERT(tinyos::kernel::memory::paging::is_runtime_enabled(), "Runtime paging did not enable.");
+    TINYOS_ASSERT(tinyos::kernel::memory::paging::active_page_directory_address() == tinyos::kernel::memory::paging::page_directory_address(), "Runtime paging CR3 mismatch.");
 
     tinyos::kernel::device::block::initialize();
     TINYOS_ASSERT(tinyos::kernel::device::block::validation_self_test(), "Block device scaffold validation failed.");
@@ -183,6 +189,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::syscall::initialize();
     debug_boot_checkpoint("syscall abi ready");
     TINYOS_ASSERT(tinyos::kernel::syscall::validation_self_test(), "Syscall validation self-test failed.");
+    TINYOS_ASSERT(tinyos::kernel::syscall::boundary_policy_validation_self_test(), "Syscall boundary policy validation failed.");
     tinyos::kernel::app::runtime::initialize();
     debug_boot_checkpoint("language runtime manifest ready");
     TINYOS_ASSERT(tinyos::kernel::app::runtime::validation_self_test(), "Language runtime manifest validation failed.");
@@ -236,6 +243,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::device::ready_count() == tinyos::kernel::device::count(), "Device registry contains non-ready core devices.");
     TINYOS_ASSERT(tinyos::kernel::device::has_ready_class(tinyos::kernel::device::Class::Block), "Block device class missing from registry.");
     TINYOS_ASSERT(tinyos::kernel::device::has_ready_class(tinyos::kernel::device::Class::Framebuffer), "Framebuffer device class missing from registry.");
+    TINYOS_ASSERT(tinyos::kernel::platform::pc::device_contract_satisfied(), "PC required device class contract missing ready devices.");
 
     TINYOS_ASSERT(tinyos::kernel::security::integrity::allocator_state_valid(), "Allocator integrity self-test failed.");
     debug_boot_checkpoint("allocator integrity self-test complete");
@@ -259,6 +267,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "ELF loader validation scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "RAMFS file tools scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall argument validation scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall boundary policy contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Language runtime manifest ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Application capability profile scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TAPP package registry scaffold ready.");
@@ -279,13 +288,18 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget event bridge ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "UI event queue scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System requirements manifest ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Platform compatibility manifest ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PC platform initialization contract ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PC required device classes ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Device RAMFS metadata scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Architecture capability manifest ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address space scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address space protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel section protection contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Boot module address-space regions ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address-space paging policy gap diagnostics ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address-space paging policy applied to bootstrap tables.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Runtime paging enabled with protected bootstrap map.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging structures prepared for bootstrap identity map.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PIT IRQ0 stable at 100 Hz.");

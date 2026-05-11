@@ -111,6 +111,12 @@ TinyOS currently provides:
 10. [x] split kernel image protection contract into metadata, text, rodata and writable data regions
 11. [x] add diagnostics for paging entries that do not match address-space policy
 12. [x] apply address-space read/write/user policy to prepared bootstrap page tables
+13. [x] enable runtime paging with the protected bootstrap identity map
+14. [x] add architecture capability manifest for portability diagnostics
+15. [x] add platform compatibility manifest for device and emulator contracts
+16. [x] add PC platform initialization contract scaffold
+17. [x] add PC required device class coverage contract
+18. [x] add syscall boundary policy contract
 
 ### Phase 4 - tasking
 - [x] add task descriptor

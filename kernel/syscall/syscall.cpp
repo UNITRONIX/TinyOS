@@ -5,6 +5,15 @@ namespace
 {
     constexpr uintptr_t NullPageLimit = 0x1000;
     constexpr size_t MaxUserBufferBytes = 64 * 1024;
+    constexpr size_t MaxArgumentCount = 4;
+
+    const tinyos::kernel::syscall::BoundaryPolicy g_boundary_policy = {
+        MaxArgumentCount,
+        MaxUserBufferBytes,
+        NullPageLimit,
+        true,
+        true
+    };
 
     bool g_ready = false;
     size_t g_validation_failure_count = 0;
@@ -76,6 +85,11 @@ namespace tinyos::kernel::syscall
     size_t max_user_buffer_bytes()
     {
         return MaxUserBufferBytes;
+    }
+
+    const BoundaryPolicy& boundary_policy()
+    {
+        return g_boundary_policy;
     }
 
     bool is_known(Number number)
@@ -161,7 +175,17 @@ namespace tinyos::kernel::syscall
             && unknown_rejected
             && null_rejected
             && oversized_rejected
-            && accepted_validated;
+            && accepted_validated
+            && boundary_policy_validation_self_test();
+    }
+
+    bool boundary_policy_validation_self_test()
+    {
+        return g_boundary_policy.max_argument_count == MaxArgumentCount &&
+            g_boundary_policy.max_user_buffer_bytes == MaxUserBufferBytes &&
+            g_boundary_policy.null_guard_bytes == NullPageLimit &&
+            g_boundary_policy.reject_unknown_numbers &&
+            g_boundary_policy.require_explicit_buffer_access;
     }
 
     size_t validation_failure_count()
