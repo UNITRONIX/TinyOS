@@ -190,6 +190,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     debug_boot_checkpoint("syscall abi ready");
     TINYOS_ASSERT(tinyos::kernel::syscall::validation_self_test(), "Syscall validation self-test failed.");
     TINYOS_ASSERT(tinyos::kernel::syscall::boundary_policy_validation_self_test(), "Syscall boundary policy validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::syscall::definition_validation_self_test(), "Syscall definition table validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::syscall::filter_policy_validation_self_test(), "Syscall filter policy validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::syscall::resource_policy_validation_self_test(), "Syscall resource policy validation failed.");
     tinyos::kernel::app::runtime::initialize();
     debug_boot_checkpoint("language runtime manifest ready");
     TINYOS_ASSERT(tinyos::kernel::app::runtime::validation_self_test(), "Language runtime manifest validation failed.");
@@ -268,6 +271,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "RAMFS file tools scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall argument validation scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall boundary policy contract ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall definition table ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall filter policy ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall resource limit policy ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Language runtime manifest ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Application capability profile scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TAPP package registry scaffold ready.");

@@ -6,6 +6,7 @@ namespace
     constexpr uintptr_t NullPageLimit = 0x1000;
     constexpr size_t MaxUserBufferBytes = 64 * 1024;
     constexpr size_t MaxArgumentCount = 4;
+    constexpr size_t MaxRejectedCallsBeforeThrottle = 32;
 
     const tinyos::kernel::syscall::BoundaryPolicy g_boundary_policy = {
         MaxArgumentCount,
@@ -13,6 +14,26 @@ namespace
         NullPageLimit,
         true,
         true
+    };
+
+    const tinyos::kernel::syscall::FilterPolicy g_filter_policy = {
+        true,
+        true
+    };
+
+    const tinyos::kernel::syscall::ResourcePolicy g_resource_policy = {
+        MaxRejectedCallsBeforeThrottle,
+        true
+    };
+
+    const tinyos::kernel::syscall::Definition g_definitions[] = {
+        { tinyos::kernel::syscall::Number::Write, "write", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Read, "read", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferWrite, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Open, "open", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Close, "close", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Spawn, "spawn", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Exit, "exit", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Sleep, "sleep", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false }
     };
 
     bool g_ready = false;
@@ -60,6 +81,46 @@ namespace
 
         return true;
     }
+
+    uint32_t argument_at(const tinyos::kernel::syscall::Request& request, size_t index)
+    {
+        switch (index)
+        {
+        case 0:
+            return request.arg0;
+        case 1:
+            return request.arg1;
+        case 2:
+            return request.arg2;
+        case 3:
+            return request.arg3;
+        }
+
+        return 0;
+    }
+
+    tinyos::kernel::syscall::ArgumentKind argument_kind_at(const tinyos::kernel::syscall::Definition& definition, size_t index)
+    {
+        switch (index)
+        {
+        case 0:
+            return definition.arg0;
+        case 1:
+            return definition.arg1;
+        case 2:
+            return definition.arg2;
+        case 3:
+            return definition.arg3;
+        }
+
+        return tinyos::kernel::syscall::ArgumentKind::None;
+    }
+
+    bool is_buffer_argument(tinyos::kernel::syscall::ArgumentKind kind)
+    {
+        return kind == tinyos::kernel::syscall::ArgumentKind::UserBufferRead ||
+            kind == tinyos::kernel::syscall::ArgumentKind::UserBufferWrite;
+    }
 }
 
 namespace tinyos::kernel::syscall
@@ -92,6 +153,58 @@ namespace tinyos::kernel::syscall
         return g_boundary_policy;
     }
 
+    const FilterPolicy& filter_policy()
+    {
+        return g_filter_policy;
+    }
+
+    const ResourcePolicy& resource_policy()
+    {
+        return g_resource_policy;
+    }
+
+    size_t definition_count()
+    {
+        return sizeof(g_definitions) / sizeof(g_definitions[0]);
+    }
+
+    size_t implemented_definition_count()
+    {
+        size_t total = 0;
+        for (size_t index = 0; index < definition_count(); ++index)
+        {
+            if (g_definitions[index].implemented)
+            {
+                ++total;
+            }
+        }
+
+        return total;
+    }
+
+    const Definition* definition_at(size_t index)
+    {
+        if (index >= definition_count())
+        {
+            return nullptr;
+        }
+
+        return &g_definitions[index];
+    }
+
+    const Definition* definition_for_number(uint32_t number)
+    {
+        for (size_t index = 0; index < definition_count(); ++index)
+        {
+            if (static_cast<uint32_t>(g_definitions[index].number) == number)
+            {
+                return &g_definitions[index];
+            }
+        }
+
+        return nullptr;
+    }
+
     bool is_known(Number number)
     {
         return static_cast<uint32_t>(number) < count();
@@ -108,34 +221,78 @@ namespace tinyos::kernel::syscall
         return validate_buffer(address, length, true);
     }
 
+    Status validate_request_shape(const Request& request)
+    {
+        const auto* definition = definition_for_number(request.number);
+        if (definition == nullptr)
+        {
+            return Status::UnknownSyscall;
+        }
+
+        if (definition->argument_count > g_boundary_policy.max_argument_count)
+        {
+            ++g_validation_failure_count;
+            return Status::InvalidLength;
+        }
+
+        for (size_t index = 0; index < definition->argument_count; ++index)
+        {
+            const auto kind = argument_kind_at(*definition, index);
+            if (!is_buffer_argument(kind))
+            {
+                continue;
+            }
+
+            const uintptr_t address = argument_at(request, index);
+            const size_t length = argument_at(request, index + 1);
+            const auto access = kind == ArgumentKind::UserBufferRead ? BufferAccess::Read : BufferAccess::Write;
+            if (!validate_user_buffer(address, length, access))
+            {
+                return length == 0 || length > MaxUserBufferBytes
+                    ? Status::InvalidLength
+                    : Status::InvalidPointer;
+            }
+        }
+
+        return Status::Ok;
+    }
+
     Result dispatch(const Request& request)
     {
-        if (!is_known_number(request.number))
+        if (throttle_active())
+        {
+            return make_result(Status::RateLimited);
+        }
+
+        const Status shape_status = validate_request_shape(request);
+        if (shape_status != Status::Ok)
+        {
+            ++g_rejected_call_count;
+            return make_result(shape_status);
+        }
+
+        const auto* definition = definition_for_number(request.number);
+        if (definition == nullptr)
         {
             ++g_rejected_call_count;
             return make_result(Status::UnknownSyscall);
+        }
+
+        if (g_filter_policy.deny_unimplemented && !definition->implemented)
+        {
+            if (g_filter_policy.count_filtered_as_rejected)
+            {
+                ++g_rejected_call_count;
+            }
+            return make_result(Status::Filtered);
         }
 
         const auto number = static_cast<Number>(request.number);
         switch (number)
         {
         case Number::Write:
-            if (!validate_user_buffer(request.arg0, request.arg1, BufferAccess::Read))
-            {
-                ++g_rejected_call_count;
-                return request.arg1 == 0 || request.arg1 > MaxUserBufferBytes
-                    ? make_result(Status::InvalidLength)
-                    : make_result(Status::InvalidPointer);
-            }
             return make_result(Status::Unsupported);
         case Number::Read:
-            if (!validate_user_buffer(request.arg0, request.arg1, BufferAccess::Write))
-            {
-                ++g_rejected_call_count;
-                return request.arg1 == 0 || request.arg1 > MaxUserBufferBytes
-                    ? make_result(Status::InvalidLength)
-                    : make_result(Status::InvalidPointer);
-            }
             return make_result(Status::Unsupported);
         case Number::Open:
         case Number::Close:
@@ -159,13 +316,15 @@ namespace tinyos::kernel::syscall
         const Request null_write_request = { static_cast<uint32_t>(Number::Write), 0, 8, 0, 0 };
         const Request oversized_write_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, MaxUserBufferBytes + 1, 0, 0 };
         const Request accepted_shape_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, 16, 0, 0 };
+        const Request accepted_open_shape_request = { static_cast<uint32_t>(Number::Open), NullPageLimit, 16, 0, 0 };
 
         const bool direct_valid = validate_buffer(NullPageLimit, 16, false);
         const bool direct_null_rejected = !validate_buffer(0, 16, false);
         const bool unknown_rejected = dispatch(unknown_request).status == Status::UnknownSyscall;
         const bool null_rejected = dispatch(null_write_request).status == Status::InvalidPointer;
         const bool oversized_rejected = dispatch(oversized_write_request).status == Status::InvalidLength;
-        const bool accepted_validated = dispatch(accepted_shape_request).status == Status::Unsupported;
+        const bool accepted_filtered = dispatch(accepted_shape_request).status == Status::Filtered;
+        const bool open_shape_validated = validate_request_shape(accepted_open_shape_request) == Status::Ok;
 
         g_validation_failure_count = failures_before;
         g_rejected_call_count = rejected_before;
@@ -175,8 +334,12 @@ namespace tinyos::kernel::syscall
             && unknown_rejected
             && null_rejected
             && oversized_rejected
-            && accepted_validated
-            && boundary_policy_validation_self_test();
+            && accepted_filtered
+            && open_shape_validated
+            && boundary_policy_validation_self_test()
+            && definition_validation_self_test()
+            && filter_policy_validation_self_test()
+            && resource_policy_validation_self_test();
     }
 
     bool boundary_policy_validation_self_test()
@@ -188,6 +351,59 @@ namespace tinyos::kernel::syscall
             g_boundary_policy.require_explicit_buffer_access;
     }
 
+    bool definition_validation_self_test()
+    {
+        if (definition_count() != count())
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < definition_count(); ++index)
+        {
+            const auto* definition = definition_at(index);
+            if (definition == nullptr || definition->name == nullptr || definition->argument_count > g_boundary_policy.max_argument_count)
+            {
+                return false;
+            }
+
+            if (!is_known(definition->number) || definition_for_number(static_cast<uint32_t>(definition->number)) != definition)
+            {
+                return false;
+            }
+
+            for (size_t other_index = index + 1; other_index < definition_count(); ++other_index)
+            {
+                const auto* other = definition_at(other_index);
+                if (other != nullptr && other->number == definition->number)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return definition_for_number(static_cast<uint32_t>(Number::Count)) == nullptr;
+    }
+
+    bool filter_policy_validation_self_test()
+    {
+        return g_filter_policy.deny_unimplemented &&
+            g_filter_policy.count_filtered_as_rejected &&
+            implemented_definition_count() == 0;
+    }
+
+    bool resource_policy_validation_self_test()
+    {
+        const size_t rejected_before = g_rejected_call_count;
+        g_rejected_call_count = g_resource_policy.max_rejected_calls_before_throttle;
+        const Request valid_shape_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, 16, 0, 0 };
+        const bool throttled = throttle_active() && dispatch(valid_shape_request).status == Status::RateLimited;
+        g_rejected_call_count = rejected_before;
+
+        return g_resource_policy.max_rejected_calls_before_throttle != 0 &&
+            g_resource_policy.throttle_after_rejections &&
+            throttled;
+    }
+
     size_t validation_failure_count()
     {
         return g_validation_failure_count;
@@ -196,6 +412,35 @@ namespace tinyos::kernel::syscall
     size_t rejected_call_count()
     {
         return g_rejected_call_count;
+    }
+
+    bool throttle_active()
+    {
+        return g_resource_policy.throttle_after_rejections &&
+            g_rejected_call_count >= g_resource_policy.max_rejected_calls_before_throttle;
+    }
+
+    const char* number_name(uint32_t number)
+    {
+        const auto* definition = definition_for_number(number);
+        return definition != nullptr ? definition->name : "unknown";
+    }
+
+    const char* argument_kind_name(ArgumentKind kind)
+    {
+        switch (kind)
+        {
+        case ArgumentKind::None:
+            return "none";
+        case ArgumentKind::Scalar:
+            return "scalar";
+        case ArgumentKind::UserBufferRead:
+            return "user-buffer-read";
+        case ArgumentKind::UserBufferWrite:
+            return "user-buffer-write";
+        }
+
+        return "unknown";
     }
 
     const char* status_name(Status status)
@@ -212,6 +457,10 @@ namespace tinyos::kernel::syscall
             return "invalid-length";
         case Status::Unsupported:
             return "unsupported";
+        case Status::Filtered:
+            return "filtered";
+        case Status::RateLimited:
+            return "rate-limited";
         }
 
         return "unknown-status";

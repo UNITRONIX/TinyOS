@@ -117,6 +117,9 @@ TinyOS currently provides:
 16. [x] add PC platform initialization contract scaffold
 17. [x] add PC required device class coverage contract
 18. [x] add syscall boundary policy contract
+19. [x] add syscall definition table contract
+20. [x] add syscall filter policy scaffold
+21. [x] add syscall resource limit policy scaffold
 
 ### Phase 4 - tasking
 - [x] add task descriptor

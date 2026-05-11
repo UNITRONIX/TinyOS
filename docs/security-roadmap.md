@@ -71,6 +71,9 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 - [x] syscall ABI scaffold
 - [x] syscall argument validation scaffold
 - [x] syscall boundary policy contract
+- [x] syscall definition table contract
+- [x] syscall filter policy scaffold
+- [x] syscall resource limit policy scaffold
 - [x] user transition scaffold
 - [x] safer memory helpers and allocator hardening
 - [x] runtime capability masks

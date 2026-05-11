@@ -1739,6 +1739,12 @@ namespace tinyos::shell
             drivers::vga::write("Syscall count: ");
             write_uint64(kernel::syscall::count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Definitions : ");
+            write_uint64(kernel::syscall::definition_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Implemented : ");
+            write_uint64(kernel::syscall::implemented_definition_count());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Max buffer   : ");
             write_uint64(kernel::syscall::max_user_buffer_bytes());
             drivers::vga::put_char('\n');
@@ -1753,16 +1759,43 @@ namespace tinyos::shell
             drivers::vga::write_line(policy.reject_unknown_numbers ? "reject" : "allow");
             drivers::vga::write("Access mode  : ");
             drivers::vga::write_line(policy.require_explicit_buffer_access ? "explicit" : "implicit");
+            const auto& filter = kernel::syscall::filter_policy();
+            drivers::vga::write("Filter impl  : ");
+            drivers::vga::write_line(filter.deny_unimplemented ? "deny-unimplemented" : "allow-unimplemented");
+            drivers::vga::write("Filter count : ");
+            drivers::vga::write_line(filter.count_filtered_as_rejected ? "rejected" : "ignored");
+            const auto& resource = kernel::syscall::resource_policy();
+            drivers::vga::write("Reject limit : ");
+            write_uint64(resource.max_rejected_calls_before_throttle);
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Throttle     : ");
+            drivers::vga::write_line(kernel::syscall::throttle_active() ? "active" : "inactive");
             drivers::vga::write("Validation   : ");
             drivers::vga::write_line(kernel::syscall::validation_self_test() ? "ok" : "failed");
             drivers::vga::write("Policy test  : ");
             drivers::vga::write_line(kernel::syscall::boundary_policy_validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Defs test    : ");
+            drivers::vga::write_line(kernel::syscall::definition_validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Filter test  : ");
+            drivers::vga::write_line(kernel::syscall::filter_policy_validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Limit test   : ");
+            drivers::vga::write_line(kernel::syscall::resource_policy_validation_self_test() ? "ok" : "failed");
             drivers::vga::write("Bad buffers  : ");
             write_uint64(kernel::syscall::validation_failure_count());
             drivers::vga::put_char('\n');
             drivers::vga::write("Rejected calls: ");
             write_uint64(kernel::syscall::rejected_call_count());
             drivers::vga::put_char('\n');
+            for (size_t index = 0; index < kernel::syscall::definition_count(); ++index)
+            {
+                const auto* definition = kernel::syscall::definition_at(index);
+                drivers::vga::write("  - ");
+                drivers::vga::write(definition != nullptr ? definition->name : "invalid");
+                drivers::vga::write(" args=");
+                write_uint64(definition != nullptr ? definition->argument_count : 0);
+                drivers::vga::write(" impl=");
+                drivers::vga::write_line(definition != nullptr && definition->implemented ? "yes" : "no");
+            }
             return;
         }
 
