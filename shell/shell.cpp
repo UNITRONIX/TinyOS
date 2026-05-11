@@ -44,8 +44,10 @@
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
 #include <tinyos/ui/events.hpp>
+#include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
+#include <tinyos/ui/window_manager.hpp>
 #include <tinyos/ui/widgets.hpp>
 
 namespace
@@ -1082,6 +1084,91 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::widgets::event_bridge_validation_self_test() ? "ok" : "failed");
     }
 
+    void print_window_manager_info()
+    {
+        const auto* state = tinyos::ui::window_manager::state();
+        tinyos::drivers::vga::write("WM ready      : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::is_ready() ? "yes" : "no");
+        tinyos::drivers::vga::write("Grid          : ");
+        write_uint64(state != nullptr ? state->columns : 0);
+        tinyos::drivers::vga::write("x");
+        write_uint64(state != nullptr ? state->rows : 0);
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Windows       : ");
+        write_uint64(tinyos::ui::window_manager::window_count());
+        tinyos::drivers::vga::put_char('\n');
+        const auto* focused = tinyos::ui::window_manager::focused_window();
+        tinyos::drivers::vga::write("Focused       : ");
+        tinyos::drivers::vga::write_line(focused != nullptr && focused->title != nullptr ? focused->title : "none");
+        tinyos::drivers::vga::write("Compositions  : ");
+        write_uint64(tinyos::ui::window_manager::composition_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Focus changes : ");
+        write_uint64(tinyos::ui::window_manager::focus_change_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Rejected ops  : ");
+        write_uint64(tinyos::ui::window_manager::rejected_operation_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Self-test     : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Composition   : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::composition_validation_self_test() ? "ok" : "failed");
+        for (size_t index = 0; index < tinyos::ui::window_manager::window_count(); ++index)
+        {
+            const auto* window = tinyos::ui::window_manager::window_at(index);
+            tinyos::drivers::vga::write("  - ");
+            tinyos::drivers::vga::write(window != nullptr && window->title != nullptr ? window->title : "invalid");
+            tinyos::drivers::vga::write(" role=");
+            tinyos::drivers::vga::write(window != nullptr ? tinyos::ui::window_manager::role_name(window->role) : "unknown");
+            tinyos::drivers::vga::write(" focused=");
+            tinyos::drivers::vga::write_line(window != nullptr && window->focused ? "yes" : "no");
+        }
+    }
+
+    void print_desktop_info()
+    {
+        const auto* state = tinyos::ui::desktop::state();
+        tinyos::drivers::vga::write("Desktop ready : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::is_ready() ? "yes" : "no");
+        tinyos::drivers::vga::write("Grid          : ");
+        write_uint64(state != nullptr ? state->columns : 0);
+        tinyos::drivers::vga::write("x");
+        write_uint64(state != nullptr ? state->rows : 0);
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Launcher items: ");
+        write_uint64(tinyos::ui::desktop::launcher_item_count());
+        tinyos::drivers::vga::put_char('\n');
+        const auto* selected = tinyos::ui::desktop::selected_launcher_item();
+        tinyos::drivers::vga::write("Selected      : ");
+        tinyos::drivers::vga::write_line(selected != nullptr && selected->title != nullptr ? selected->title : "none");
+        tinyos::drivers::vga::write("Renders       : ");
+        write_uint64(tinyos::ui::desktop::render_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Selections    : ");
+        write_uint64(tinyos::ui::desktop::selection_change_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Launches      : ");
+        write_uint64(tinyos::ui::desktop::launch_request_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Rejected ops  : ");
+        write_uint64(tinyos::ui::desktop::rejected_operation_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Self-test     : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Launcher      : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::launcher_validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Interaction   : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::interaction_validation_self_test() ? "ok" : "failed");
+        for (size_t index = 0; index < tinyos::ui::desktop::launcher_item_count(); ++index)
+        {
+            const auto* item = tinyos::ui::desktop::launcher_item_at(index);
+            tinyos::drivers::vga::write("  - ");
+            tinyos::drivers::vga::write(item != nullptr && item->title != nullptr ? item->title : "invalid");
+            tinyos::drivers::vga::write(" -> ");
+            tinyos::drivers::vga::write_line(item != nullptr && item->command != nullptr ? item->command : "none");
+        }
+    }
+
     void print_requirements()
     {
         const auto& requirements = tinyos::kernel::platform::requirements::current();
@@ -1138,6 +1225,13 @@ namespace
         tinyos::drivers::vga::write_line("  terminalpaneltest - draw terminal UI panel");
         tinyos::drivers::vga::write_line("  widgetinfo - show TUI widget scaffold state");
         tinyos::drivers::vga::write_line("  widgettest - draw TUI widget demo");
+        tinyos::drivers::vga::write_line("  wminfo   - show window manager scaffold state");
+        tinyos::drivers::vga::write_line("  wmtest   - draw window manager demo");
+        tinyos::drivers::vga::write_line("  wmfocus  - cycle window focus");
+        tinyos::drivers::vga::write_line("  desktopinfo - show desktop shell prototype state");
+        tinyos::drivers::vga::write_line("  desktoptest - draw desktop shell prototype");
+        tinyos::drivers::vga::write_line("  desktopnext - select next desktop launcher item");
+        tinyos::drivers::vga::write_line("  desktoplaunch - render selected launch request");
         tinyos::drivers::vga::write_line("  widgetdispatch - dispatch queued UI events to widgets");
         tinyos::drivers::vga::write_line("  widgetactiontest - inject and dispatch widget action");
         tinyos::drivers::vga::write_line("  uieventinfo - show UI event queue state");
@@ -1414,6 +1508,52 @@ namespace tinyos::shell
         if (core::string::compare(command, "widgettest") == 0)
         {
             drivers::vga::write_line(tinyos::ui::widgets::render_demo() ? "TUI widget demo drawn." : "TUI widget demo failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "wminfo") == 0)
+        {
+            print_window_manager_info();
+            return;
+        }
+
+        if (core::string::compare(command, "wmtest") == 0)
+        {
+            drivers::vga::write_line(tinyos::ui::window_manager::render_demo() ? "Window manager demo drawn." : "Window manager demo failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "wmfocus") == 0)
+        {
+            const bool focused = tinyos::ui::window_manager::focus_next();
+            const bool drawn = focused && tinyos::ui::window_manager::compose();
+            drivers::vga::write_line(focused && drawn ? "Window focus changed." : "Window focus failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "desktopinfo") == 0)
+        {
+            print_desktop_info();
+            return;
+        }
+
+        if (core::string::compare(command, "desktoptest") == 0)
+        {
+            drivers::vga::write_line(tinyos::ui::desktop::render_demo() ? "Desktop shell demo drawn." : "Desktop shell demo failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "desktopnext") == 0)
+        {
+            const bool selected = tinyos::ui::desktop::select_next();
+            const bool drawn = selected && tinyos::ui::desktop::render_home();
+            drivers::vga::write_line(selected && drawn ? "Desktop launcher selection changed." : "Desktop launcher selection failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "desktoplaunch") == 0)
+        {
+            drivers::vga::write_line(tinyos::ui::desktop::launch_selected() ? "Desktop launch request rendered." : "Desktop launch request failed.");
             return;
         }
 

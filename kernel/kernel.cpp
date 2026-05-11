@@ -41,8 +41,10 @@
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
 #include <tinyos/ui/events.hpp>
+#include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
+#include <tinyos/ui/window_manager.hpp>
 #include <tinyos/ui/widgets.hpp>
 
 namespace
@@ -109,6 +111,13 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::ui::terminal::panel_validation_self_test(), "Terminal panel scaffold validation failed.");
     tinyos::ui::widgets::initialize();
     TINYOS_ASSERT(tinyos::ui::widgets::validation_self_test(), "TUI widget scaffold validation failed.");
+    tinyos::ui::window_manager::initialize();
+    TINYOS_ASSERT(tinyos::ui::window_manager::validation_self_test(), "Window manager scaffold validation failed.");
+    TINYOS_ASSERT(tinyos::ui::window_manager::composition_validation_self_test(), "Window manager composition validation failed.");
+    tinyos::ui::desktop::initialize();
+    TINYOS_ASSERT(tinyos::ui::desktop::validation_self_test(), "Desktop shell prototype validation failed.");
+    TINYOS_ASSERT(tinyos::ui::desktop::launcher_validation_self_test(), "Desktop launcher validation failed.");
+    TINYOS_ASSERT(tinyos::ui::desktop::interaction_validation_self_test(), "Desktop launcher interaction validation failed.");
     register_device_or_panic("serial-com1", tinyos::kernel::device::Class::Diagnostics, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagDiagnostics);
     debug_boot_checkpoint("device registry ready");
 
@@ -291,6 +300,8 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal UI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal panel scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Window manager scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop shell prototype ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget event bridge ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "UI event queue scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System requirements manifest ready.");

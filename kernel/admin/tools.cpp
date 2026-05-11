@@ -62,6 +62,8 @@ namespace
         { "renderinfo", "show renderer state", Category::Ui, State::Ready, false, false },
         { "terminalinfo", "show terminal UI state", Category::Ui, State::Ready, false, false },
         { "widgetinfo", "show widget state", Category::Ui, State::Ready, false, false },
+        { "wminfo", "show window manager state", Category::Ui, State::Ready, false, false },
+        { "desktopinfo", "show desktop shell state", Category::Ui, State::Ready, false, false },
         { "uieventinfo", "show UI event queue", Category::Ui, State::Ready, false, false },
         { "inputinfo", "show input queue", Category::Ui, State::Ready, false, false },
         { "keyboardinfo", "show keyboard driver", Category::Ui, State::Ready, false, false },

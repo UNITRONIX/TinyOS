@@ -120,6 +120,8 @@ TinyOS currently provides:
 19. [x] add syscall definition table contract
 20. [x] add syscall filter policy scaffold
 21. [x] add syscall resource limit policy scaffold
+22. [x] add text-grid window manager scaffold
+23. [x] add desktop shell prototype over text-grid window manager
 
 ### Phase 4 - tasking
 - [x] add task descriptor
@@ -195,9 +197,10 @@ TinyOS currently provides:
 - [x] add first terminal UI state scaffold
 - [x] add UI-facing event queue
 - [x] add first TUI widgets
-- add simple window manager
+- [x] add simple window manager
+- [x] add desktop shell prototype
 - add reusable GUI widgets
-- add desktop shell prototype
+- add keyboard-driven desktop interactions
 
 ### Phase 9 - multi-architecture growth
 - keep `i686` as reference target
