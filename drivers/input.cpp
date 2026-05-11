@@ -12,6 +12,32 @@ namespace
     volatile size_t g_write_index = 0;
     volatile size_t g_count = 0;
     volatile uint64_t g_dropped_events = 0;
+
+    void clear_event(tinyos::drivers::input::Event& event)
+    {
+        event.type = tinyos::drivers::input::EventType::None;
+        event.character = 0;
+        event.pressed = false;
+        event.column = 0;
+        event.row = 0;
+        event.delta_column = 0;
+        event.delta_row = 0;
+        event.button = 0;
+    }
+
+    bool push_event(const tinyos::drivers::input::Event& event)
+    {
+        if (event.type == tinyos::drivers::input::EventType::None || g_count >= QueueSize)
+        {
+            ++g_dropped_events;
+            return false;
+        }
+
+        g_queue[g_write_index] = event;
+        g_write_index = (g_write_index + 1) % QueueSize;
+        ++g_count;
+        return true;
+    }
 }
 
 namespace tinyos::drivers::input
@@ -26,29 +52,49 @@ namespace tinyos::drivers::input
 
     void push_key_event(char character, bool pressed)
     {
-        if (character == 0 || g_count >= QueueSize)
+        if (character == 0)
         {
-            if (character != 0)
-            {
-                ++g_dropped_events;
-            }
+            ++g_dropped_events;
             return;
         }
 
-        g_queue[g_write_index].type = EventType::Key;
-        g_queue[g_write_index].character = character;
-        g_queue[g_write_index].pressed = pressed;
-        g_write_index = (g_write_index + 1) % QueueSize;
-        ++g_count;
+        Event event;
+        clear_event(event);
+        event.type = EventType::Key;
+        event.character = character;
+        event.pressed = pressed;
+        push_event(event);
+    }
+
+    void push_pointer_event(uint32_t column, uint32_t row, int32_t delta_column, int32_t delta_row)
+    {
+        Event event;
+        clear_event(event);
+        event.type = EventType::Pointer;
+        event.column = column;
+        event.row = row;
+        event.delta_column = delta_column;
+        event.delta_row = delta_row;
+        push_event(event);
+    }
+
+    void push_mouse_button_event(uint32_t column, uint32_t row, uint8_t button, bool pressed)
+    {
+        Event event;
+        clear_event(event);
+        event.type = EventType::MouseButton;
+        event.column = column;
+        event.row = row;
+        event.button = button;
+        event.pressed = pressed;
+        push_event(event);
     }
 
     bool poll_event(Event& event)
     {
         if (g_count == 0)
         {
-            event.type = EventType::None;
-            event.character = 0;
-            event.pressed = false;
+            clear_event(event);
             return false;
         }
 

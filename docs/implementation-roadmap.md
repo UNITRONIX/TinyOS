@@ -122,6 +122,7 @@ TinyOS currently provides:
 21. [x] add syscall resource limit policy scaffold
 22. [x] add text-grid window manager scaffold
 23. [x] add desktop shell prototype over text-grid window manager
+24. [x] add desktop icons, app windows and keyboard/mouse event dispatch scaffold
 
 ### Phase 4 - tasking
 - [x] add task descriptor
@@ -199,8 +200,10 @@ TinyOS currently provides:
 - [x] add first TUI widgets
 - [x] add simple window manager
 - [x] add desktop shell prototype
+- [x] add desktop icons and app windows
+- [x] add keyboard and mouse event dispatch for desktop mode
 - add reusable GUI widgets
-- add keyboard-driven desktop interactions
+- add PS/2 mouse hardware driver
 
 ### Phase 9 - multi-architecture growth
 - keep `i686` as reference target

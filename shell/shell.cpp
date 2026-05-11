@@ -1138,6 +1138,17 @@ namespace
         tinyos::drivers::vga::write("Launcher items: ");
         write_uint64(tinyos::ui::desktop::launcher_item_count());
         tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Icons         : ");
+        write_uint64(tinyos::ui::desktop::icon_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("App windows   : ");
+        write_uint64(tinyos::ui::desktop::open_app_window_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Pointer       : ");
+        write_uint64(state != nullptr ? state->pointer_column : 0);
+        tinyos::drivers::vga::write(",");
+        write_uint64(state != nullptr ? state->pointer_row : 0);
+        tinyos::drivers::vga::put_char('\n');
         const auto* selected = tinyos::ui::desktop::selected_launcher_item();
         tinyos::drivers::vga::write("Selected      : ");
         tinyos::drivers::vga::write_line(selected != nullptr && selected->title != nullptr ? selected->title : "none");
@@ -1150,6 +1161,12 @@ namespace
         tinyos::drivers::vga::write("Launches      : ");
         write_uint64(tinyos::ui::desktop::launch_request_count());
         tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Events        : ");
+        write_uint64(tinyos::ui::desktop::handled_event_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Pointer events: ");
+        write_uint64(tinyos::ui::desktop::pointer_event_count());
+        tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Rejected ops  : ");
         write_uint64(tinyos::ui::desktop::rejected_operation_count());
         tinyos::drivers::vga::put_char('\n');
@@ -1159,13 +1176,31 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::desktop::launcher_validation_self_test() ? "ok" : "failed");
         tinyos::drivers::vga::write("Interaction   : ");
         tinyos::drivers::vga::write_line(tinyos::ui::desktop::interaction_validation_self_test() ? "ok" : "failed");
-        for (size_t index = 0; index < tinyos::ui::desktop::launcher_item_count(); ++index)
+        tinyos::drivers::vga::write("Input         : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::desktop::input_validation_self_test() ? "ok" : "failed");
+        for (size_t index = 0; index < tinyos::ui::desktop::icon_count(); ++index)
         {
-            const auto* item = tinyos::ui::desktop::launcher_item_at(index);
+            const auto* item = tinyos::ui::desktop::icon_at(index);
             tinyos::drivers::vga::write("  - ");
             tinyos::drivers::vga::write(item != nullptr && item->title != nullptr ? item->title : "invalid");
             tinyos::drivers::vga::write(" -> ");
-            tinyos::drivers::vga::write_line(item != nullptr && item->command != nullptr ? item->command : "none");
+            tinyos::drivers::vga::write(item != nullptr && item->command != nullptr ? item->command : "none");
+            tinyos::drivers::vga::write(" at ");
+            write_uint64(item != nullptr ? item->column : 0);
+            tinyos::drivers::vga::write(",");
+            write_uint64(item != nullptr ? item->row : 0);
+            tinyos::drivers::vga::write_line(item != nullptr && item->selected ? " selected" : "");
+        }
+        for (size_t index = 0; index < tinyos::ui::desktop::app_window_count(); ++index)
+        {
+            const auto* window = tinyos::ui::desktop::app_window_at(index);
+            if (window != nullptr && window->open)
+            {
+                tinyos::drivers::vga::write("  window ");
+                tinyos::drivers::vga::write(window->title != nullptr ? window->title : "invalid");
+                tinyos::drivers::vga::write(" -> ");
+                tinyos::drivers::vga::write_line(window->command != nullptr ? window->command : "none");
+            }
         }
     }
 
@@ -1232,6 +1267,9 @@ namespace
         tinyos::drivers::vga::write_line("  desktoptest - draw desktop shell prototype");
         tinyos::drivers::vga::write_line("  desktopnext - select next desktop launcher item");
         tinyos::drivers::vga::write_line("  desktoplaunch - render selected launch request");
+        tinyos::drivers::vga::write_line("  desktopdispatch - dispatch desktop input events");
+        tinyos::drivers::vga::write_line("  desktopkeytest - test desktop keyboard flow");
+        tinyos::drivers::vga::write_line("  desktopmousetest - test desktop mouse click flow");
         tinyos::drivers::vga::write_line("  widgetdispatch - dispatch queued UI events to widgets");
         tinyos::drivers::vga::write_line("  widgetactiontest - inject and dispatch widget action");
         tinyos::drivers::vga::write_line("  uieventinfo - show UI event queue state");
@@ -1557,6 +1595,44 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::compare(command, "desktopdispatch") == 0)
+        {
+            tinyos::ui::events::pump_from_input(tinyos::ui::events::queue_capacity());
+            drivers::vga::write("Desktop events dispatched: ");
+            write_uint64(tinyos::ui::desktop::dispatch_events(tinyos::ui::events::queue_capacity()));
+            drivers::vga::put_char('\n');
+            return;
+        }
+
+        if (core::string::compare(command, "desktopkeytest") == 0)
+        {
+            const bool tab_queued = tinyos::ui::events::push_key_event('\t', true);
+            const size_t tab_dispatched = tinyos::ui::desktop::dispatch_events(1);
+            const bool enter_queued = tinyos::ui::events::push_key_event('\n', true);
+            const size_t enter_dispatched = tinyos::ui::desktop::dispatch_events(1);
+            drivers::vga::write_line(tab_queued && tab_dispatched == 1 && enter_queued && enter_dispatched == 1 ? "Desktop keyboard flow dispatched." : "Desktop keyboard flow failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "desktopmousetest") == 0)
+        {
+            const tinyos::ui::desktop::DesktopIcon* icon = nullptr;
+            for (size_t index = 0; index < tinyos::ui::desktop::icon_count(); ++index)
+            {
+                const auto* current = tinyos::ui::desktop::icon_at(index);
+                if (current != nullptr && current->selected)
+                {
+                    icon = current;
+                    break;
+                }
+            }
+
+            const bool queued = icon != nullptr && tinyos::ui::events::push_mouse_button_event(icon->column + 1, icon->row + 1, 1, true);
+            const size_t dispatched = queued ? tinyos::ui::desktop::dispatch_events(1) : 0;
+            drivers::vga::write_line(queued && dispatched == 1 ? "Desktop mouse click dispatched." : "Desktop mouse click failed.");
+            return;
+        }
+
         if (core::string::compare(command, "widgetdispatch") == 0)
         {
             tinyos::ui::events::pump_from_input(tinyos::ui::events::queue_capacity());
@@ -1595,6 +1671,11 @@ namespace tinyos::shell
             event.source = tinyos::ui::events::Source::None;
             event.character = 0;
             event.pressed = false;
+            event.column = 0;
+            event.row = 0;
+            event.delta_column = 0;
+            event.delta_row = 0;
+            event.button = 0;
             event.sequence = 0;
 
             if (!tinyos::ui::events::poll_event(event))
@@ -1614,6 +1695,19 @@ namespace tinyos::shell
                 drivers::vga::write(" '");
                 drivers::vga::put_char(event.character);
                 drivers::vga::write(event.pressed ? "' pressed" : "' released");
+            }
+            if (event.type == tinyos::ui::events::EventType::Pointer || event.type == tinyos::ui::events::EventType::MouseButton)
+            {
+                drivers::vga::write(" at ");
+                write_uint64(event.column);
+                drivers::vga::write(",");
+                write_uint64(event.row);
+                if (event.type == tinyos::ui::events::EventType::MouseButton)
+                {
+                    drivers::vga::write(" button=");
+                    write_uint64(event.button);
+                    drivers::vga::write(event.pressed ? " pressed" : " released");
+                }
             }
             drivers::vga::put_char('\n');
             return;

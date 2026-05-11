@@ -25,10 +25,15 @@ namespace
         event.source = tinyos::ui::events::Source::None;
         event.character = 0;
         event.pressed = false;
+        event.column = 0;
+        event.row = 0;
+        event.delta_column = 0;
+        event.delta_row = 0;
+        event.button = 0;
         event.sequence = 0;
     }
 
-    bool push_event(tinyos::ui::events::EventType type, tinyos::ui::events::Source source, char character, bool pressed)
+    bool push_event(tinyos::ui::events::EventType type, tinyos::ui::events::Source source, char character, bool pressed, uint32_t column, uint32_t row, int32_t delta_column, int32_t delta_row, uint8_t button)
     {
         if (!g_ready || type == tinyos::ui::events::EventType::None || g_count >= QueueSize)
         {
@@ -41,6 +46,11 @@ namespace
         event.source = source;
         event.character = character;
         event.pressed = pressed;
+        event.column = column;
+        event.row = row;
+        event.delta_column = delta_column;
+        event.delta_row = delta_row;
+        event.button = button;
         event.sequence = g_next_sequence;
         ++g_next_sequence;
         g_write_index = (g_write_index + 1) % QueueSize;
@@ -78,7 +88,17 @@ namespace tinyos::ui::events
             return false;
         }
 
-        return push_event(EventType::Key, Source::Synthetic, character, pressed);
+        return push_event(EventType::Key, Source::Synthetic, character, pressed, 0, 0, 0, 0, 0);
+    }
+
+    bool push_pointer_event(uint32_t column, uint32_t row, int32_t delta_column, int32_t delta_row)
+    {
+        return push_event(EventType::Pointer, Source::Synthetic, 0, false, column, row, delta_column, delta_row, 0);
+    }
+
+    bool push_mouse_button_event(uint32_t column, uint32_t row, uint8_t button, bool pressed)
+    {
+        return push_event(EventType::MouseButton, Source::Synthetic, 0, pressed, column, row, 0, 0, button);
     }
 
     size_t pump_from_input(size_t max_events)
@@ -95,6 +115,11 @@ namespace tinyos::ui::events
             input_event.type = tinyos::drivers::input::EventType::None;
             input_event.character = 0;
             input_event.pressed = false;
+            input_event.column = 0;
+            input_event.row = 0;
+            input_event.delta_column = 0;
+            input_event.delta_row = 0;
+            input_event.button = 0;
 
             if (!tinyos::drivers::input::poll_event(input_event))
             {
@@ -103,7 +128,23 @@ namespace tinyos::ui::events
 
             if (input_event.type == tinyos::drivers::input::EventType::Key && input_event.character != 0)
             {
-                if (push_event(EventType::Key, Source::Keyboard, input_event.character, input_event.pressed))
+                if (push_event(EventType::Key, Source::Keyboard, input_event.character, input_event.pressed, 0, 0, 0, 0, 0))
+                {
+                    ++g_pumped_input_events;
+                    ++pumped;
+                }
+            }
+            else if (input_event.type == tinyos::drivers::input::EventType::Pointer)
+            {
+                if (push_event(EventType::Pointer, Source::Mouse, 0, false, input_event.column, input_event.row, input_event.delta_column, input_event.delta_row, 0))
+                {
+                    ++g_pumped_input_events;
+                    ++pumped;
+                }
+            }
+            else if (input_event.type == tinyos::drivers::input::EventType::MouseButton)
+            {
+                if (push_event(EventType::MouseButton, Source::Mouse, 0, input_event.pressed, input_event.column, input_event.row, 0, 0, input_event.button))
                 {
                     ++g_pumped_input_events;
                     ++pumped;
@@ -179,6 +220,10 @@ namespace tinyos::ui::events
             return "none";
         case EventType::Key:
             return "key";
+        case EventType::Pointer:
+            return "pointer";
+        case EventType::MouseButton:
+            return "mouse-button";
         }
 
         return "unknown";
@@ -192,6 +237,8 @@ namespace tinyos::ui::events
             return "none";
         case Source::Keyboard:
             return "keyboard";
+        case Source::Mouse:
+            return "mouse";
         case Source::Synthetic:
             return "synthetic";
         }

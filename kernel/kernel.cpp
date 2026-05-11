@@ -246,6 +246,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::ui::events::initialize();
     TINYOS_ASSERT(tinyos::ui::events::validation_self_test(), "UI event queue scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::widgets::event_bridge_validation_self_test(), "TUI widget event bridge validation failed.");
+    TINYOS_ASSERT(tinyos::ui::desktop::input_validation_self_test(), "Desktop input interaction validation failed.");
     register_device_or_panic("ui-event-queue", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 2, tinyos::kernel::device::FlagVirtual);
     tinyos::drivers::keyboard::initialize();
     register_device_or_panic("keyboard-ps2", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 1, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
@@ -302,6 +303,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Window manager scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop shell prototype ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop input interactions ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget event bridge ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "UI event queue scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System requirements manifest ready.");
