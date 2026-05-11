@@ -1,4 +1,5 @@
 #include <tinyos/ui/desktop.hpp>
+#include <tinyos/ui/cursor.hpp>
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/window_manager.hpp>
@@ -259,6 +260,10 @@ namespace
 
         ok = tinyos::ui::renderer::fill_rect(status_column, status_row, g_state.columns > status_column ? g_state.columns - status_column : 1, 1, ' ', StatusAttribute) && ok;
         ok = tinyos::ui::renderer::draw_text(status_column, status_row, "Tab/n: select  Enter/Space: open  q: shell", StatusAttribute) && ok;
+        if (tinyos::ui::cursor::is_ready())
+        {
+            ok = tinyos::ui::cursor::render() && ok;
+        }
 
         if (!ok)
         {
@@ -516,6 +521,7 @@ namespace tinyos::ui::desktop
         {
             g_state.pointer_column = event.column;
             g_state.pointer_row = event.row;
+            tinyos::ui::cursor::handle_event(event);
             ++g_pointer_events;
             ++g_handled_events;
             return g_state.fullscreen ? render_fullscreen() : render_home();
@@ -525,6 +531,7 @@ namespace tinyos::ui::desktop
         {
             g_state.pointer_column = event.column;
             g_state.pointer_row = event.row;
+            tinyos::ui::cursor::handle_event(event);
             ++g_pointer_events;
             ++g_handled_events;
             if (!select_icon_at(event.column, event.row))

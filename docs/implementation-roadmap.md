@@ -25,6 +25,7 @@ TinyOS currently provides:
 - [ ] Phase 7 - graphics foundation
 - [ ] Phase 8 - UI stack
 - [ ] Phase 9 - multi-architecture growth
+- [x] Graphics slice - optional GRUB framebuffer boot and pixel desktop preview
 
 ## Security segment - high priority
 
@@ -124,6 +125,8 @@ TinyOS currently provides:
 23. [x] add desktop shell prototype over text-grid window manager
 24. [x] add desktop icons, app windows and keyboard/mouse event dispatch scaffold
 25. [x] add fullscreen desktop mode with keyboard navigation
+26. [x] add linear framebuffer metadata contract and pixel renderer primitives
+27. [x] add cursor scaffold for desktop pointer feedback
 
 ### Phase 4 - tasking
 - [x] add task descriptor
@@ -204,6 +207,9 @@ TinyOS currently provides:
 - [x] add desktop icons and app windows
 - [x] add keyboard and mouse event dispatch for desktop mode
 - [x] add fullscreen desktop mode with top panel and desktop-only navigation
+- [x] add linear framebuffer metadata contract with text-grid fallback
+- [x] add pixel renderer primitive contract
+- [x] add cursor scaffold for pointer feedback
 - add reusable GUI widgets
 - add PS/2 mouse hardware driver
 

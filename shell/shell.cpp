@@ -43,8 +43,10 @@
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
+#include <tinyos/ui/cursor.hpp>
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/desktop.hpp>
+#include <tinyos/ui/graphical_desktop.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
 #include <tinyos/ui/window_manager.hpp>
@@ -370,6 +372,7 @@ namespace
     void print_framebuffer_info()
     {
         const auto* surface = tinyos::kernel::device::framebuffer::active_surface();
+        const auto* linear = tinyos::kernel::device::framebuffer::linear_surface();
         tinyos::drivers::vga::write("Surface ready : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::is_ready() ? "yes" : "no");
         tinyos::drivers::vga::write("Name          : ");
@@ -389,9 +392,20 @@ namespace
         write_uint64(surface != nullptr ? surface->bits_per_pixel : 0);
         tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Linear FB     : ");
-        tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "yes" : "not yet");
+        tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "detected" : "fallback text-grid");
+        tinyos::drivers::vga::write("Linear name   : ");
+        tinyos::drivers::vga::write_line(linear != nullptr && linear->name != nullptr ? linear->name : "none");
+        tinyos::drivers::vga::write("Linear size   : ");
+        write_uint64(linear != nullptr ? linear->width : 0);
+        tinyos::drivers::vga::write("x");
+        write_uint64(linear != nullptr ? linear->height : 0);
+        tinyos::drivers::vga::write("x");
+        write_uint64(linear != nullptr ? linear->bits_per_pixel : 0);
+        tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Self-test     : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Linear test   : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::linear_framebuffer_contract_self_test() ? "ok" : "failed");
     }
 
     void print_renderer_info()
@@ -410,11 +424,19 @@ namespace
         tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Text output    : ");
         tinyos::drivers::vga::write_line(state != nullptr && state->text_output ? "yes" : "no");
+        tinyos::drivers::vga::write("Pixel output   : ");
+        tinyos::drivers::vga::write_line(state != nullptr && state->pixel_output ? "yes" : "no");
+        tinyos::drivers::vga::write("Bits per pixel : ");
+        write_uint64(state != nullptr ? state->bits_per_pixel : 0);
+        tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Draw calls     : ");
         write_uint64(tinyos::ui::renderer::draw_call_count());
         tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Primitive calls: ");
         write_uint64(tinyos::ui::renderer::primitive_call_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Pixel calls    : ");
+        write_uint64(tinyos::ui::renderer::pixel_draw_call_count());
         tinyos::drivers::vga::put_char('\n');
         tinyos::drivers::vga::write("Rejected draws : ");
         write_uint64(tinyos::ui::renderer::rejected_draw_call_count());
@@ -423,6 +445,40 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::renderer::validation_self_test() ? "ok" : "failed");
         tinyos::drivers::vga::write("Primitives     : ");
         tinyos::drivers::vga::write_line(tinyos::ui::renderer::primitive_validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Pixel contract : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::renderer::pixel_contract_validation_self_test() ? "ok" : "failed");
+    }
+
+    void print_cursor_info()
+    {
+        const auto* state = tinyos::ui::cursor::state();
+        tinyos::drivers::vga::write("Cursor ready  : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::cursor::is_ready() ? "yes" : "no");
+        tinyos::drivers::vga::write("Visible       : ");
+        tinyos::drivers::vga::write_line(state != nullptr && state->visible ? "yes" : "no");
+        tinyos::drivers::vga::write("Position      : ");
+        write_uint64(state != nullptr ? state->column : 0);
+        tinyos::drivers::vga::write(",");
+        write_uint64(state != nullptr ? state->row : 0);
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Bounds        : ");
+        write_uint64(state != nullptr ? state->max_columns : 0);
+        tinyos::drivers::vga::write("x");
+        write_uint64(state != nullptr ? state->max_rows : 0);
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Movements     : ");
+        write_uint64(tinyos::ui::cursor::movement_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Renders       : ");
+        write_uint64(tinyos::ui::cursor::render_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Rejected ops  : ");
+        write_uint64(tinyos::ui::cursor::rejected_operation_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Self-test     : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::cursor::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Render test   : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::cursor::render_validation_self_test() ? "ok" : "failed");
     }
 
     void print_terminal_info()
@@ -1208,6 +1264,21 @@ namespace
 
     void run_desktop_mode()
     {
+        if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
+        {
+            if (!tinyos::ui::graphical_desktop::run_session())
+            {
+                tinyos::drivers::vga::write_line("Graphical desktop mode failed.");
+                return;
+            }
+
+            tinyos::ui::renderer::initialize();
+            tinyos::ui::terminal::initialize();
+            tinyos::drivers::vga::clear();
+            tinyos::drivers::vga::write_line("Returned from graphical desktop mode.");
+            return;
+        }
+
         if (!tinyos::ui::desktop::render_fullscreen())
         {
             tinyos::drivers::vga::write_line("Desktop mode failed.");
@@ -1289,6 +1360,7 @@ namespace
         tinyos::drivers::vga::write_line("  storageinfo - show block VFS mount scaffold");
         tinyos::drivers::vga::write_line("  fbinfo   - show framebuffer surface scaffold");
         tinyos::drivers::vga::write_line("  renderinfo - show renderer scaffold state");
+        tinyos::drivers::vga::write_line("  cursorinfo - show cursor scaffold state");
         tinyos::drivers::vga::write_line("  rendertest - draw a renderer test label");
         tinyos::drivers::vga::write_line("  renderfilltest - draw a renderer filled strip");
         tinyos::drivers::vga::write_line("  terminalinfo - show terminal UI scaffold state");
@@ -1532,6 +1604,12 @@ namespace tinyos::shell
         if (core::string::compare(command, "renderinfo") == 0)
         {
             print_renderer_info();
+            return;
+        }
+
+        if (core::string::compare(command, "cursorinfo") == 0)
+        {
+            print_cursor_info();
             return;
         }
 

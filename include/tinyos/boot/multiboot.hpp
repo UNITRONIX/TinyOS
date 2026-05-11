@@ -7,6 +7,14 @@ namespace tinyos::boot::multiboot
     inline constexpr uint32_t BootloaderMagic = 0x2BADB002;
     inline constexpr uint32_t FlagModules = 1u << 3;
     inline constexpr uint32_t FlagMemoryMap = 1u << 6;
+    inline constexpr uint32_t FlagFramebufferInfo = 1u << 12;
+
+    enum class FramebufferType : uint8_t
+    {
+        IndexedColor = 0,
+        Rgb = 1,
+        Text = 2
+    };
 
     struct [[gnu::packed]] Info
     {
@@ -20,6 +28,24 @@ namespace tinyos::boot::multiboot
         uint32_t syms[4];
         uint32_t mmap_length;
         uint32_t mmap_addr;
+        uint32_t drives_length;
+        uint32_t drives_addr;
+        uint32_t config_table;
+        uint32_t boot_loader_name;
+        uint32_t apm_table;
+        uint32_t vbe_control_info;
+        uint32_t vbe_mode_info;
+        uint16_t vbe_mode;
+        uint16_t vbe_interface_seg;
+        uint16_t vbe_interface_off;
+        uint16_t vbe_interface_len;
+        uint64_t framebuffer_addr;
+        uint32_t framebuffer_pitch;
+        uint32_t framebuffer_width;
+        uint32_t framebuffer_height;
+        uint8_t framebuffer_bpp;
+        uint8_t framebuffer_type;
+        uint8_t color_info[6];
     };
 
     struct [[gnu::packed]] MemoryMapEntry

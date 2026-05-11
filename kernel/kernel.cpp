@@ -40,8 +40,10 @@
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
+#include <tinyos/ui/cursor.hpp>
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/desktop.hpp>
+#include <tinyos/ui/graphical_desktop.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
 #include <tinyos/ui/window_manager.hpp>
@@ -83,6 +85,38 @@ namespace
     {
         TINYOS_ASSERT(tinyos::kernel::device::register_device(name, device_class, state, unit, flags), "Device registry rejected a core device.");
     }
+
+    void record_multiboot_framebuffer(uint32_t multiboot_info_addr)
+    {
+        if (multiboot_info_addr == 0)
+        {
+            return;
+        }
+
+        const auto* info = reinterpret_cast<const tinyos::boot::multiboot::Info*>(multiboot_info_addr);
+        if ((info->flags & tinyos::boot::multiboot::FlagFramebufferInfo) == 0)
+        {
+            return;
+        }
+
+        if (info->framebuffer_type != static_cast<uint8_t>(tinyos::boot::multiboot::FramebufferType::Rgb))
+        {
+            return;
+        }
+
+        if (info->framebuffer_addr > 0xFFFFFFFFull)
+        {
+            return;
+        }
+
+        tinyos::kernel::device::framebuffer::record_linear_framebuffer(
+            "multiboot-linear-framebuffer",
+            static_cast<uintptr_t>(info->framebuffer_addr),
+            info->framebuffer_width,
+            info->framebuffer_height,
+            info->framebuffer_pitch,
+            info->framebuffer_bpp);
+    }
 }
 
 extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr)
@@ -99,9 +133,11 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::platform::requirements::validation_self_test(), "System requirements manifest validation failed.");
     TINYOS_ASSERT(tinyos::kernel::platform::pc::validation_self_test(), "PC platform initialization contract validation failed.");
     tinyos::kernel::device::initialize();
+    record_multiboot_framebuffer(multiboot_info_addr);
     register_device_or_panic("vga-text", tinyos::kernel::device::Class::Console, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware);
     tinyos::kernel::device::framebuffer::initialize_text_grid("vga-text-grid", 80, 25, 0xB8000, 2);
     TINYOS_ASSERT(tinyos::kernel::device::framebuffer::validation_self_test(), "Framebuffer surface scaffold validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::device::framebuffer::linear_framebuffer_contract_self_test(), "Linear framebuffer boot contract validation failed.");
     register_device_or_panic("vga-text-grid", tinyos::kernel::device::Class::Framebuffer, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagWritable);
     tinyos::ui::renderer::initialize();
     TINYOS_ASSERT(tinyos::ui::renderer::validation_self_test(), "Renderer scaffold validation failed.");
@@ -109,6 +145,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::ui::terminal::initialize();
     TINYOS_ASSERT(tinyos::ui::terminal::validation_self_test(), "Terminal UI scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::terminal::panel_validation_self_test(), "Terminal panel scaffold validation failed.");
+    TINYOS_ASSERT(tinyos::ui::renderer::pixel_contract_validation_self_test(), "Pixel renderer contract validation failed.");
+    tinyos::ui::cursor::initialize();
+    TINYOS_ASSERT(tinyos::ui::cursor::validation_self_test(), "Cursor scaffold validation failed.");
     tinyos::ui::widgets::initialize();
     TINYOS_ASSERT(tinyos::ui::widgets::validation_self_test(), "TUI widget scaffold validation failed.");
     tinyos::ui::window_manager::initialize();
@@ -119,6 +158,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::ui::desktop::launcher_validation_self_test(), "Desktop launcher validation failed.");
     TINYOS_ASSERT(tinyos::ui::desktop::interaction_validation_self_test(), "Desktop launcher interaction validation failed.");
     TINYOS_ASSERT(tinyos::ui::desktop::fullscreen_validation_self_test(), "Fullscreen desktop validation failed.");
+#if defined(TINYOS_GRAPHICAL_BOOT)
+    TINYOS_ASSERT(tinyos::ui::graphical_desktop::validation_self_test(), "Graphical desktop preview validation failed.");
+#endif
     register_device_or_panic("serial-com1", tinyos::kernel::device::Class::Diagnostics, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagDiagnostics);
     debug_boot_checkpoint("device registry ready");
 
@@ -297,8 +339,11 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Block device scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Block VFS mount scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Framebuffer surface scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Linear framebuffer boot contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Renderer scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Renderer primitive scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Pixel renderer contract ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Cursor scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal UI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal panel scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
@@ -306,6 +351,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop shell prototype ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Fullscreen desktop mode ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop input interactions ready.");
+#if defined(TINYOS_GRAPHICAL_BOOT)
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Graphical desktop optional mode ready.");
+#endif
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget event bridge ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "UI event queue scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System requirements manifest ready.");

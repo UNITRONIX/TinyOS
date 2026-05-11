@@ -3,6 +3,7 @@ ISO := build/tinyos.iso
 ISO_DIR := build/isodir
 OBJ_DIR := build/obj
 DEBUG_BOOT ?= 0
+GRAPHICAL_BOOT ?= 0
 BOOT_TEST_TIMEOUT ?= 8s
 STABILITY_TEST_TIMEOUT ?= 20s
 MINIMAL_TEST_MEMORY ?= 32M
@@ -57,6 +58,11 @@ ifeq ($(DEBUG_BOOT),1)
 	CXXFLAGS += -DTINYOS_DEBUG_BOOT
 endif
 
+ifeq ($(GRAPHICAL_BOOT),1)
+	CXXFLAGS += -DTINYOS_GRAPHICAL_BOOT
+	ASFLAGS += -DTINYOS_GRAPHICAL_BOOT=1
+endif
+
 CPP_SOURCES := \
 	arch/i686/arch.cpp \
 	arch/i686/context.cpp \
@@ -105,7 +111,9 @@ CPP_SOURCES := \
 	ui/renderer.cpp \
 	ui/events.cpp \
 	ui/terminal.cpp \
+	ui/cursor.cpp \
 	ui/desktop.cpp \
+	ui/graphical_desktop.cpp \
 	ui/window_manager.cpp \
 	ui/widgets.cpp \
 	shell/shell.cpp \
@@ -116,6 +124,7 @@ ASM_SOURCES := \
     arch/i686/interrupt_stubs.asm
 
 OBJECTS := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.o) $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.o)
+DEPFILES := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.d)
 
 define require_tools
 	@missing=0; \
@@ -133,7 +142,7 @@ define require_tools
 	fi
 endef
 
-.PHONY: all iso run run-headless image-plan image-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-minimal test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
+.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan image-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
 
 all: check-build-tools $(TARGET)
 
@@ -158,7 +167,7 @@ $(TARGET): $(OBJECTS)
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/%.o: %.asm
 	@mkdir -p $(dir $@)
@@ -173,6 +182,11 @@ iso: check-image-tools $(TARGET)
 
 run: check-test-tools iso
 	$(QEMU) -cdrom $(ISO)
+
+run-gui: run
+
+run-framebuffer-preview:
+	$(MAKE) GRAPHICAL_BOOT=1 TARGET=tinyos-gui.kernel ISO=build/tinyos-gui.iso ISO_DIR=build/isodir-gui OBJ_DIR=build/obj-gui run
 
 run-headless: check-test-tools iso
 	$(QEMU) -cdrom $(ISO) -serial stdio -display none
@@ -250,6 +264,21 @@ test-boot: check-test-tools iso
 		echo "Boot smoke test failed: desktop input marker not found."; \
 		exit 1; \
 	fi; \
+	if ! grep -q "Linear framebuffer boot contract ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Boot smoke test failed: linear framebuffer marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Pixel renderer contract ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Boot smoke test failed: pixel renderer marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Cursor scaffold ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Boot smoke test failed: cursor marker not found."; \
+		exit 1; \
+	fi; \
 	if grep -q "TinyOS booted successfully" $(BOOT_TEST_LOG); then \
 		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch ABI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
 			echo "Boot smoke test passed. Log: $(BOOT_TEST_LOG)"; \
@@ -295,6 +324,21 @@ test-existing-iso: check-qemu-tools
 		echo "Existing ISO boot smoke test failed: desktop input marker not found."; \
 		exit 1; \
 	fi; \
+	if ! grep -q "Linear framebuffer boot contract ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Existing ISO boot smoke test failed: linear framebuffer marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Pixel renderer contract ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Existing ISO boot smoke test failed: pixel renderer marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Cursor scaffold ready" $(BOOT_TEST_LOG); then \
+		cat $(BOOT_TEST_LOG); \
+		echo "Existing ISO boot smoke test failed: cursor marker not found."; \
+		exit 1; \
+	fi; \
 	if grep -q "TinyOS booted successfully" $(BOOT_TEST_LOG); then \
 		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch ABI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
 			echo "Existing ISO boot smoke test passed. Log: $(BOOT_TEST_LOG)"; \
@@ -309,6 +353,16 @@ test-existing-iso: check-qemu-tools
 		exit 1; \
 	fi
 
+test-gui-boot:
+	$(MAKE) GRAPHICAL_BOOT=1 TARGET=tinyos-gui.kernel ISO=build/tinyos-gui.iso ISO_DIR=build/isodir-gui OBJ_DIR=build/obj-gui BOOT_TEST_LOG=build/boot-gui.log test-boot
+	@if grep -q "Graphical desktop optional mode ready" build/boot-gui.log; then \
+		echo "Graphical boot smoke test passed. Log: build/boot-gui.log"; \
+	else \
+		cat build/boot-gui.log; \
+		echo "Graphical boot smoke test failed: graphical desktop optional marker not found."; \
+		exit 1; \
+	fi
+
 test-minimal: check-test-tools iso
 	@mkdir -p build
 	@rm -f $(MINIMAL_TEST_LOG)
@@ -319,7 +373,7 @@ test-minimal: check-test-tools iso
 		echo "Minimal requirement test failed: QEMU exited before timeout with status $$status."; \
 		exit 1; \
 	fi; \
-	if grep -q "TinyOS booted successfully" $(MINIMAL_TEST_LOG) && grep -q "System requirements manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Language runtime manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "System management tools manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Window manager scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop shell prototype ready" $(MINIMAL_TEST_LOG) && grep -q "Fullscreen desktop mode ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop input interactions ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget event bridge ready" $(MINIMAL_TEST_LOG) && grep -q "UI event queue scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(MINIMAL_TEST_LOG); then \
+	if grep -q "TinyOS booted successfully" $(MINIMAL_TEST_LOG) && grep -q "System requirements manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Language runtime manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "System management tools manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(MINIMAL_TEST_LOG) && grep -q "Linear framebuffer boot contract ready" $(MINIMAL_TEST_LOG) && grep -q "Pixel renderer contract ready" $(MINIMAL_TEST_LOG) && grep -q "Cursor scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Window manager scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop shell prototype ready" $(MINIMAL_TEST_LOG) && grep -q "Fullscreen desktop mode ready" $(MINIMAL_TEST_LOG) && grep -q "Desktop input interactions ready" $(MINIMAL_TEST_LOG) && grep -q "TUI widget event bridge ready" $(MINIMAL_TEST_LOG) && grep -q "UI event queue scaffold ready" $(MINIMAL_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(MINIMAL_TEST_LOG); then \
 		echo "Minimal requirement test passed. Log: $(MINIMAL_TEST_LOG)"; \
 	else \
 		cat $(MINIMAL_TEST_LOG); \
@@ -337,4 +391,6 @@ debug-run:
 	$(MAKE) DEBUG_BOOT=1 TARGET=tinyos-debug.kernel ISO=build/tinyos-debug.iso ISO_DIR=build/isodir-debug OBJ_DIR=build/obj-debug run
 
 clean:
-	rm -rf build/obj build/obj-debug build/isodir build/isodir-debug build/tinyos.iso build/tinyos-debug.iso build/boot-smoke.log build/boot-minimal.log tinyos.kernel tinyos-debug.kernel
+	rm -rf build/obj build/obj-debug build/obj-gui build/isodir build/isodir-debug build/isodir-gui build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel
+
+-include $(DEPFILES)

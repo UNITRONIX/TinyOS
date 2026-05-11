@@ -3,7 +3,9 @@
 namespace
 {
     tinyos::kernel::device::framebuffer::Surface g_surface = {};
+    tinyos::kernel::device::framebuffer::Surface g_linear_surface = {};
     bool g_ready = false;
+    bool g_linear_ready = false;
 }
 
 namespace tinyos::kernel::device::framebuffer
@@ -22,6 +24,31 @@ namespace tinyos::kernel::device::framebuffer
         g_ready = g_surface.ready;
     }
 
+    bool record_linear_framebuffer(const char* name, uintptr_t address, uint32_t width, uint32_t height, uint32_t pitch, uint32_t bits_per_pixel)
+    {
+        const uint32_t bytes_per_pixel = bits_per_pixel / 8;
+        const bool supported_depth = bits_per_pixel == 24 || bits_per_pixel == 32;
+        const bool sane_pitch = bytes_per_pixel != 0 && pitch >= width * bytes_per_pixel;
+        if (name == nullptr || address == 0 || width == 0 || height == 0 || !supported_depth || !sane_pitch)
+        {
+            g_linear_surface.ready = false;
+            g_linear_ready = false;
+            return false;
+        }
+
+        g_linear_surface.name = name;
+        g_linear_surface.kind = SurfaceKind::LinearFramebuffer;
+        g_linear_surface.address = address;
+        g_linear_surface.width = width;
+        g_linear_surface.height = height;
+        g_linear_surface.pitch = pitch;
+        g_linear_surface.bits_per_pixel = bits_per_pixel;
+        g_linear_surface.cell_size = bytes_per_pixel;
+        g_linear_surface.ready = true;
+        g_linear_ready = true;
+        return true;
+    }
+
     bool is_ready()
     {
         return g_ready && g_surface.ready;
@@ -32,9 +59,37 @@ namespace tinyos::kernel::device::framebuffer
         return is_ready() ? &g_surface : nullptr;
     }
 
+    const Surface* linear_surface()
+    {
+        return g_linear_ready && g_linear_surface.ready ? &g_linear_surface : nullptr;
+    }
+
+    bool has_active_text_grid()
+    {
+        return is_ready() && g_surface.kind == SurfaceKind::TextGrid;
+    }
+
     bool has_linear_framebuffer()
     {
-        return is_ready() && g_surface.kind == SurfaceKind::LinearFramebuffer;
+        return linear_surface() != nullptr;
+    }
+
+    bool linear_framebuffer_contract_self_test()
+    {
+        if (!has_linear_framebuffer())
+        {
+            return has_active_text_grid();
+        }
+
+        const auto* surface = linear_surface();
+        const uint32_t bytes_per_pixel = surface->bits_per_pixel / 8;
+        return surface->kind == SurfaceKind::LinearFramebuffer &&
+            surface->address != 0 &&
+            surface->width >= 320 &&
+            surface->height >= 200 &&
+            bytes_per_pixel != 0 &&
+            surface->pitch >= surface->width * bytes_per_pixel &&
+            surface->cell_size == bytes_per_pixel;
     }
 
     bool validation_self_test()

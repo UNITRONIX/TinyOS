@@ -40,7 +40,7 @@ Run a headless boot smoke test in QEMU:
 make test-boot
 ```
 
-The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, device registry, RAM block device, block VFS mount, framebuffer surface, device RAMFS metadata, renderer, terminal UI, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, context ABI and scheduler tick markers appear.
+The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, context ABI and scheduler tick markers appear.
 
 Run a longer runtime stability check:
 
@@ -68,6 +68,28 @@ Run interactively with VGA output:
 
 ```sh
 make run
+```
+
+Run TinyOS and start the optional desktop from the terminal:
+
+```sh
+make run-gui
+```
+
+This uses the safe text console boot path. Start the desktop with `desktop`; use `q` to return to the terminal.
+
+The experimental framebuffer preview is kept separate because TinyOS does not yet have a full framebuffer text console:
+
+```sh
+make run-framebuffer-preview
+```
+
+That target is for renderer development only until terminal output can be drawn on the linear framebuffer.
+
+Run the graphical boot smoke test:
+
+```sh
+make test-gui-boot
 ```
 
 Run the debug boot image:

@@ -60,6 +60,7 @@ namespace
         { "pcinfo", "show PC platform init contract", Category::Devices, State::Ready, false, false },
         { "archinfo", "show architecture capability manifest", Category::Devices, State::Ready, false, false },
         { "renderinfo", "show renderer state", Category::Ui, State::Ready, false, false },
+        { "cursorinfo", "show cursor scaffold state", Category::Ui, State::Ready, false, false },
         { "terminalinfo", "show terminal UI state", Category::Ui, State::Ready, false, false },
         { "widgetinfo", "show widget state", Category::Ui, State::Ready, false, false },
         { "wminfo", "show window manager state", Category::Ui, State::Ready, false, false },
