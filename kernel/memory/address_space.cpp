@@ -12,11 +12,16 @@ namespace
     constexpr size_t MaxRegions = 16;
     constexpr uintptr_t BootstrapIdentityLimit = 16 * 1024 * 1024;
     constexpr uint32_t KernelRegionFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite | tinyos::kernel::memory::paging::PageFlagExecute;
+    constexpr uint32_t KernelMetadataFlags = tinyos::kernel::memory::paging::PageFlagRead;
+    constexpr uint32_t KernelTextFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagExecute;
+    constexpr uint32_t KernelReadOnlyDataFlags = tinyos::kernel::memory::paging::PageFlagRead;
+    constexpr uint32_t KernelWritableDataFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite;
     constexpr uint32_t BootModuleRegionFlags = tinyos::kernel::memory::paging::PageFlagRead;
     constexpr uint32_t SupportedRegionFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite | tinyos::kernel::memory::paging::PageFlagUser | tinyos::kernel::memory::paging::PageFlagExecute;
 
     tinyos::kernel::memory::address_space::Region g_regions[MaxRegions] = {};
     size_t g_region_count = 0;
+    size_t g_kernel_section_region_count = 0;
     size_t g_boot_module_region_count = 0;
     size_t g_rejected_region_count = 0;
     size_t g_total_mapped_bytes = 0;
@@ -24,6 +29,12 @@ namespace
 
     extern "C" char __kernel_start;
     extern "C" char __kernel_end;
+    extern "C" char __kernel_text_start;
+    extern "C" char __kernel_text_end;
+    extern "C" char __kernel_rodata_start;
+    extern "C" char __kernel_rodata_end;
+    extern "C" char __kernel_data_start;
+    extern "C" char __kernel_bss_end;
 
     uintptr_t align_down(uintptr_t value, uintptr_t alignment)
     {
@@ -55,6 +66,44 @@ namespace
         return (flags & tinyos::kernel::memory::paging::PageFlagUser) == 0;
     }
 
+    bool is_kernel_section_type(tinyos::kernel::memory::address_space::RegionType type)
+    {
+        return type == tinyos::kernel::memory::address_space::RegionType::KernelMetadata
+            || type == tinyos::kernel::memory::address_space::RegionType::KernelText
+            || type == tinyos::kernel::memory::address_space::RegionType::KernelReadOnlyData
+            || type == tinyos::kernel::memory::address_space::RegionType::KernelWritableData;
+    }
+
+    bool region_is_identity_backed(const tinyos::kernel::memory::address_space::Region& region)
+    {
+        return region.virtual_base == region.physical_base;
+    }
+
+    bool paging_mapping_matches_region(const tinyos::kernel::memory::address_space::Region& region, uintptr_t address)
+    {
+        constexpr uint32_t EnforceableFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite | tinyos::kernel::memory::paging::PageFlagUser;
+        tinyos::kernel::memory::paging::PageMapping mapping;
+        if (!tinyos::kernel::memory::paging::mapping_for(address, mapping))
+        {
+            return false;
+        }
+
+        if (!mapping.present || mapping.physical_address != address)
+        {
+            return false;
+        }
+
+        const uint32_t expected_flags = region.flags & EnforceableFlags;
+        const uint32_t actual_flags = mapping.flags & EnforceableFlags;
+        if ((actual_flags & expected_flags) != expected_flags)
+        {
+            return false;
+        }
+
+        const uint32_t extra_flags = actual_flags & ~expected_flags;
+        return extra_flags == 0;
+    }
+
     bool region_is_valid(const tinyos::kernel::memory::address_space::Region& region)
     {
         if (region.name == nullptr || region.size == 0 || !is_aligned(region.virtual_base) || !is_aligned(region.physical_base) || !is_aligned(region.size))
@@ -67,12 +116,32 @@ namespace
             return false;
         }
 
-        if (region.type == tinyos::kernel::memory::address_space::RegionType::IdentityMapped && region.virtual_base != region.physical_base)
+        if (region.type == tinyos::kernel::memory::address_space::RegionType::IdentityMapped && !region_is_identity_backed(region))
         {
             return false;
         }
 
-        if (region.type == tinyos::kernel::memory::address_space::RegionType::KernelImage && region.virtual_base != region.physical_base)
+        if ((region.type == tinyos::kernel::memory::address_space::RegionType::KernelImage || is_kernel_section_type(region.type)) && !region_is_identity_backed(region))
+        {
+            return false;
+        }
+
+        if (region.type == tinyos::kernel::memory::address_space::RegionType::KernelMetadata && region.flags != KernelMetadataFlags)
+        {
+            return false;
+        }
+
+        if (region.type == tinyos::kernel::memory::address_space::RegionType::KernelText && region.flags != KernelTextFlags)
+        {
+            return false;
+        }
+
+        if (region.type == tinyos::kernel::memory::address_space::RegionType::KernelReadOnlyData && region.flags != KernelReadOnlyDataFlags)
+        {
+            return false;
+        }
+
+        if (region.type == tinyos::kernel::memory::address_space::RegionType::KernelWritableData && region.flags != KernelWritableDataFlags)
         {
             return false;
         }
@@ -101,12 +170,61 @@ namespace
         g_regions[g_region_count].type = type;
         g_total_mapped_bytes += size;
         ++g_region_count;
+        if (is_kernel_section_type(type))
+        {
+            ++g_kernel_section_region_count;
+        }
+
         if (type == tinyos::kernel::memory::address_space::RegionType::BootModule)
         {
             ++g_boot_module_region_count;
         }
 
         return true;
+    }
+
+    void add_kernel_section_region(const char* name, uintptr_t start, uintptr_t end, uint32_t flags, tinyos::kernel::memory::address_space::RegionType type)
+    {
+        const uintptr_t aligned_start = align_down(start, tinyos::kernel::memory::frames::FrameSize);
+        const uintptr_t aligned_end = align_up(end, tinyos::kernel::memory::frames::FrameSize);
+        if (aligned_end <= aligned_start)
+        {
+            ++g_rejected_region_count;
+            return;
+        }
+
+        add_region(name, aligned_start, aligned_start, aligned_end - aligned_start, flags, type);
+    }
+
+    void add_kernel_image_regions()
+    {
+        add_kernel_section_region(
+            "kernel-metadata",
+            reinterpret_cast<uintptr_t>(&__kernel_start),
+            reinterpret_cast<uintptr_t>(&__kernel_text_start),
+            KernelMetadataFlags,
+            tinyos::kernel::memory::address_space::RegionType::KernelMetadata);
+
+        add_kernel_section_region(
+            "kernel-text",
+            reinterpret_cast<uintptr_t>(&__kernel_text_start),
+            reinterpret_cast<uintptr_t>(&__kernel_text_end),
+            KernelTextFlags,
+            tinyos::kernel::memory::address_space::RegionType::KernelText);
+
+        add_kernel_section_region(
+            "kernel-rodata",
+            reinterpret_cast<uintptr_t>(&__kernel_rodata_start),
+            reinterpret_cast<uintptr_t>(&__kernel_rodata_end),
+            KernelReadOnlyDataFlags,
+            tinyos::kernel::memory::address_space::RegionType::KernelReadOnlyData);
+
+        add_kernel_section_region(
+            "kernel-data",
+            reinterpret_cast<uintptr_t>(&__kernel_data_start),
+            reinterpret_cast<uintptr_t>(&__kernel_bss_end),
+            KernelWritableDataFlags,
+            tinyos::kernel::memory::address_space::RegionType::KernelWritableData);
     }
 
     void add_boot_module_regions(uint32_t multiboot_info_addr)
@@ -151,6 +269,7 @@ namespace tinyos::kernel::memory::address_space
     void initialize(uint32_t multiboot_info_addr)
     {
         g_region_count = 0;
+        g_kernel_section_region_count = 0;
         g_boot_module_region_count = 0;
         g_rejected_region_count = 0;
         g_total_mapped_bytes = 0;
@@ -164,15 +283,7 @@ namespace tinyos::kernel::memory::address_space
             KernelRegionFlags,
             RegionType::IdentityMapped);
 
-        const uintptr_t kernel_start = align_down(reinterpret_cast<uintptr_t>(&__kernel_start), frames::FrameSize);
-        const uintptr_t kernel_end = align_up(reinterpret_cast<uintptr_t>(&__kernel_end), frames::FrameSize);
-        add_region(
-            "kernel-image",
-            kernel_start,
-            kernel_start,
-            kernel_end - kernel_start,
-            KernelRegionFlags,
-            RegionType::KernelImage);
+        add_kernel_image_regions();
 
         add_boot_module_regions(multiboot_info_addr);
 
@@ -188,6 +299,11 @@ namespace tinyos::kernel::memory::address_space
     size_t region_count()
     {
         return g_region_count;
+    }
+
+    size_t kernel_section_region_count()
+    {
+        return g_kernel_section_region_count;
     }
 
     size_t boot_module_region_count()
@@ -218,6 +334,14 @@ namespace tinyos::kernel::memory::address_space
             return "identity";
         case RegionType::KernelImage:
             return "kernel";
+        case RegionType::KernelMetadata:
+            return "kernel-metadata";
+        case RegionType::KernelText:
+            return "kernel-text";
+        case RegionType::KernelReadOnlyData:
+            return "kernel-rodata";
+        case RegionType::KernelWritableData:
+            return "kernel-data";
         case RegionType::BootModule:
             return "boot-module";
         }
@@ -230,6 +354,57 @@ namespace tinyos::kernel::memory::address_space
         return g_total_mapped_bytes;
     }
 
+    size_t apply_paging_policy()
+    {
+        if (!g_ready || !paging::is_ready())
+        {
+            return 0;
+        }
+
+        size_t updated_pages = 0;
+        for (size_t index = 0; index < g_region_count; ++index)
+        {
+            const Region& region = g_regions[index];
+            if (region.type == RegionType::IdentityMapped)
+            {
+                continue;
+            }
+
+            updated_pages += paging::update_mapping_flags_for_range(region.virtual_base, region.size, region.flags);
+        }
+
+        return updated_pages;
+    }
+
+    size_t paging_policy_gap_count()
+    {
+        if (!g_ready || !paging::is_ready())
+        {
+            return 0;
+        }
+
+        size_t gap_count = 0;
+        for (size_t region_index = 0; region_index < g_region_count; ++region_index)
+        {
+            const Region& region = g_regions[region_index];
+            if (region.type == RegionType::IdentityMapped)
+            {
+                continue;
+            }
+
+            for (uintptr_t offset = 0; offset < region.size; offset += frames::FrameSize)
+            {
+                const uintptr_t address = region.virtual_base + offset;
+                if (!paging_mapping_matches_region(region, address))
+                {
+                    ++gap_count;
+                }
+            }
+        }
+
+        return gap_count;
+    }
+
     bool validation_self_test()
     {
         if (!g_ready || g_region_count < 2 || g_region_count > MaxRegions || g_total_mapped_bytes == 0)
@@ -238,8 +413,12 @@ namespace tinyos::kernel::memory::address_space
         }
 
         bool has_identity_region = false;
-        bool has_kernel_region = false;
+        bool has_kernel_metadata_region = false;
+        bool has_kernel_text_region = false;
+        bool has_kernel_rodata_region = false;
+        bool has_kernel_data_region = false;
         size_t observed_total = 0;
+        size_t observed_kernel_sections = 0;
         size_t observed_boot_modules = 0;
         for (size_t index = 0; index < g_region_count; ++index)
         {
@@ -255,9 +434,29 @@ namespace tinyos::kernel::memory::address_space
                 has_identity_region = true;
             }
 
-            if (region.type == RegionType::KernelImage)
+            if (is_kernel_section_type(region.type))
             {
-                has_kernel_region = true;
+                ++observed_kernel_sections;
+            }
+
+            if (region.type == RegionType::KernelMetadata)
+            {
+                has_kernel_metadata_region = true;
+            }
+
+            if (region.type == RegionType::KernelText)
+            {
+                has_kernel_text_region = true;
+            }
+
+            if (region.type == RegionType::KernelReadOnlyData)
+            {
+                has_kernel_rodata_region = true;
+            }
+
+            if (region.type == RegionType::KernelWritableData)
+            {
+                has_kernel_data_region = true;
             }
 
             if (region.type == RegionType::BootModule)
@@ -266,6 +465,14 @@ namespace tinyos::kernel::memory::address_space
             }
         }
 
-        return has_identity_region && has_kernel_region && observed_total == g_total_mapped_bytes && observed_boot_modules == g_boot_module_region_count && g_rejected_region_count == 0;
+        return has_identity_region
+            && has_kernel_metadata_region
+            && has_kernel_text_region
+            && has_kernel_rodata_region
+            && has_kernel_data_region
+            && observed_total == g_total_mapped_bytes
+            && observed_kernel_sections == g_kernel_section_region_count
+            && observed_boot_modules == g_boot_module_region_count
+            && g_rejected_region_count == 0;
     }
 }

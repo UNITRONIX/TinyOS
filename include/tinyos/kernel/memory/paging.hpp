@@ -27,6 +27,8 @@ namespace tinyos::kernel::memory::paging
     size_t mapped_bytes();
     uint32_t bootstrap_page_flags();
     bool mapping_for(uintptr_t virtual_address, PageMapping& mapping);
+    bool update_mapping_flags(uintptr_t virtual_address, uint32_t flags);
+    size_t update_mapping_flags_for_range(uintptr_t virtual_base, size_t size, uint32_t flags);
     bool is_bootstrap_identity_mapped(uintptr_t virtual_address);
     bool validation_self_test();
 }

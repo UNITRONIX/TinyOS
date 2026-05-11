@@ -1880,6 +1880,9 @@ namespace tinyos::shell
             drivers::vga::write("Region count      : ");
             write_uint64(kernel::memory::address_space::region_count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Kernel sections   : ");
+            write_uint64(kernel::memory::address_space::kernel_section_region_count());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Boot modules      : ");
             write_uint64(kernel::memory::address_space::boot_module_region_count());
             drivers::vga::put_char('\n');
@@ -1891,6 +1894,9 @@ namespace tinyos::shell
             drivers::vga::put_char('\n');
             drivers::vga::write("Self-test        : ");
             drivers::vga::write_line(kernel::memory::address_space::validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Paging gaps      : ");
+            write_uint64(kernel::memory::address_space::paging_policy_gap_count());
+            drivers::vga::put_char('\n');
 
             for (size_t index = 0; index < kernel::memory::address_space::region_count(); ++index)
             {

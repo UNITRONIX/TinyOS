@@ -108,6 +108,9 @@ TinyOS currently provides:
 7. [x] add bootstrap page protection flag query and validation self-test
 8. [x] connect address-space region rights to paging protection flags
 9. [x] track boot modules as read-only kernel address-space regions
+10. [x] split kernel image protection contract into metadata, text, rodata and writable data regions
+11. [x] add diagnostics for paging entries that do not match address-space policy
+12. [x] apply address-space read/write/user policy to prepared bootstrap page tables
 
 ### Phase 4 - tasking
 - [x] add task descriptor
