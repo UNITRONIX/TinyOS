@@ -100,6 +100,15 @@ namespace
         { "imagesign", "sign a TinyOS image or manifest", Category::Security, State::Planned, true, true },
         { "imageencrypt", "encrypt a TinyOS image for a target", Category::Security, State::Planned, true, true },
         { "keygen", "create deployment keys", Category::Security, State::Planned, true, true },
+        { "provisionui", "open provisioning workbench UI", Category::Development, State::Planned, true, false },
+        { "provisioninit", "create isolated project workspace", Category::Development, State::Planned, true, false },
+        { "provisionconfig", "configure project provisioning defaults", Category::Development, State::Planned, true, true },
+        { "provisionvariant", "manage provisioning device variants", Category::Development, State::Planned, true, false },
+        { "provisionapi", "show project API and capability surface", Category::Runtime, State::Planned, false, false },
+        { "provisionresources", "estimate project RAM and ROM budget", Category::Memory, State::Planned, false, false },
+        { "remoteaccess", "manage remote access to project workspace", Category::Security, State::Planned, true, true },
+        { "terminaltheme", "manage terminal color theme", Category::Ui, State::Planned, true, false },
+        { "videomode", "select console or framebuffer mode", Category::Ui, State::Planned, true, true },
         { "deploy", "send image through a remote transport", Category::Development, State::Planned, true, true },
         { "provision", "activate an image on a target", Category::Development, State::Planned, true, true },
         { "rollback", "restore previous image slot", Category::Power, State::Planned, true, true },
@@ -239,6 +248,9 @@ namespace tinyos::kernel::admin::tools
             find("trustinfo") != nullptr &&
             find("imageinfo") != nullptr &&
             find("imageencrypt") != nullptr &&
+            find("provisioninit") != nullptr &&
+            find("provisionresources") != nullptr &&
+            find("remoteaccess") != nullptr &&
             find("deploy") != nullptr &&
             find("tools") != nullptr &&
             find("mount") != nullptr;

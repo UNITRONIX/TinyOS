@@ -8,6 +8,7 @@ GRAPHICAL_AUTOSTART ?= 0
 BOOT_TEST_TIMEOUT ?= 8s
 STABILITY_TEST_TIMEOUT ?= 20s
 MINIMAL_TEST_MEMORY ?= 32M
+MINIMAL_PROBE_MEMORY ?= 32M 24M 16M
 BOOT_TEST_LOG ?= build/boot-smoke.log
 MINIMAL_TEST_LOG ?= build/boot-minimal.log
 
@@ -148,7 +149,7 @@ define require_tools
 	fi
 endef
 
-.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan image-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
+.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan image-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
 
 all: check-build-tools $(TARGET)
 
@@ -199,6 +200,9 @@ run-headless: check-test-tools iso
 
 image-plan:
 	bash scripts/tinyos-image.sh plan
+
+provision-plan:
+	bash scripts/tinyos-image.sh provision-plan
 
 image-profile-check:
 	bash scripts/tinyos-image.sh check-profile examples/system.profile
@@ -386,6 +390,14 @@ test-minimal: check-test-tools iso
 		echo "Minimal requirement test failed: required markers not found."; \
 		exit 1; \
 	fi
+
+test-minimal-probe: check-test-tools iso
+	@set -e; \
+	for memory in $(MINIMAL_PROBE_MEMORY); do \
+		safe=$$(printf '%s' "$$memory" | tr -c 'A-Za-z0-9' '_'); \
+		echo "Probing TinyOS minimal runtime with $$memory RAM..."; \
+		$(MAKE) --no-print-directory MINIMAL_TEST_MEMORY=$$memory MINIMAL_TEST_LOG=build/boot-minimal-$$safe.log test-minimal; \
+	done
 
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot

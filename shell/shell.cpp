@@ -1676,9 +1676,13 @@ namespace
     void print_provision_info()
     {
         tinyos::drivers::vga::write_line("Provision pipeline:");
-        tinyos::drivers::vga::write_line("  app bundle -> system profile -> image manifest -> build -> sign -> encrypt -> deploy -> verify -> rollback");
+        tinyos::drivers::vga::write_line("  workspace -> config -> variants -> resources -> app -> image -> deploy -> verify -> rollback");
         tinyos::drivers::vga::write_line("Host entry point:");
-        tinyos::drivers::vga::write_line("  scripts/tinyos-image.sh plan|check-profile|build|manifest|keygen|sign|encrypt|deploy");
+        tinyos::drivers::vga::write_line("  scripts/tinyos-image.sh provision-plan|check-profile|build|manifest|keygen|sign|encrypt|deploy");
+        tinyos::drivers::vga::write_line("Project workbench:");
+        tinyos::drivers::vga::write_line("  planned: provisioninit, provisionconfig, provisionvariant, provisionresources, provisionui");
+        tinyos::drivers::vga::write_line("Policy:");
+        tinyos::drivers::vga::write_line("  isolated workspace, encryption by default, remote access opt-in");
         tinyos::drivers::vga::write_line("Kernel status:");
         print_image_info();
     }

@@ -12,12 +12,22 @@ namespace
     using tinyos::kernel::provision::image::TrustLevel;
 
     const Step g_steps[] = {
+        { "project-workspace", "tinyos-image provision-init", "create isolated project folder and profile skeleton", Phase::ProjectWorkspace, State::HostToolPlanned, TrustLevel::Development, true, false, false },
+        { "provision-config", "tinyos-image provision-config", "set encryption, API, remote access and UI defaults", Phase::ProvisionConfig, State::HostToolPlanned, TrustLevel::Manifested, true, false, false },
+        { "device-variants", "tinyos-image provision-variant", "declare target device variants and resource budgets", Phase::DeviceVariant, State::HostToolPlanned, TrustLevel::Manifested, true, false, false },
+        { "project-api", "tinyos-api manifest", "publish project API and capability surface", Phase::ProjectApi, State::KernelPlanned, TrustLevel::Manifested, false, false, false },
+        { "resource-budget", "tinyos-image provision-resources", "estimate RAM, ROM and image footprint per variant", Phase::ResourceDiagnostics, State::HostToolPlanned, TrustLevel::Manifested, true, false, false },
+        { "diagnostic-terminal", "provisionui", "show color TUI provisioning status and resource checks", Phase::TerminalExperience, State::KernelPlanned, TrustLevel::Development, false, false, false },
+        { "terminal-colors", "terminaltheme", "color-coded terminal theme contract for panels and diagnostics", Phase::TerminalExperience, State::KernelPlanned, TrustLevel::Development, false, false, false },
+        { "high-resolution-console", "videomode", "select text-grid fallback or framebuffer console variants", Phase::TerminalExperience, State::KernelPlanned, TrustLevel::Development, false, false, false },
         { "app-bundle", "tinyos-app", "package app binary, manifest and assets", Phase::ApplicationBundle, State::ReadyContract, TrustLevel::Manifested, true, false, false },
         { "system-profile", "system.profile", "declare target arch, files, apps and capabilities", Phase::SystemProfile, State::ReadyContract, TrustLevel::Manifested, true, false, false },
+        { "encryption-default", "system.profile", "require encryption for provisioning image workflows", Phase::Encryption, State::ReadyContract, TrustLevel::Encrypted, true, false, false },
         { "image-manifest", "tinyos-image manifest", "record image inputs and hashes", Phase::ImageManifest, State::ReadyContract, TrustLevel::Manifested, true, false, false },
         { "image-build", "tinyos-image build", "compile TinyOS and assemble bootable image", Phase::ImageBuild, State::HostToolPlanned, TrustLevel::Manifested, true, false, false },
         { "image-sign", "tinyos-image sign", "sign image or manifest with developer key", Phase::Signing, State::HostToolPlanned, TrustLevel::Signed, true, true, false },
         { "image-encrypt", "tinyos-image encrypt", "encrypt image for a target or deployment profile", Phase::Encryption, State::HostToolPlanned, TrustLevel::Encrypted, true, true, false },
+        { "remote-folder-access", "tinyos-image remote-access", "configure SSH/SFTP access to the project workspace", Phase::RemoteTransport, State::HostToolPlanned, TrustLevel::Encrypted, true, true, true },
         { "deploy-ssh", "tinyos-image deploy", "copy signed image through SSH or SFTP transport", Phase::RemoteTransport, State::HostToolPlanned, TrustLevel::Encrypted, true, true, true },
         { "target-verify", "provision-agent verify", "verify signature and image policy before activation", Phase::TargetVerification, State::KernelPlanned, TrustLevel::Verified, false, true, false },
         { "rollback-slot", "provision-agent rollback", "keep a previous bootable image slot", Phase::Rollback, State::KernelPlanned, TrustLevel::Verified, false, false, false },
@@ -157,15 +167,23 @@ namespace tinyos::kernel::provision::image
     bool validation_self_test()
     {
         return g_ready &&
-            step_count() == 10 &&
-            ready_contract_count() >= 4 &&
-            host_tool_planned_count() >= 4 &&
-            kernel_planned_count() >= 2 &&
-            key_step_count() >= 4 &&
-            remote_step_count() >= 2 &&
+            step_count() >= 19 &&
+            ready_contract_count() >= 5 &&
+            host_tool_planned_count() >= 8 &&
+            kernel_planned_count() >= 5 &&
+            key_step_count() >= 5 &&
+            remote_step_count() >= 3 &&
+            find_step("project-workspace") != nullptr &&
+            find_step("provision-config") != nullptr &&
+            find_step("device-variants") != nullptr &&
+            find_step("project-api") != nullptr &&
+            find_step("resource-budget") != nullptr &&
+            find_step("diagnostic-terminal") != nullptr &&
             find_step("system-profile") != nullptr &&
+            find_step("encryption-default") != nullptr &&
             find_step("image-sign") != nullptr &&
             find_step("image-encrypt") != nullptr &&
+            find_step("remote-folder-access") != nullptr &&
             find_step("deploy-ssh") != nullptr &&
             find_step("target-verify") != nullptr;
     }
@@ -174,6 +192,18 @@ namespace tinyos::kernel::provision::image
     {
         switch (phase)
         {
+        case Phase::ProjectWorkspace:
+            return "project-workspace";
+        case Phase::ProvisionConfig:
+            return "provision-config";
+        case Phase::DeviceVariant:
+            return "device-variant";
+        case Phase::ProjectApi:
+            return "project-api";
+        case Phase::ResourceDiagnostics:
+            return "resource-diagnostics";
+        case Phase::TerminalExperience:
+            return "terminal-experience";
         case Phase::ApplicationBundle:
             return "application-bundle";
         case Phase::SystemProfile:

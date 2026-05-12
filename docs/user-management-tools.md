@@ -19,11 +19,12 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 - Storage: `mount`
 - Processes and services: `ps`, `kill`, `service`
 - Security identities and policy: `useradd`
-- Development and distribution: `package`, `tappinstall`, `tappremove`, `imagebuild`, `imagesign`, `imageencrypt`, `keygen`, `deploy`, `provision`, `rollback`
+- Development and distribution: `package`, `tappinstall`, `tappremove`, `imagebuild`, `imagesign`, `imageencrypt`, `keygen`, `provisionui`, `provisioninit`, `provisionconfig`, `provisionvariant`, `provisionapi`, `provisionresources`, `remoteaccess`, `terminaltheme`, `videomode`, `deploy`, `provision`, `rollback`
 - Networking: `netinfo`
 
 ## Host package tools
 
+- `scripts/tinyos-image.sh provision-plan` prints the planned project provisioning workflow.
 - `scripts/tinyos-image.sh keygen-app` creates a developer app signing key pair.
 - `scripts/tinyos-image.sh trust-app` records an app public key's DER fingerprint for the kernel trust-store contract.
 - `scripts/tinyos-image.sh sign-app` writes a detached `.tapp.sig` signature and receipt.

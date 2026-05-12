@@ -288,7 +288,28 @@ Current groundwork:
 - `widgetinfo`, `widgettest`, `widgetdispatch` and `widgetactiontest` shell diagnostics;
 - UI event queue scaffold over the generic input queue;
 - `uieventinfo`, `uieventpump`, `uieventpeek` and `uieventtest` shell diagnostics;
-- linear framebuffer and 2D primitive drawing remain future work.
+- color terminal themes for provisioning and diagnostics are planned on top of the text-grid path;
+- framebuffer-backed higher-resolution terminal modes remain future work.
+
+## Stage 9B - project provisioning workbench
+
+Goal: make TinyOS easier to prepare for a concrete project or device family without turning provisioning into a monolithic installer.
+
+Tasks:
+
+- create isolated project workspace folders with plain-text profiles;
+- configure signing, encryption, remote access, API exposure and terminal preferences per project;
+- support multiple device variants with RAM, ROM/image, display, storage and feature budgets;
+- add resource diagnostics that combine host image size, `.tapp` package size and kernel memory counters;
+- keep remote access opt-in, starting with host-side SSH/SCP/SFTP and later a TinyLink target transport;
+- expose the workflow through a colorful terminal UI after text-grid color helpers are stable.
+
+Completion criteria:
+
+- `scripts/tinyos-image.sh provision-plan` explains the workflow;
+- a project profile can be validated before building an image;
+- resource checks can reject a variant before deployment;
+- remote deploy still requires signing and encryption evidence by default.
 
 ## Minimum runtime envelope
 
@@ -302,7 +323,7 @@ Current tested minimum:
 - 8259 PIC and 8253/8254 PIT;
 - ISO boot media plus RAM-backed block storage scaffold.
 
-The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the low-memory smoke markers.
+The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the low-memory smoke markers. The `make test-minimal-probe` target can probe lower values such as 24 MiB and 16 MiB before the documented baseline is changed.
 
 ## Stage 10 - portability
 

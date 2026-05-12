@@ -7,6 +7,12 @@ namespace tinyos::kernel::provision::image
 {
     enum class Phase : uint32_t
     {
+        ProjectWorkspace,
+        ProvisionConfig,
+        DeviceVariant,
+        ProjectApi,
+        ResourceDiagnostics,
+        TerminalExperience,
         ApplicationBundle,
         SystemProfile,
         ImageManifest,

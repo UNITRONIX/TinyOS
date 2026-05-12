@@ -156,6 +156,7 @@ TinyOS currently provides:
 - [x] add `.tapp` app package registry, RAMFS metadata, host validation, detached signing and install-gate verifier
 - [x] add user-facing system management tool manifest
 - [x] add secure image/provisioning manifest for future signed, encrypted and remotely deployed images
+- [~] define project provisioning workbench contracts for isolated workspaces, device variants, resource budgets, remote access and color terminal diagnostics
 - [x] add user/kernel transition stubs
 - [x] add ELF loader skeleton
 - [x] add strict ELF metadata validation scaffold
@@ -197,6 +198,19 @@ TinyOS currently provides:
 - [x] add `requirements` shell diagnostic command
 - [x] add RAMFS `/system/requirements.txt`
 - [x] add `make test-minimal` for the 32 MiB QEMU boot envelope
+- [~] add `make test-minimal-probe` for lower-memory experiments before changing the documented baseline
+
+### Developer provisioning workbench
+- [x] document the provisioning workbench direction in `docs/provisioning-workbench.md`
+- [x] expose planned workbench stages through the provisioning manifest
+- [x] add host `provision-plan` output for the project workflow
+- [x] extend `system.profile` with workspace, variants, resource budget and remote-access defaults
+- [ ] add `provisioninit` to create isolated project workspaces
+- [ ] add `provisionconfig` for signing, encryption, API, terminal and remote defaults
+- [ ] add `provisionvariant` for target-specific RAM, ROM, display, storage and feature budgets
+- [ ] add `provisionresources` to estimate RAM and ROM/image usage per variant
+- [ ] add color terminal panels for provisioning status and budget diagnostics
+- [ ] add target-side verify and rollback activation after storage and permissions are ready
 
 ### Phase 8 - UI stack
 - [x] add first terminal UI state scaffold

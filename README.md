@@ -25,6 +25,7 @@ TinyOS source code and documentation are licensed under the Apache License 2.0 u
 - `.tapp` application package registry, trust store and install-gate checks with `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `trustinfo` and `trust`
 - system management tool manifest with `tools`, `toolinfo` and `tool <command>` diagnostics
 - secure image/provisioning manifest with `imageinfo`, `provisioninfo` and `deployinfo` diagnostics
+- project provisioning workbench plan for isolated workspaces, device variants, resource budgets and remote access
 - host `.tapp` signing helpers: `keygen-app`, `trust-app`, `sign-app` and `verify-app`
 - documented minimum runtime target: `i686`, Multiboot ISO, VGA text mode, PS/2 keyboard and 32 MiB RAM
 - simple system API layer
@@ -50,6 +51,7 @@ The default boot path starts the TinyOS terminal. The framebuffer desktop remain
 - `docs/os-roadmap.md` - staged plan for growing TinyOS into a real OS.
 - `docs/implementation-roadmap.md` - current implementation milestones.
 - `docs/security-roadmap.md` - security and hardening priorities.
+- `docs/provisioning-workbench.md` - project provisioning workflow and tool plan.
 - `docs/system-requirements.md` - minimum and recommended runtime/build requirements.
 - `docs/licensing.md` - Apache-2.0 policy and third-party boundary notes.
 

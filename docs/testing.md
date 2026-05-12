@@ -58,6 +58,15 @@ make test-minimal
 
 By default this boots TinyOS with `MINIMAL_TEST_MEMORY=32M` and checks the boot, requirements, renderer, terminal UI, UI event queue and storage mount markers. Override it with `MINIMAL_TEST_MEMORY=64M` when comparing low-memory behavior.
 
+Probe a small RAM range before lowering the documented baseline:
+
+```sh
+make test-minimal-probe
+make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
+```
+
+This target runs `test-minimal` once per memory value and writes separate logs such as `build/boot-minimal-24M.log`.
+
 If the build toolchain is not installed yet but `build/tinyos.iso` already exists, run the existing artifact through QEMU:
 
 ```sh

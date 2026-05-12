@@ -40,3 +40,14 @@ make test-boot
 make test-minimal
 make test-stability
 ```
+
+## Lower-Memory Probing
+
+The supported baseline remains 32 MiB until repeated boot tests prove a smaller value. Use the probe target for experiments:
+
+```sh
+make test-minimal-probe
+make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
+```
+
+Record any lower passing value in this document only after the boot smoke markers, provisioning manifest, terminal UI and storage diagnostics remain stable.

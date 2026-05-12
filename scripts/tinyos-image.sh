@@ -11,6 +11,7 @@ TinyOS image helper
 
 Usage:
   scripts/tinyos-image.sh plan
+    scripts/tinyos-image.sh provision-plan
   scripts/tinyos-image.sh check-profile [profile]
     scripts/tinyos-image.sh check-app [app.manifest|package.tapp]
     scripts/tinyos-image.sh pack-app [app.manifest] [output.tapp]
@@ -107,6 +108,7 @@ print_plan()
 {
     cat <<'PLAN'
 TinyOS secure image plan:
+    0. provision-plan - show the project provisioning workbench plan
   1. check-profile  - validate system.profile basics
     2. check-app      - validate app manifest or .tapp package basics
     3. pack-app       - create a .tapp package envelope
@@ -126,6 +128,31 @@ TinyOS secure image plan:
 PLAN
 }
 
+print_provision_plan()
+{
+    cat <<'PLAN'
+TinyOS provisioning workbench plan:
+  1. provisioninit      - create an isolated project workspace folder
+  2. provisionconfig    - set encryption, signing, API, terminal and remote defaults
+  3. provisionvariant   - define target variants with RAM, ROM, display and feature budgets
+  4. provisionresources - estimate RAM, ROM/image and package footprint for a variant
+  5. provisionui        - future color terminal workbench for project provisioning
+  6. remoteaccess       - opt-in SSH/SFTP access to the project workspace or deploy folder
+  7. build/sign/encrypt - produce deployable artifacts using the project defaults
+  8. deploy-check       - reject unsigned or plaintext remote deployment artifacts
+
+Current host command status:
+  ready: check-profile, check-app, pack-app, keygen-app, trust-app, sign-app, verify-app
+  ready: build, manifest, keygen, sign, encrypt, deploy-check, deploy
+  planned: provisioninit, provisionconfig, provisionvariant, provisionresources, provisionui, remoteaccess
+
+Default safety policy:
+  encryption=required for remote provisioning
+  remote.access=disabled until configured
+  private keys stay outside deployed images
+PLAN
+}
+
 check_profile()
 {
     local profile=${1:-examples/system.profile}
@@ -138,10 +165,16 @@ check_profile()
         '^profile.name='
         '^target.arch='
         '^image.boot='
+        '^provision.workspace='
+        '^provision.isolation='
+        '^devices.variants='
+        '^resources.ram_budget_mib='
+        '^resources.rom_budget_mib='
         '^apps.required='
         '^security.signing='
         '^security.trust_store='
         '^security.encryption='
+        '^remote.access='
     )
 
     local pattern
@@ -596,6 +629,9 @@ fi
 case "$command_name" in
     plan)
         print_plan
+        ;;
+    provision-plan)
+        print_provision_plan
         ;;
     check-profile)
         check_profile "$@"
