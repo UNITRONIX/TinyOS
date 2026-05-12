@@ -2,6 +2,12 @@
 
 TinyOS source code and project documentation are intended to be distributed under the Apache License 2.0 unless a file explicitly states otherwise.
 
+## Project ownership
+
+- Project owner: UNITRONIX.
+- Author: Krzysztof Nienartowicz.
+- Repository notice: `NOTICE` records the current project ownership and author metadata for source and documentation distribution.
+
 ## Project rules
 
 - Keep TinyOS kernel, drivers, shell tools and documentation original or based only on Apache-2.0-compatible material.

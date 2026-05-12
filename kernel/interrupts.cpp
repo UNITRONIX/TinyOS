@@ -2,7 +2,9 @@
 
 #include <tinyos/arch/hal.hpp>
 #include <tinyos/drivers/keyboard.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/drivers/mouse.hpp>
+#endif
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
@@ -188,9 +190,11 @@ extern "C" void irq_dispatch(uint32_t irq)
     case 1:
         tinyos::drivers::keyboard::handle_irq();
         break;
+#if !defined(TINYOS_TERMINAL_ONLY)
     case 12:
         tinyos::drivers::mouse::handle_irq();
         break;
+#endif
     default:
         break;
     }

@@ -200,11 +200,17 @@ TinyOS currently provides:
 - [x] add RAMFS `/system/requirements.txt`
 - [x] add `make test-minimal` for the 32 MiB QEMU boot envelope
 - [~] add `make test-minimal-probe` for lower-memory experiments before changing the documented baseline
+- [x] add `make test-lowmem-probe` for terminal-marker KiB-scale RAM experiments
+- [x] add `TERMINAL_ONLY=1`, `make terminal-only-iso` and `make test-terminal-lowmem-probe` to physically omit desktop/window-manager/cursor/mouse paths from low-memory builds
 - [x] add compact terminal dashboard through `status`
+- [x] add TinyOS system information page through `sysinfo`
 - [x] add non-destructive system health checks through `syscheck`
 - [x] add terminal risk listing through `riskinfo`
 - [x] add command discovery through `helpsearch`
 - [x] add active system profile metadata through `/system/profile.txt`, `profileinfo` and `profilecheck`
+- [x] add two-pane RAMFS terminal file manager through `filemgr`
+- [x] add interactive RAMFS text editor through `textedit`
+- [x] connect `fileui` and `filemgr` edit actions to `textedit`
 
 ### Installed system pattern
 - [x] document the target installer and installed-system flow in `docs/installed-system-pattern.md`

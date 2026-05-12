@@ -16,10 +16,13 @@ namespace
         { "helpsearch", "search terminal command help", Category::Shell, State::Ready, false, false },
         { "helplist", "print classic command list", Category::Shell, State::Ready, false, false },
         { "fileui", "open terminal file browser", Category::Files, State::Ready, true, false },
+        { "filemgr", "open two-pane terminal file manager", Category::Files, State::Ready, true, false },
+        { "textedit", "open interactive RAMFS text editor", Category::Files, State::Ready, true, false },
         { "tools", "list management tools", Category::Shell, State::Ready, false, false },
         { "toolinfo", "show management tool manifest summary", Category::Shell, State::Ready, false, false },
         { "tool", "show one management tool", Category::Shell, State::Ready, false, false },
         { "status", "show compact terminal system dashboard", Category::Shell, State::Ready, false, false },
+        { "sysinfo", "show TinyOS system information", Category::Shell, State::Ready, false, false },
         { "syscheck", "run non-destructive system health checks", Category::Security, State::Ready, false, false },
         { "riskinfo", "list state-writing and high-risk tools", Category::Security, State::Ready, false, false },
         { "profileinfo", "show active system profile", Category::Security, State::Ready, false, false },
@@ -37,6 +40,7 @@ namespace
         { "describe", "show RAMFS node metadata", Category::Files, State::Ready, false, false },
         { "pathcheck", "validate and inspect a VFS path", Category::Files, State::Ready, false, false },
         { "write", "overwrite writable RAMFS file", Category::Files, State::Ready, true, true },
+        { "edit", "compatibility alias for writable RAMFS edit", Category::Files, State::Ready, true, true },
         { "copy", "copy readable RAMFS file", Category::Files, State::Ready, true, false },
         { "move", "move runtime RAMFS node", Category::Files, State::Ready, true, true },
         { "remove", "remove runtime RAMFS node", Category::Files, State::Ready, true, true },
@@ -71,7 +75,7 @@ namespace
         { "installinfo", "show installed-system contract", Category::Runtime, State::Ready, false, false },
         { "installcheck", "validate installer mock preflight", Category::Development, State::Ready, false, false },
         { "install", "write mock install receipt to RAMFS", Category::Development, State::Ready, true, false },
-        { "sysinfo", "show syscall ABI scaffold", Category::Runtime, State::Ready, false, false },
+        { "syscallinfo", "show syscall ABI scaffold", Category::Runtime, State::Ready, false, false },
         { "userinfo", "show user transition scaffold", Category::Runtime, State::Ready, false, false },
         { "elfinfo", "show ELF loader scaffold", Category::Runtime, State::Ready, false, false },
         { "modulesinfo", "show boot modules", Category::Runtime, State::Ready, false, false },
@@ -257,12 +261,14 @@ namespace tinyos::kernel::admin::tools
             find("files") != nullptr &&
             find("helpsearch") != nullptr &&
             find("status") != nullptr &&
+            find("sysinfo") != nullptr &&
             find("syscheck") != nullptr &&
             find("riskinfo") != nullptr &&
             find("profileinfo") != nullptr &&
             find("profilecheck") != nullptr &&
             find("pathcheck") != nullptr &&
             find("runtimeinfo") != nullptr &&
+            find("syscallinfo") != nullptr &&
             find("appinfo") != nullptr &&
             find("launchcheck") != nullptr &&
             find("tappinfo") != nullptr &&
@@ -278,6 +284,8 @@ namespace tinyos::kernel::admin::tools
             find("remoteaccess") != nullptr &&
             find("deploy") != nullptr &&
             find("tools") != nullptr &&
+            find("filemgr") != nullptr &&
+            find("textedit") != nullptr &&
             find("mount") != nullptr;
     }
 

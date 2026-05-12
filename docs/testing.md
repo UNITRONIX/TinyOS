@@ -67,6 +67,25 @@ make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
 
 This target runs `test-minimal` once per memory value and writes separate logs such as `build/boot-minimal-24M.log`.
 
+Probe sub-16 MiB and KiB-scale RAM values with terminal-only boot markers:
+
+```sh
+make test-lowmem-probe
+make test-lowmem-probe LOWMEM_PROBE_MEMORY="3M 2624K 2561K 2560K 2M 64K"
+```
+
+This target checks only the core boot, system requirements and terminal UI markers. It intentionally does not require desktop markers. The current desktop-capable QEMU/GRUB ISO probe passes at `2561K` and fails at `2560K` and `64K` with no TinyOS serial output.
+
+Build and test the physical terminal-only profile, which omits the desktop, window manager, cursor and PS/2 mouse objects from the linked kernel:
+
+```sh
+make terminal-only-iso
+make test-terminal-lowmem-probe
+make test-terminal-lowmem-probe LOWMEM_PROBE_MEMORY="2880K 2624K 2529K 2528K 2M 64K"
+```
+
+The current terminal-only kernel is about `238K` on disk versus about `280K` for the desktop-capable kernel. The reference QEMU/GRUB probe reaches `2529K`; `2528K`, `2M` and `64K` fail before TinyOS emits serial output. Some nearby values can be non-monotonic on the GRUB/QEMU ISO path, so treat this as a boot-path probe rather than a supported RAM baseline.
+
 Validate install-profile safety rules without writing disks:
 
 ```sh
@@ -87,6 +106,7 @@ show /system/profile.txt
 Inside the terminal, use the non-destructive operational checks before and after manual feature testing:
 
 ```text
+sysinfo
 status
 syscheck
 riskinfo
@@ -95,6 +115,11 @@ profilecheck
 pathcheck /system/tools.txt
 pathcheck /system/profile.txt
 helpsearch install
+helpsearch textedit
+helpsearch filemgr
+fileui
+filemgr
+textedit /users/notes.txt
 ```
 
 If the build toolchain is not installed yet but `build/tinyos.iso` already exists, run the existing artifact through QEMU:

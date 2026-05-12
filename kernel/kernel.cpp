@@ -5,7 +5,9 @@
 #include <tinyos/config.hpp>
 #include <tinyos/drivers/input.hpp>
 #include <tinyos/drivers/keyboard.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/drivers/mouse.hpp>
+#endif
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
@@ -41,13 +43,17 @@
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/cursor.hpp>
-#include <tinyos/ui/events.hpp>
 #include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/graphical_desktop.hpp>
+#endif
+#include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/window_manager.hpp>
+#endif
 #include <tinyos/ui/widgets.hpp>
 
 namespace
@@ -133,7 +139,11 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::is_ready() ? "kernel shell + RAMFS ready" : "kernel shell ready");
         tinyos::drivers::vga::write_line("");
         tinyos::drivers::vga::write_line("Type 'help' for commands, 'helpui' for the terminal command browser.");
+    #if defined(TINYOS_TERMINAL_ONLY)
+        tinyos::drivers::vga::write_line("Terminal-only low-memory profile active.");
+    #else
         tinyos::drivers::vga::write_line("Desktop commands are Alpha development tools and may be incomplete.");
+    #endif
         tinyos::drivers::vga::write_line("");
     }
 
@@ -197,10 +207,11 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::ui::terminal::validation_self_test(), "Terminal UI scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::terminal::panel_validation_self_test(), "Terminal panel scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::renderer::pixel_contract_validation_self_test(), "Pixel renderer contract validation failed.");
-    tinyos::ui::cursor::initialize();
-    TINYOS_ASSERT(tinyos::ui::cursor::validation_self_test(), "Cursor scaffold validation failed.");
     tinyos::ui::widgets::initialize();
     TINYOS_ASSERT(tinyos::ui::widgets::validation_self_test(), "TUI widget scaffold validation failed.");
+#if !defined(TINYOS_TERMINAL_ONLY)
+    tinyos::ui::cursor::initialize();
+    TINYOS_ASSERT(tinyos::ui::cursor::validation_self_test(), "Cursor scaffold validation failed.");
     tinyos::ui::window_manager::initialize();
     TINYOS_ASSERT(tinyos::ui::window_manager::validation_self_test(), "Window manager scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::window_manager::composition_validation_self_test(), "Window manager composition validation failed.");
@@ -211,6 +222,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::ui::desktop::fullscreen_validation_self_test(), "Fullscreen desktop validation failed.");
 #if defined(TINYOS_GRAPHICAL_BOOT)
     TINYOS_ASSERT(tinyos::ui::graphical_desktop::validation_self_test(), "Graphical desktop preview validation failed.");
+#endif
 #endif
     register_device_or_panic("serial-com1", tinyos::kernel::device::Class::Diagnostics, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagDiagnostics);
     debug_boot_checkpoint("device registry ready");
@@ -357,11 +369,14 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::ui::events::initialize();
     TINYOS_ASSERT(tinyos::ui::events::validation_self_test(), "UI event queue scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::widgets::event_bridge_validation_self_test(), "TUI widget event bridge validation failed.");
+#if !defined(TINYOS_TERMINAL_ONLY)
     TINYOS_ASSERT(tinyos::ui::desktop::input_validation_self_test(), "Desktop input interaction validation failed.");
+#endif
     register_device_or_panic("ui-event-queue", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 2, tinyos::kernel::device::FlagVirtual);
     tinyos::drivers::keyboard::initialize();
     register_device_or_panic("keyboard-ps2", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 1, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
     debug_boot_checkpoint("keyboard driver ready");
+#if !defined(TINYOS_TERMINAL_ONLY)
     TINYOS_ASSERT(tinyos::drivers::mouse::packet_decoder_self_test(), "PS/2 mouse packet decoder validation failed.");
     tinyos::drivers::mouse::initialize();
     if (tinyos::drivers::mouse::is_ready())
@@ -369,6 +384,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
         register_device_or_panic("mouse-ps2", tinyos::kernel::device::Class::Input, tinyos::kernel::device::State::Ready, 3, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
         debug_boot_checkpoint("mouse driver ready");
     }
+#endif
 
     TINYOS_ASSERT(tinyos::kernel::device::count() >= 9, "Device registry core devices missing.");
     TINYOS_ASSERT(tinyos::kernel::device::ready_count() == tinyos::kernel::device::count(), "Device registry contains non-ready core devices.");
@@ -382,15 +398,19 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::drivers::pic::clear_mask(0);
     tinyos::drivers::keyboard::enable_interrupt_input();
     tinyos::drivers::pic::clear_mask(1);
+#if !defined(TINYOS_TERMINAL_ONLY)
     if (tinyos::drivers::mouse::is_ready())
     {
         tinyos::drivers::pic::clear_mask(12);
     }
+#endif
     tinyos::arch::interrupts::enable();
     tinyos::kernel::interrupts::set_hardware_irq_enabled(true);
     TINYOS_ASSERT(!tinyos::drivers::pic::is_masked(0), "PIT IRQ0 is still masked after rollout.");
     TINYOS_ASSERT(!tinyos::drivers::pic::is_masked(1), "Keyboard IRQ1 is still masked after rollout.");
+#if !defined(TINYOS_TERMINAL_ONLY)
     TINYOS_ASSERT(!tinyos::drivers::mouse::is_ready() || !tinyos::drivers::pic::is_masked(12), "Mouse IRQ12 is still masked after rollout.");
+#endif
     TINYOS_ASSERT(wait_for_timer_stability(), "PIT IRQ0 stability check failed.");
     debug_boot_checkpoint("pit irq0 stability check complete");
 
@@ -423,14 +443,18 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Renderer scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Renderer primitive scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Pixel renderer contract ready.");
-    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Cursor scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal UI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal panel scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
+#if !defined(TINYOS_TERMINAL_ONLY)
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Cursor scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Window manager scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop shell prototype ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Fullscreen desktop mode ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Desktop input interactions ready.");
+#else
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal-only low-memory profile ready.");
+#endif
 #if defined(TINYOS_GRAPHICAL_BOOT)
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Graphical desktop optional mode ready.");
 #endif
@@ -453,14 +477,16 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PIT IRQ0 stable at 100 Hz.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Keyboard IRQ1 enabled with polling fallback.");
+#if !defined(TINYOS_TERMINAL_ONLY)
     if (tinyos::drivers::mouse::is_ready())
     {
         tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PS/2 mouse IRQ12 enabled for graphical desktop.");
     }
+#endif
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch ABI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
-    #if defined(TINYOS_GRAPHICAL_AUTOSTART)
+    #if defined(TINYOS_GRAPHICAL_AUTOSTART) && !defined(TINYOS_TERMINAL_ONLY)
         if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
         {
             (void)tinyos::ui::graphical_desktop::run_session();

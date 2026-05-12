@@ -4,11 +4,11 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 
 ## Ready tools
 
-- Shell: `help`, `helpui`, `helpsearch`, `helplist`, `status`, `syscheck`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
-- Files: `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `pathcheck`, `mkdir`, `touch`, `chmod`, `write`, `copy`, `move`, `remove`, `fstest`, `ramfsinfo`, `vfsinfo`
+- Shell: `help`, `helpui`, `helpsearch`, `helplist`, `sysinfo`, `status`, `syscheck`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
+- Files: `filemgr`, `textedit`, `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `pathcheck`, `mkdir`, `touch`, `chmod`, `write`, `edit`, `copy`, `move`, `remove`, `fstest`, `ramfsinfo`, `vfsinfo`
 - Storage and devices: `blockinfo`, `storageinfo`, `devices`, `device`, `fbinfo`
 - Memory: `meminfo`, `frameinfo`, `heapinfo`, `heaptest`, `paginginfo`, `addrspaceinfo`
-- Runtime and apps: `runtimeinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `installinfo`, `installcheck`, `install`, `sysinfo`, `userinfo`, `elfinfo`, `modulesinfo`
+- Runtime and apps: `runtimeinfo`, `syscallinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `installinfo`, `installcheck`, `install`, `userinfo`, `elfinfo`, `modulesinfo`
 - Security: `riskinfo`, `profileinfo`, `profilecheck`, `securityinfo`, `integritycheck`, `requirements`, `trustinfo`, `trust`
 - UI and input: `renderinfo`, `terminalinfo`, `widgetinfo`, `uieventinfo`, `inputinfo`, `keyboardinfo`
 - Scheduling and time: `schedinfo`, `taskinfo`, `contextinfo`, `timerinfo`, `uptime`
@@ -36,11 +36,19 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 ## Terminal diagnostics
 
 - `status` prints a compact system dashboard for version, architecture, ticks, memory, VFS, tools, package and install-receipt state.
+- `sysinfo` prints the TinyOS system information page: owner, author, license, version, architecture, boot profile, terminal tools and practical RAM probe range.
 - `syscheck` runs non-destructive health checks across architecture, platform, memory, VFS, app/package, syscall, provisioning, system profile and terminal contracts.
 - `riskinfo` lists management commands that write state or are marked high risk in the kernel tool manifest.
 - `profileinfo` and `profilecheck` expose and validate the current system identity/security profile.
 - `pathcheck <path>` resolves a shell path and reports validity, metadata and permissions.
 - `helpsearch <text>` searches command names, usage and summaries without opening the interactive help UI.
+
+## Terminal file tools
+
+- `filemgr` is the two-pane terminal file manager. It can switch active panes, open directories, view files, create files/directories, open selected files in `textedit`, remove paths, copy files to the other pane and move files to the other pane.
+- `textedit <path>` is the interactive RAMFS text editor. It can load an existing file, create a missing runtime file after confirmation, replace the buffer, append a line, clear the buffer, save, reload and show file metadata.
+- `fileui` is the lighter single-pane RAMFS file browser. It can open directories, view files, create files/directories, edit selected writable files through `textedit`, remove paths, copy files and move paths.
+- `edit <path> <text>` and `write <path> <text>` are the current low-memory text editing path for writable RAMFS files.
 
 ## Host package tools
 

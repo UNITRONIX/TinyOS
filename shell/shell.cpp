@@ -45,19 +45,24 @@
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/cursor.hpp>
-#include <tinyos/ui/events.hpp>
 #include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/graphical_desktop.hpp>
+#endif
+#include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/window_manager.hpp>
+#endif
 #include <tinyos/ui/widgets.hpp>
 
 namespace
 {
     constexpr size_t MaxInputLength = 128;
     constexpr size_t MaxPathLength = 96;
+    constexpr size_t TextEditorBufferBytes = 512;
     constexpr const char* SystemProfilePath = "/system/profile.txt";
     constexpr const char* InstallReceiptPath = "/receipts/install.receipt";
     constexpr char InstallReceiptText[] =
@@ -79,9 +84,12 @@ namespace
         "provisioning.remote_access=disabled\n"
         "next=persistent-disk-install-planned\n";
     char g_current_directory[MaxPathLength] = "/";
+    char g_textedit_buffer[TextEditorBufferBytes + 1];
+    char g_textedit_line[MaxInputLength];
 
     void wait_for_key();
     void write_check_result(const char* label, bool passed);
+    void fileui_show_selected(const char* current_path, size_t selected);
 
     void debug_shell_checkpoint(const char* stage)
     {
@@ -782,6 +790,47 @@ namespace
         tinyos::drivers::vga::write_line(system_profile_contract_passes() ? "valid" : "invalid");
     }
 
+        void print_system_information()
+        {
+        const auto& arch_info = tinyos::arch::info();
+        tinyos::drivers::vga::write_line("TinyOS system information:");
+        tinyos::drivers::vga::write("System       : ");
+        tinyos::drivers::vga::write(tinyos::config::Name);
+        tinyos::drivers::vga::write(" ");
+        tinyos::drivers::vga::write_line(tinyos::config::Version);
+        tinyos::drivers::vga::write("Owner        : ");
+        tinyos::drivers::vga::write_line(tinyos::config::Owner);
+        tinyos::drivers::vga::write("Author       : ");
+        tinyos::drivers::vga::write_line(tinyos::config::Author);
+        tinyos::drivers::vga::write("License      : ");
+        tinyos::drivers::vga::write_line(tinyos::config::License);
+        tinyos::drivers::vga::write("Architecture : ");
+        tinyos::drivers::vga::write_line(arch_info.name);
+        tinyos::drivers::vga::write("CPU family   : ");
+        tinyos::drivers::vga::write_line(arch_info.cpu_family);
+        tinyos::drivers::vga::write("Boot media   : ");
+        tinyos::drivers::vga::write_line("GRUB Multiboot ISO");
+        tinyos::drivers::vga::write("Build profile: ");
+    #if defined(TINYOS_TERMINAL_ONLY)
+        tinyos::drivers::vga::write_line("terminal-only low-memory");
+    #else
+        tinyos::drivers::vga::write_line("desktop-capable terminal-first");
+    #endif
+        tinyos::drivers::vga::write("Shell        : ");
+        tinyos::drivers::vga::write_line("kernel terminal shell");
+        tinyos::drivers::vga::write("File manager : ");
+        tinyos::drivers::vga::write_line("filemgr two-pane plus fileui single-pane");
+        tinyos::drivers::vga::write("Text editor  : ");
+        tinyos::drivers::vga::write_line("textedit interactive RAMFS editor plus edit/write");
+        tinyos::drivers::vga::write("RAM baseline : ");
+        tinyos::drivers::vga::write_line("32MiB supported, 3MiB+ practical probe range");
+        tinyos::drivers::vga::write("Usable RAM   : ");
+        write_uint64(tinyos::kernel::memory::map::usable_bytes() / 1024);
+        tinyos::drivers::vga::write_line(" KiB");
+        tinyos::drivers::vga::write("Profile      : ");
+        tinyos::drivers::vga::write_line(SystemProfilePath);
+        }
+
     bool syscall_contract_valid()
     {
         return tinyos::kernel::syscall::validation_self_test() &&
@@ -1060,6 +1109,429 @@ namespace
         wait_for_key();
     }
 
+    bool load_textedit_buffer(const char* path, size_t& buffer_size)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        const char* data = nullptr;
+        size_t size = 0;
+        buffer_size = 0;
+        if (node == nullptr || node->directory || !tinyos::kernel::vfs::read_file(node, data, size) || size > TextEditorBufferBytes)
+        {
+            g_textedit_buffer[0] = '\0';
+            return false;
+        }
+
+        for (size_t index = 0; index < size; ++index)
+        {
+            g_textedit_buffer[index] = data[index];
+        }
+
+        g_textedit_buffer[size] = '\0';
+        buffer_size = size;
+        return true;
+    }
+
+    bool save_textedit_buffer(const char* path, size_t buffer_size)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        if (node == nullptr || node->directory || !node->writable || buffer_size > node->capacity)
+        {
+            return false;
+        }
+
+        return tinyos::kernel::vfs::write_file(path, g_textedit_buffer, buffer_size);
+    }
+
+    bool replace_textedit_buffer(const char* text, size_t& buffer_size)
+    {
+        const size_t text_size = tinyos::core::string::length(text);
+        if (text_size > TextEditorBufferBytes)
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < text_size; ++index)
+        {
+            g_textedit_buffer[index] = text[index];
+        }
+
+        g_textedit_buffer[text_size] = '\0';
+        buffer_size = text_size;
+        return true;
+    }
+
+    bool append_textedit_line(const char* text, size_t& buffer_size)
+    {
+        const size_t text_size = tinyos::core::string::length(text);
+        const size_t newline = buffer_size == 0 || g_textedit_buffer[buffer_size - 1] == '\n' ? 0 : 1;
+        if (buffer_size + newline + text_size + 1 > TextEditorBufferBytes)
+        {
+            return false;
+        }
+
+        if (newline != 0)
+        {
+            g_textedit_buffer[buffer_size] = '\n';
+            ++buffer_size;
+        }
+
+        for (size_t index = 0; index < text_size; ++index)
+        {
+            g_textedit_buffer[buffer_size + index] = text[index];
+        }
+
+        buffer_size += text_size;
+        g_textedit_buffer[buffer_size] = '\n';
+        ++buffer_size;
+        g_textedit_buffer[buffer_size] = '\0';
+        return true;
+    }
+
+    void draw_text_editor(const char* path, size_t buffer_size, bool dirty)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write_line("TinyOS TextEdit");
+        tinyos::drivers::vga::write_line("E replace  A append  C clear  S save  R reload  I info  Q exit");
+        tinyos::drivers::vga::write("Path: ");
+        tinyos::drivers::vga::write_line(path);
+        tinyos::drivers::vga::write("State: ");
+        tinyos::drivers::vga::write(node != nullptr && node->writable ? "writable" : "read-only");
+        tinyos::drivers::vga::write(dirty ? ", modified" : ", clean");
+        tinyos::drivers::vga::write("  Size: ");
+        write_uint64(buffer_size);
+        tinyos::drivers::vga::write("/");
+        write_uint64(node != nullptr ? node->capacity : 0);
+        tinyos::drivers::vga::write_line(" bytes");
+        tinyos::drivers::vga::write_line("----------------------------------------");
+        if (buffer_size == 0)
+        {
+            tinyos::drivers::vga::write_line("<empty>");
+        }
+        else
+        {
+            write_buffer(g_textedit_buffer, buffer_size);
+            if (g_textedit_buffer[buffer_size - 1] != '\n')
+            {
+                tinyos::drivers::vga::put_char('\n');
+            }
+        }
+        tinyos::drivers::vga::write_line("----------------------------------------");
+    }
+
+    void run_text_editor(const char* path)
+    {
+        if (tinyos::kernel::vfs::find(path) == nullptr)
+        {
+            tinyos::drivers::vga::write("File not found. Create it? [y/N] ");
+            const char key = tinyos::drivers::keyboard::read_char();
+            tinyos::drivers::vga::put_char('\n');
+            if ((key != 'y' && key != 'Y') || !tinyos::kernel::vfs::create_file(path))
+            {
+                tinyos::drivers::vga::write_line("TextEdit aborted.");
+                return;
+            }
+        }
+
+        size_t buffer_size = 0;
+        bool dirty = false;
+        if (!load_textedit_buffer(path, buffer_size))
+        {
+            tinyos::drivers::vga::write_line("TextEdit cannot open this file.");
+            return;
+        }
+
+        for (;;)
+        {
+            draw_text_editor(path, buffer_size, dirty);
+            const char key = tinyos::drivers::keyboard::read_char();
+            if (key == 'q' || key == 'Q' || key == 27)
+            {
+                if (dirty && !confirm_fileui_action("Discard unsaved text?"))
+                {
+                    continue;
+                }
+                tinyos::drivers::vga::clear();
+                return;
+            }
+            if (key == 'e' || key == 'E')
+            {
+                tinyos::drivers::vga::write("Replace with: ");
+                tinyos::drivers::keyboard::read_line(g_textedit_line, sizeof(g_textedit_line));
+                if (!replace_textedit_buffer(g_textedit_line, buffer_size))
+                {
+                    fileui_message("Replacement is too large.");
+                }
+                else
+                {
+                    dirty = true;
+                }
+                continue;
+            }
+            if (key == 'a' || key == 'A')
+            {
+                tinyos::drivers::vga::write("Append line: ");
+                tinyos::drivers::keyboard::read_line(g_textedit_line, sizeof(g_textedit_line));
+                if (!append_textedit_line(g_textedit_line, buffer_size))
+                {
+                    fileui_message("Append would exceed file buffer.");
+                }
+                else
+                {
+                    dirty = true;
+                }
+                continue;
+            }
+            if (key == 'c' || key == 'C')
+            {
+                if (confirm_fileui_action("Clear editor buffer?"))
+                {
+                    g_textedit_buffer[0] = '\0';
+                    buffer_size = 0;
+                    dirty = true;
+                }
+                continue;
+            }
+            if (key == 's' || key == 'S')
+            {
+                if (save_textedit_buffer(path, buffer_size))
+                {
+                    dirty = false;
+                    fileui_message("File saved.");
+                }
+                else
+                {
+                    fileui_message("Save failed.");
+                }
+                continue;
+            }
+            if (key == 'r' || key == 'R')
+            {
+                if (!dirty || confirm_fileui_action("Reload and discard changes?"))
+                {
+                    dirty = false;
+                    (void)load_textedit_buffer(path, buffer_size);
+                }
+                continue;
+            }
+            if (key == 'i' || key == 'I')
+            {
+                tinyos::drivers::vga::clear();
+                show_file_info(path);
+                wait_for_key();
+                continue;
+            }
+        }
+    }
+
+    void print_filemgr_entry(const tinyos::kernel::vfs::Node* node, bool selected, bool active)
+    {
+        tinyos::drivers::vga::write(selected ? (active ? "> " : "* ") : "  ");
+        tinyos::drivers::vga::write(node != nullptr && node->directory ? "[D] " : "[F] ");
+        const char* name = node != nullptr && node->name != nullptr ? node->name : "invalid";
+        size_t index = 0;
+        while (name[index] != '\0' && index < 24)
+        {
+            tinyos::drivers::vga::put_char(name[index]);
+            ++index;
+        }
+        while (index < 24)
+        {
+            tinyos::drivers::vga::put_char(' ');
+            ++index;
+        }
+    }
+
+    void draw_file_manager(const char* left_path, size_t left_selected, const char* right_path, size_t right_selected, bool left_active)
+    {
+        const auto* left_node = tinyos::kernel::vfs::find(left_path);
+        const auto* right_node = tinyos::kernel::vfs::find(right_path);
+        const size_t left_count = tinyos::kernel::vfs::child_count(left_node);
+        const size_t right_count = tinyos::kernel::vfs::child_count(right_node);
+        constexpr size_t VisibleRows = 14;
+        size_t left_first = 0;
+        size_t right_first = 0;
+        if (left_selected >= VisibleRows)
+        {
+            left_first = left_selected - VisibleRows + 1;
+        }
+        if (right_selected >= VisibleRows)
+        {
+            right_first = right_selected - VisibleRows + 1;
+        }
+
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write_line("TinyOS FileMgr");
+        tinyos::drivers::vga::write_line("Tab switch  Enter open/view  Left parent  V view  E edit  N file  M dir");
+        tinyos::drivers::vga::write_line("C copy to other pane  R move to other pane  D delete  Q exit");
+        tinyos::drivers::vga::write(left_active ? "Left* : " : "Left  : ");
+        tinyos::drivers::vga::write(left_path);
+        tinyos::drivers::vga::write("    ");
+        tinyos::drivers::vga::write(left_active ? "Right : " : "Right*: ");
+        tinyos::drivers::vga::write_line(right_path);
+
+        for (size_t offset = 0; offset < VisibleRows; ++offset)
+        {
+            const size_t left_index = left_first + offset;
+            const size_t right_index = right_first + offset;
+            print_filemgr_entry(left_index < left_count ? tinyos::kernel::vfs::child_at(left_node, left_index) : nullptr, left_index == left_selected && left_count != 0, left_active);
+            tinyos::drivers::vga::write(" | ");
+            print_filemgr_entry(right_index < right_count ? tinyos::kernel::vfs::child_at(right_node, right_index) : nullptr, right_index == right_selected && right_count != 0, !left_active);
+            tinyos::drivers::vga::put_char('\n');
+        }
+    }
+
+    void filemgr_open_selected(char* path, size_t& selected)
+    {
+        char selected_path[MaxPathLength];
+        const auto* child = selected_fileui_node(path, selected);
+        if (child == nullptr || !build_child_path(path, child->name, selected_path, sizeof(selected_path)))
+        {
+            fileui_message("Nothing selected.");
+            return;
+        }
+
+        if (child->directory)
+        {
+            if (!tinyos::kernel::vfs::can_enter_directory(child))
+            {
+                fileui_message("Directory not executable.");
+                return;
+            }
+            (void)copy_path_string(path, MaxPathLength, selected_path);
+            selected = 0;
+            return;
+        }
+
+        tinyos::drivers::vga::clear();
+        show_file_info(selected_path);
+        tinyos::drivers::vga::write_line("");
+        show_file(selected_path);
+        wait_for_key();
+    }
+
+    void filemgr_copy_or_move_to_other(const char* source_directory, size_t selected, const char* destination_directory, bool move_path)
+    {
+        char source_path[MaxPathLength];
+        char destination_path[MaxPathLength];
+        const auto* child = selected_fileui_node(source_directory, selected);
+        if (child == nullptr || child->directory || !fileui_selected_path(source_directory, selected, source_path, sizeof(source_path)) || !build_child_path(destination_directory, child->name, destination_path, sizeof(destination_path)))
+        {
+            fileui_message("Select a file first.");
+            return;
+        }
+
+        const bool ok = move_path ? tinyos::kernel::vfs::move(source_path, destination_path) : tinyos::kernel::vfs::copy_file(source_path, destination_path);
+        fileui_message(ok ? (move_path ? "File moved to other pane." : "File copied to other pane.") : (move_path ? "Move failed." : "Copy failed."));
+    }
+
+    void run_file_manager()
+    {
+        char left_path[MaxPathLength];
+        char right_path[MaxPathLength];
+        (void)copy_path_string(left_path, sizeof(left_path), g_current_directory);
+        (void)copy_path_string(right_path, sizeof(right_path), "/");
+        size_t left_selected = 0;
+        size_t right_selected = 0;
+        bool left_active = true;
+
+        for (;;)
+        {
+            left_selected = clamped_fileui_selection(left_path, left_selected);
+            right_selected = clamped_fileui_selection(right_path, right_selected);
+            draw_file_manager(left_path, left_selected, right_path, right_selected, left_active);
+            const char key = tinyos::drivers::keyboard::read_char();
+            char* active_path = left_active ? left_path : right_path;
+            char* other_path = left_active ? right_path : left_path;
+            size_t& active_selected = left_active ? left_selected : right_selected;
+            const auto* active_node = tinyos::kernel::vfs::find(active_path);
+            const size_t active_count = tinyos::kernel::vfs::child_count(active_node);
+
+            if (key == 'q' || key == 'Q' || key == 27)
+            {
+                tinyos::drivers::vga::clear();
+                return;
+            }
+            if (key == '\t')
+            {
+                left_active = !left_active;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyUp && active_count != 0)
+            {
+                active_selected = active_selected == 0 ? active_count - 1 : active_selected - 1;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyDown && active_count != 0)
+            {
+                active_selected = (active_selected + 1) % active_count;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyLeft)
+            {
+                (void)pop_path_segment(active_path);
+                active_selected = 0;
+                continue;
+            }
+            if ((key == tinyos::drivers::keyboard::KeyRight || key == '\n') && active_count != 0)
+            {
+                filemgr_open_selected(active_path, active_selected);
+                continue;
+            }
+            if ((key == 'v' || key == 'V') && active_count != 0)
+            {
+                fileui_show_selected(active_path, active_selected);
+                continue;
+            }
+            if ((key == 'e' || key == 'E') && active_count != 0)
+            {
+                char selected_path[MaxPathLength];
+                if (fileui_selected_path(active_path, active_selected, selected_path, sizeof(selected_path)))
+                {
+                    run_text_editor(selected_path);
+                }
+                continue;
+            }
+            if (key == 'n' || key == 'N')
+            {
+                char path[MaxPathLength];
+                if (prompt_fileui_path(active_path, "New file: ", path, sizeof(path)))
+                {
+                    fileui_message(tinyos::kernel::vfs::create_file(path) ? "File created." : "File create failed.");
+                }
+                continue;
+            }
+            if (key == 'm' || key == 'M')
+            {
+                char path[MaxPathLength];
+                if (prompt_fileui_path(active_path, "New directory: ", path, sizeof(path)))
+                {
+                    fileui_message(tinyos::kernel::vfs::create_directory(path) ? "Directory created." : "Directory create failed.");
+                }
+                continue;
+            }
+            if ((key == 'd' || key == 'D') && active_count != 0)
+            {
+                char selected_path[MaxPathLength];
+                if (fileui_selected_path(active_path, active_selected, selected_path, sizeof(selected_path)) && confirm_fileui_action("Remove selected path?"))
+                {
+                    fileui_message(tinyos::kernel::vfs::remove(selected_path) ? "Path removed." : "Remove failed.");
+                }
+                continue;
+            }
+            if ((key == 'c' || key == 'C') && active_count != 0)
+            {
+                filemgr_copy_or_move_to_other(active_path, active_selected, other_path, false);
+                continue;
+            }
+            if ((key == 'r' || key == 'R') && active_count != 0)
+            {
+                filemgr_copy_or_move_to_other(active_path, active_selected, other_path, true);
+                continue;
+            }
+        }
+    }
+
     void fileui_show_selected(const char* current_path, size_t selected)
     {
         char selected_path[MaxPathLength];
@@ -1159,13 +1631,9 @@ namespace
             if ((key == 'e' || key == 'E') && count != 0)
             {
                 char selected_path[MaxPathLength];
-                char text[MaxInputLength];
                 if (fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)))
                 {
-                    tinyos::drivers::vga::write("Text: ");
-                    tinyos::drivers::keyboard::read_line(text, sizeof(text));
-                    edit_file(selected_path, text);
-                    wait_for_key();
+                    run_text_editor(selected_path);
                 }
                 continue;
             }
@@ -1385,6 +1853,7 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::renderer::pixel_contract_validation_self_test() ? "ok" : "failed");
     }
 
+#if !defined(TINYOS_TERMINAL_ONLY)
     void print_cursor_info()
     {
         const auto* state = tinyos::ui::cursor::state();
@@ -1416,6 +1885,7 @@ namespace
         tinyos::drivers::vga::write("Render test   : ");
         tinyos::drivers::vga::write_line(tinyos::ui::cursor::render_validation_self_test() ? "ok" : "failed");
     }
+#endif
 
     void print_terminal_info()
     {
@@ -2119,6 +2589,7 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::widgets::event_bridge_validation_self_test() ? "ok" : "failed");
     }
 
+#if !defined(TINYOS_TERMINAL_ONLY)
     void print_window_manager_info()
     {
         const auto* state = tinyos::ui::window_manager::state();
@@ -2290,6 +2761,7 @@ namespace
             tinyos::ui::desktop::handle_event(event);
         }
     }
+#endif
 
     void print_requirements()
     {
@@ -2344,6 +2816,7 @@ namespace
         { "helplist", "print the classic command list", "helplist", "helplist" },
         { "fileui", "open the terminal file browser", "fileui", "fileui" },
         { "status", "show compact terminal system dashboard", "status", "status" },
+        { "sysinfo", "show TinyOS system information", "sysinfo", "sysinfo" },
         { "syscheck", "run non-destructive system health checks", "syscheck", "syscheck" },
         { "aliases", "show compatibility aliases", "aliases", "aliases" },
         { "clear", "clear the terminal", "clear", "clear" },
@@ -2360,6 +2833,7 @@ namespace
         { "ls", "compatibility alias for files", "ls [path]", "ls" },
         { "fsmap", "show RAMFS tree", "fsmap [path]", "fsmap" },
         { "tree", "compatibility alias for fsmap", "tree [path]", "tree" },
+        { "filemgr", "open the two-pane terminal file manager", "filemgr", "filemgr" },
         { "show", "print RAMFS file", "show <path>", nullptr },
         { "view", "compatibility alias for show", "view <path>", nullptr },
         { "cat", "compatibility alias for show", "cat <path>", nullptr },
@@ -2370,6 +2844,7 @@ namespace
         { "touch", "create writable RAMFS file", "touch <path>", nullptr },
         { "write", "overwrite writable RAMFS file", "write <path> <text>", nullptr },
         { "edit", "compatibility alias for write", "edit <path> <text>", nullptr },
+        { "textedit", "open the interactive RAMFS text editor", "textedit <path>", nullptr },
         { "copy", "copy readable RAMFS file", "copy <source> <destination>", nullptr },
         { "cp", "compatibility alias for copy", "cp <source> <destination>", nullptr },
         { "move", "move runtime file or directory", "move <source> <destination>", nullptr },
@@ -2418,7 +2893,7 @@ namespace
         { "install", "write mock install receipt to RAMFS", "install", nullptr },
         { "profileinfo", "show active system profile", "profileinfo", "profileinfo" },
         { "profilecheck", "validate active system profile", "profilecheck", "profilecheck" },
-        { "sysinfo", "show syscall ABI scaffold status", "sysinfo", "sysinfo" },
+        { "syscallinfo", "show syscall ABI scaffold status", "syscallinfo", "syscallinfo" },
         { "userinfo", "show user transition scaffold status", "userinfo", "userinfo" },
         { "elfinfo", "show ELF loader scaffold state", "elfinfo", "elfinfo" },
         { "modulesinfo", "show parsed boot modules", "modulesinfo", "modulesinfo" }
@@ -2426,7 +2901,6 @@ namespace
 
     const HelpCommand UiHelp[] = {
         { "renderinfo", "show renderer scaffold state", "renderinfo", "renderinfo" },
-        { "cursorinfo", "show cursor scaffold state", "cursorinfo", "cursorinfo" },
         { "rendertest", "draw a renderer test label", "rendertest", "rendertest" },
         { "renderfilltest", "draw a renderer filled strip", "renderfilltest", "renderfilltest" },
         { "terminalinfo", "show terminal UI scaffold state", "terminalinfo", "terminalinfo" },
@@ -2443,7 +2917,9 @@ namespace
         { "uieventtest", "inject a UI test key event", "uieventtest", "uieventtest" },
         { "inputinfo", "show generic input queue state", "inputinfo", "inputinfo" },
         { "inputpeek", "read one generic input event", "inputpeek", "inputpeek" },
-        { "keyboardinfo", "show keyboard IRQ/input state", "keyboardinfo", "keyboardinfo" },
+        { "keyboardinfo", "show keyboard IRQ/input state", "keyboardinfo", "keyboardinfo" }
+    #if !defined(TINYOS_TERMINAL_ONLY)
+        ,{ "cursorinfo", "show cursor scaffold state", "cursorinfo", "cursorinfo" },
         { "wminfo", "show window manager scaffold state", "wminfo", "wminfo" },
         { "wmtest", "draw window manager demo", "wmtest", "wmtest" },
         { "wmfocus", "cycle window focus", "wmfocus", "wmfocus" },
@@ -2455,6 +2931,7 @@ namespace
         { "desktopdispatch", "Alpha: dispatch desktop input events", "desktopdispatch", nullptr },
         { "desktopkeytest", "Alpha: test desktop keyboard flow", "desktopkeytest", nullptr },
         { "desktopmousetest", "Alpha: test desktop mouse click flow", "desktopmousetest", nullptr }
+    #endif
     };
 
     const HelpCommand DiagnosticsHelp[] = {
@@ -2713,10 +3190,16 @@ namespace
         tinyos::drivers::vga::write_line("  helpui   - interactive terminal command browser");
         tinyos::drivers::vga::write_line("  helpsearch - search command help text");
         tinyos::drivers::vga::write_line("  fileui   - interactive terminal file browser");
+        tinyos::drivers::vga::write_line("  filemgr  - two-pane terminal file manager");
+        tinyos::drivers::vga::write_line("  sysinfo  - show TinyOS system information");
         tinyos::drivers::vga::write_line("  helplist - print this classic command list");
         tinyos::drivers::vga::write_line("  status   - compact terminal system dashboard");
         tinyos::drivers::vga::write_line("  syscheck - run non-destructive system checks");
+    #if !defined(TINYOS_TERMINAL_ONLY)
         tinyos::drivers::vga::write_line("  desktop* - Alpha desktop prototypes; development only, incomplete");
+    #else
+        tinyos::drivers::vga::write_line("  terminal-only - desktop/window manager commands are not linked");
+    #endif
         tinyos::drivers::vga::write_line("  help     - show this help");
         tinyos::drivers::vga::write_line("  clear    - clear the screen");
         tinyos::drivers::vga::write_line("  pwd      - show current directory");
@@ -2730,6 +3213,7 @@ namespace
         tinyos::drivers::vga::write_line("  describe - show TinyOS RAMFS node details");
         tinyos::drivers::vga::write_line("  pathcheck - validate and inspect a VFS path");
         tinyos::drivers::vga::write_line("  write    - overwrite writable TinyOS RAMFS file");
+        tinyos::drivers::vga::write_line("  textedit - open interactive RAMFS text editor");
         tinyos::drivers::vga::write_line("  copy/cp  - copy readable RAMFS file");
         tinyos::drivers::vga::write_line("  move/mv  - move runtime RAMFS file or directory");
         tinyos::drivers::vga::write_line("  remove/rm - remove runtime RAMFS file or empty directory");
@@ -2741,7 +3225,9 @@ namespace
         tinyos::drivers::vga::write_line("  storageinfo - show block VFS mount scaffold");
         tinyos::drivers::vga::write_line("  fbinfo   - show framebuffer surface scaffold");
         tinyos::drivers::vga::write_line("  renderinfo - show renderer scaffold state");
+    #if !defined(TINYOS_TERMINAL_ONLY)
         tinyos::drivers::vga::write_line("  cursorinfo - show cursor scaffold state");
+    #endif
         tinyos::drivers::vga::write_line("  rendertest - draw a renderer test label");
         tinyos::drivers::vga::write_line("  renderfilltest - draw a renderer filled strip");
         tinyos::drivers::vga::write_line("  terminalinfo - show terminal UI scaffold state");
@@ -2750,6 +3236,7 @@ namespace
         tinyos::drivers::vga::write_line("  terminalpaneltest - draw terminal UI panel");
         tinyos::drivers::vga::write_line("  widgetinfo - show TUI widget scaffold state");
         tinyos::drivers::vga::write_line("  widgettest - draw TUI widget demo");
+    #if !defined(TINYOS_TERMINAL_ONLY)
         tinyos::drivers::vga::write_line("  wminfo   - show window manager scaffold state");
         tinyos::drivers::vga::write_line("  wmtest   - draw window manager demo");
         tinyos::drivers::vga::write_line("  wmfocus  - cycle window focus");
@@ -2761,6 +3248,7 @@ namespace
         tinyos::drivers::vga::write_line("  desktopdispatch - dispatch desktop input events");
         tinyos::drivers::vga::write_line("  desktopkeytest - test desktop keyboard flow");
         tinyos::drivers::vga::write_line("  desktopmousetest - test desktop mouse click flow");
+    #endif
         tinyos::drivers::vga::write_line("  widgetdispatch - dispatch queued UI events to widgets");
         tinyos::drivers::vga::write_line("  widgetactiontest - inject and dispatch widget action");
         tinyos::drivers::vga::write_line("  uieventinfo - show UI event queue state");
@@ -2813,7 +3301,7 @@ namespace
         tinyos::drivers::vga::write_line("  ramfsinfo - show RAMFS scaffold status");
         tinyos::drivers::vga::write_line("  securityinfo - show security scaffold status");
         tinyos::drivers::vga::write_line("  schedinfo - show scheduler scaffold state");
-        tinyos::drivers::vga::write_line("  sysinfo  - show syscall ABI scaffold status");
+        tinyos::drivers::vga::write_line("  syscallinfo - show syscall ABI scaffold status");
         tinyos::drivers::vga::write_line("  taskinfo - show kernel task scaffold state");
         tinyos::drivers::vga::write_line("  userinfo - show user transition scaffold status");
         tinyos::drivers::vga::write_line("  vfsinfo  - show VFS scaffold status");
@@ -3087,6 +3575,33 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::starts_with(command, "textedit "))
+        {
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(command + 8, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Usage: textedit <path>");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            run_text_editor(resolved);
+            return;
+        }
+
+        if (core::string::compare(command, "textedit") == 0)
+        {
+            drivers::vga::write_line("Usage: textedit <path>");
+            return;
+        }
+
         if (core::string::starts_with(command, "write ") || core::string::starts_with(command, "edit "))
         {
             char path[MaxPathLength];
@@ -3247,11 +3762,13 @@ namespace tinyos::shell
             return;
         }
 
+    #if !defined(TINYOS_TERMINAL_ONLY)
         if (core::string::compare(command, "cursorinfo") == 0)
         {
             print_cursor_info();
             return;
         }
+    #endif
 
         if (core::string::compare(command, "rendertest") == 0)
         {
@@ -3305,6 +3822,7 @@ namespace tinyos::shell
             return;
         }
 
+    #if !defined(TINYOS_TERMINAL_ONLY)
         if (core::string::compare(command, "wminfo") == 0)
         {
             print_window_manager_info();
@@ -3394,6 +3912,7 @@ namespace tinyos::shell
             drivers::vga::write_line(queued && dispatched == 1 ? "Desktop mouse click dispatched." : "Desktop mouse click failed.");
             return;
         }
+#endif
 
         if (core::string::compare(command, "widgetdispatch") == 0)
         {
@@ -3780,6 +4299,12 @@ namespace tinyos::shell
         }
 
         if (core::string::compare(command, "sysinfo") == 0)
+        {
+            print_system_information();
+            return;
+        }
+
+        if (core::string::compare(command, "syscallinfo") == 0)
         {
             drivers::vga::write("Syscall ready: ");
             drivers::vga::write_line(kernel::syscall::is_ready() ? "yes" : "no");
@@ -4437,6 +4962,12 @@ namespace tinyos::shell
         if (core::string::compare(command, "fileui") == 0)
         {
             run_file_ui();
+            return;
+        }
+
+        if (core::string::compare(command, "filemgr") == 0)
+        {
+            run_file_manager();
             return;
         }
 

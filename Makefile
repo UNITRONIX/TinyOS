@@ -5,10 +5,15 @@ OBJ_DIR := build/obj
 DEBUG_BOOT ?= 0
 GRAPHICAL_BOOT ?= 0
 GRAPHICAL_AUTOSTART ?= 0
+TERMINAL_ONLY ?= 0
 BOOT_TEST_TIMEOUT ?= 8s
 STABILITY_TEST_TIMEOUT ?= 20s
 MINIMAL_TEST_MEMORY ?= 32M
 MINIMAL_PROBE_MEMORY ?= 32M 24M 16M
+LOWMEM_PROBE_MEMORY ?= 4M 3M 2880K 2816K 2752K 2688K 2624K 2561K 2560K 2529K 2528K 2M 1536K 1024K 512K 256K 128K 64K
+LOWMEM_PROBE_SUMMARY ?= build/lowmem-probe-summary.txt
+LOWMEM_PROBE_LABEL ?= TinyOS terminal boot
+LOWMEM_PROBE_EXTRA_MARKER ?=
 BOOT_TEST_LOG ?= build/boot-smoke.log
 MINIMAL_TEST_LOG ?= build/boot-minimal.log
 
@@ -69,6 +74,10 @@ ifeq ($(GRAPHICAL_AUTOSTART),1)
 	CXXFLAGS += -DTINYOS_GRAPHICAL_AUTOSTART
 endif
 
+ifeq ($(TERMINAL_ONLY),1)
+	CXXFLAGS += -DTINYOS_TERMINAL_ONLY
+endif
+
 CPP_SOURCES := \
 	arch/i686/arch.cpp \
 	arch/i686/context.cpp \
@@ -83,7 +92,6 @@ CPP_SOURCES := \
  drivers/serial.cpp \
 	drivers/vga.cpp \
 	drivers/keyboard.cpp \
-	drivers/mouse.cpp \
 	 kernel/admin/tools.cpp \
  kernel/device/block.cpp \
  kernel/device/framebuffer.cpp \
@@ -118,13 +126,20 @@ CPP_SOURCES := \
 	ui/renderer.cpp \
 	ui/events.cpp \
 	ui/terminal.cpp \
-	ui/cursor.cpp \
-	ui/desktop.cpp \
-	ui/graphical_desktop.cpp \
-	ui/window_manager.cpp \
 	ui/widgets.cpp \
 	shell/shell.cpp \
 	kernel/kernel.cpp
+
+DESKTOP_CPP_SOURCES := \
+	drivers/mouse.cpp \
+	ui/cursor.cpp \
+	ui/desktop.cpp \
+	ui/graphical_desktop.cpp \
+	ui/window_manager.cpp
+
+ifneq ($(TERMINAL_ONLY),1)
+	CPP_SOURCES += $(DESKTOP_CPP_SOURCES)
+endif
 
 ASM_SOURCES := \
   boot/multiboot.asm \
@@ -149,7 +164,7 @@ define require_tools
 	fi
 endef
 
-.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
+.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
 
 all: check-build-tools $(TARGET)
 
@@ -186,6 +201,9 @@ iso: check-image-tools $(TARGET)
 	cp build/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	cp build/initrd/initrd-placeholder.txt $(ISO_DIR)/boot/modules/initrd-placeholder.txt
 	$(GRUBMKRESCUE) -o $(ISO) $(ISO_DIR)
+
+terminal-only-iso:
+	$(MAKE) TERMINAL_ONLY=1 TARGET=tinyos-terminal.kernel ISO=build/tinyos-terminal.iso ISO_DIR=build/isodir-terminal OBJ_DIR=build/obj-terminal iso
 
 run: check-test-tools iso
 	$(QEMU) -cdrom $(ISO)
@@ -405,6 +423,35 @@ test-minimal-probe: check-test-tools iso
 		$(MAKE) --no-print-directory MINIMAL_TEST_MEMORY=$$memory MINIMAL_TEST_LOG=build/boot-minimal-$$safe.log test-minimal; \
 	done
 
+test-lowmem-probe: check-test-tools iso
+	@mkdir -p build
+	@printf '%-8s %-8s %s\n' RAM RESULT DETAIL > $(LOWMEM_PROBE_SUMMARY)
+	@set -e; \
+	for memory in $(LOWMEM_PROBE_MEMORY); do \
+		safe=$$(printf '%s' "$$memory" | tr -c 'A-Za-z0-9' '_'); \
+		log="build/boot-lowmem-$$safe.log"; \
+		rm -f "$$log"; \
+		echo "Probing $(LOWMEM_PROBE_LABEL) with $$memory RAM..."; \
+		set +e; $(TIMEOUT) $(BOOT_TEST_TIMEOUT) $(QEMU) -m $$memory -cdrom $(ISO) -display none -serial file:$$log -no-reboot -no-shutdown >/dev/null 2>&1; status=$$?; set -e; \
+		extra_marker='$(LOWMEM_PROBE_EXTRA_MARKER)'; \
+		extra_ok=1; \
+		if [ -n "$$extra_marker" ] && ! grep -q "$$extra_marker" "$$log"; then extra_ok=0; fi; \
+		if [ $$status -eq 124 ] && [ $$extra_ok -eq 1 ] && grep -q "TinyOS booted successfully" "$$log" && grep -q "System requirements manifest ready" "$$log" && grep -q "Terminal UI scaffold ready" "$$log"; then \
+			printf '%-8s %-8s %s\n' "$$memory" PASS "terminal markers present"; \
+			printf '%-8s %-8s %s\n' "$$memory" PASS "terminal markers present" >> $(LOWMEM_PROBE_SUMMARY); \
+		elif [ $$status -eq 124 ]; then \
+			bytes=$$(wc -c < "$$log"); \
+			printf '%-8s %-8s %s\n' "$$memory" FAIL "timeout without terminal markers, serial-bytes=$$bytes"; \
+			printf '%-8s %-8s %s\n' "$$memory" FAIL "timeout without terminal markers, serial-bytes=$$bytes" >> $(LOWMEM_PROBE_SUMMARY); \
+		else \
+			printf '%-8s %-8s %s\n' "$$memory" FAIL "QEMU exited status $$status"; \
+			printf '%-8s %-8s %s\n' "$$memory" FAIL "QEMU exited status $$status" >> $(LOWMEM_PROBE_SUMMARY); \
+		fi; \
+	done
+
+test-terminal-lowmem-probe:
+	$(MAKE) TERMINAL_ONLY=1 TARGET=tinyos-terminal.kernel ISO=build/tinyos-terminal.iso ISO_DIR=build/isodir-terminal OBJ_DIR=build/obj-terminal LOWMEM_PROBE_MEMORY="$(LOWMEM_PROBE_MEMORY)" LOWMEM_PROBE_SUMMARY=build/terminal-lowmem-probe-summary.txt LOWMEM_PROBE_LABEL="TinyOS terminal-only boot" LOWMEM_PROBE_EXTRA_MARKER="Terminal-only low-memory profile ready" test-lowmem-probe
+
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot
 
@@ -415,6 +462,6 @@ debug-run:
 	$(MAKE) DEBUG_BOOT=1 TARGET=tinyos-debug.kernel ISO=build/tinyos-debug.iso ISO_DIR=build/isodir-debug OBJ_DIR=build/obj-debug run
 
 clean:
-	rm -rf build/obj build/obj-debug build/obj-gui build/obj-gui-autostart build/isodir build/isodir-debug build/isodir-gui build/isodir-desktop build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/tinyos-desktop.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel tinyos-desktop.kernel
+	rm -rf build/obj build/obj-debug build/obj-gui build/obj-gui-autostart build/obj-terminal build/isodir build/isodir-debug build/isodir-gui build/isodir-desktop build/isodir-terminal build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/tinyos-desktop.iso build/tinyos-terminal.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel tinyos-desktop.kernel tinyos-terminal.kernel
 
 -include $(DEPFILES)

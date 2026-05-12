@@ -302,7 +302,10 @@ Current groundwork:
 - text-grid fill/clear renderer primitives;
 - `renderinfo`, `rendertest` and `renderfilltest` shell diagnostics;
 - terminal UI scaffold with a status row and content region;
-- terminal-first operational diagnostics through `status`, `syscheck`, `riskinfo`, `profileinfo`, `profilecheck`, `pathcheck` and `helpsearch`;
+- terminal-first operational diagnostics through `sysinfo`, `status`, `syscheck`, `riskinfo`, `profileinfo`, `profilecheck`, `pathcheck` and `helpsearch`;
+- current `filemgr` two-pane RAMFS manager with view, create, edit, remove, copy-to-other-pane and move-to-other-pane actions;
+- current `textedit` interactive RAMFS editor with load, replace, append, clear, save, reload and metadata actions;
+- lighter `fileui` RAMFS browser with view, create, edit, remove, copy and move actions;
 - terminal clear/panel helpers over renderer primitives;
 - `terminalinfo`, `terminaltest`, `terminalclear` and `terminalpaneltest` shell diagnostics;
 - first TUI widget scaffold with label and button drawing;
@@ -345,7 +348,7 @@ Current tested minimum:
 - 8259 PIC and 8253/8254 PIT;
 - ISO boot media plus RAM-backed block storage scaffold.
 
-The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the low-memory smoke markers. The `make test-minimal-probe` target can probe lower values such as 24 MiB and 16 MiB before the documented baseline is changed.
+The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the low-memory smoke markers. The `make test-minimal-probe` target can probe lower values such as 24 MiB and 16 MiB before the documented baseline is changed. The `make test-lowmem-probe` target uses terminal markers for sub-16 MiB and KiB-scale experiments; the current desktop-capable reference ISO passes at `2561K` and fails at `2560K` and `64K` before TinyOS serial output begins. The `TERMINAL_ONLY=1` profile, available through `make terminal-only-iso` and `make test-terminal-lowmem-probe`, omits desktop/window-manager/cursor/mouse objects and currently reaches `2529K` while `2528K` and `64K` still fail before TinyOS serial output begins.
 
 ## Stage 10 - portability
 

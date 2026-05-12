@@ -7,6 +7,7 @@ This document records the current tested runtime envelope. It is intentionally s
 - CPU: `i686` compatible 32-bit processor.
 - Boot path: GRUB Multiboot ISO on a BIOS-style PC platform.
 - RAM: 32 MiB tested by `make test-minimal`.
+- Experimental low-memory RAM probe: the desktop-capable ISO currently reaches `2561K`; the physical terminal-only profile currently reaches `2529K`; `2528K` and `64K` do not reach TinyOS serial output.
 - Display: VGA text mode, 80x25 cells.
 - Input: PS/2 keyboard controller.
 - Timer: 8253/8254 PIT configured at 100 Hz.
@@ -61,3 +62,21 @@ make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
 ```
 
 Record any lower passing value in this document only after the boot smoke markers, provisioning manifest, terminal UI and storage diagnostics remain stable.
+
+For very small values, use the terminal-only low-memory probe:
+
+```sh
+make test-lowmem-probe
+make test-lowmem-probe LOWMEM_PROBE_MEMORY="4M 3M 2880K 2624K 2561K 2560K 2M 64K"
+make terminal-only-iso
+make test-terminal-lowmem-probe LOWMEM_PROBE_MEMORY="2880K 2624K 2529K 2528K 2M 64K"
+```
+
+Current measured result on the reference QEMU/GRUB ISO path:
+
+- desktop-capable ISO: `2561K` passes core boot, system requirements and terminal UI markers; `2560K` fails before TinyOS emits serial output.
+- terminal-only ISO: `2529K` passes core boot, system requirements, terminal UI and terminal-only profile markers; `2528K` fails before TinyOS emits serial output.
+- terminal-only kernel size: about `238K` on disk, compared with about `280K` for the desktop-capable kernel in the same toolchain run.
+- `64K`: fails before TinyOS emits serial output.
+
+This result is not a supported baseline yet. The kernel is linked at `1M`, so a `64K` machine cannot run the current Multiboot image without a different boot/link/load architecture. Nearby KiB values can also be non-monotonic under QEMU/GRUB because the failure occurs before TinyOS serial logging begins.
