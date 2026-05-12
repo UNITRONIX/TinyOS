@@ -58,9 +58,30 @@ namespace
 {
     constexpr size_t MaxInputLength = 128;
     constexpr size_t MaxPathLength = 96;
+    constexpr const char* SystemProfilePath = "/system/profile.txt";
+    constexpr const char* InstallReceiptPath = "/receipts/install.receipt";
+    constexpr char InstallReceiptText[] =
+        "tinyos.install.receipt.version=0\n"
+        "state=mock-installed\n"
+        "profile=examples/install.profile\n"
+        "media=iso-current\n"
+        "target=i686-pc-qemu\n"
+        "disk.write=disabled\n"
+        "receipt.storage=ramfs-runtime\n"
+        "device.name=tinyos-dev-vm\n"
+        "network.mode=disabled\n"
+        "user.name=developer\n"
+        "credential.bootstrap=prompt\n"
+        "admin.mode=same-bootstrap-secret\n"
+        "security.password_hashing=required\n"
+        "security.plaintext_secrets=forbidden\n"
+        "provisioning.encryption=required\n"
+        "provisioning.remote_access=disabled\n"
+        "next=persistent-disk-install-planned\n";
     char g_current_directory[MaxPathLength] = "/";
 
     void wait_for_key();
+    void write_check_result(const char* label, bool passed);
 
     void debug_shell_checkpoint(const char* stage)
     {
@@ -93,6 +114,11 @@ namespace
         tinyos::drivers::vga::put_char(static_cast<char>('0' + ((mode >> 6) & 7)));
         tinyos::drivers::vga::put_char(static_cast<char>('0' + ((mode >> 3) & 7)));
         tinyos::drivers::vga::put_char(static_cast<char>('0' + (mode & 7)));
+    }
+
+    void write_yes_no(bool value)
+    {
+        tinyos::drivers::vga::write_line(value ? "yes" : "no");
     }
 
     bool parse_octal_mode(const char* text, uint16_t& mode)
@@ -540,6 +566,328 @@ namespace
         const char* data = nullptr;
         size_t size = 0;
         return tinyos::kernel::vfs::read_file(node, data, size) && buffer_equals(data, size, expected);
+    }
+
+    bool buffer_contains_fragment(const char* data, size_t size, const char* expected)
+    {
+        if (data == nullptr || expected == nullptr)
+        {
+            return false;
+        }
+
+        const size_t expected_size = tinyos::core::string::length(expected);
+        if (expected_size == 0 || expected_size > size)
+        {
+            return false;
+        }
+
+        for (size_t offset = 0; offset + expected_size <= size; ++offset)
+        {
+            size_t matched = 0;
+            while (matched < expected_size && data[offset + matched] == expected[matched])
+            {
+                ++matched;
+            }
+
+            if (matched == expected_size)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool file_contains_fragment(const char* path, const char* expected)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        const char* data = nullptr;
+        size_t size = 0;
+        return tinyos::kernel::vfs::read_file(node, data, size) && buffer_contains_fragment(data, size, expected);
+    }
+
+    bool profile_has(const char* expected)
+    {
+        return file_contains_fragment(SystemProfilePath, expected);
+    }
+
+    bool system_profile_contract_passes()
+    {
+        const auto* profile = tinyos::kernel::vfs::find(SystemProfilePath);
+        return profile != nullptr && !profile->directory &&
+            tinyos::kernel::vfs::validate_path(SystemProfilePath) &&
+            profile_has("tinyos.profile.version=0\n") &&
+            profile_has("state=ramfs-default\n") &&
+            profile_has("device.variant=qemu-i686-terminal\n") &&
+            profile_has("network.mode=disabled\n") &&
+            profile_has("credential.bootstrap=prompt\n") &&
+            profile_has("security.password_hashing=required\n") &&
+            profile_has("security.plaintext_secrets=forbidden\n") &&
+            profile_has("provisioning.encryption=required\n") &&
+            profile_has("provisioning.remote_access=disabled\n") &&
+            profile_has("storage.persistence=ramfs-only\n") &&
+            profile_has("install.state=mock\n");
+    }
+
+    void print_profile_info()
+    {
+        tinyos::drivers::vga::write_line("TinyOS active system profile:");
+        tinyos::drivers::vga::write("Path     : ");
+        tinyos::drivers::vga::write_line(SystemProfilePath);
+        tinyos::drivers::vga::write("Valid    : ");
+        write_yes_no(system_profile_contract_passes());
+        tinyos::drivers::vga::write_line("Metadata:");
+        show_file(SystemProfilePath);
+    }
+
+    void print_profile_check()
+    {
+        const auto* profile = tinyos::kernel::vfs::find(SystemProfilePath);
+        tinyos::drivers::vga::write_line("TinyOS system profile check:");
+        write_check_result("profile file exists", profile != nullptr && !profile->directory);
+        write_check_result("profile path validates", tinyos::kernel::vfs::validate_path(SystemProfilePath));
+        write_check_result("profile version contract", profile_has("tinyos.profile.version=0\n"));
+        write_check_result("RAMFS default state", profile_has("state=ramfs-default\n"));
+        write_check_result("QEMU terminal variant", profile_has("device.variant=qemu-i686-terminal\n"));
+        write_check_result("network disabled by default", profile_has("network.mode=disabled\n"));
+        write_check_result("credential prompt policy", profile_has("credential.bootstrap=prompt\n"));
+        write_check_result("password hashing required", profile_has("security.password_hashing=required\n"));
+        write_check_result("plaintext secrets forbidden", profile_has("security.plaintext_secrets=forbidden\n"));
+        write_check_result("provisioning encryption required", profile_has("provisioning.encryption=required\n"));
+        write_check_result("remote access disabled", profile_has("provisioning.remote_access=disabled\n"));
+        write_check_result("RAMFS-only persistence", profile_has("storage.persistence=ramfs-only\n"));
+        write_check_result("install state is mock", profile_has("install.state=mock\n"));
+        tinyos::drivers::vga::write_line(system_profile_contract_passes() ? "System profile check passed." : "System profile check failed.");
+    }
+
+    bool install_receipt_current()
+    {
+        return file_contains(InstallReceiptPath, InstallReceiptText);
+    }
+
+    bool installer_mock_preflight_passes()
+    {
+        const auto* install_info = tinyos::kernel::vfs::find("/system/install.txt");
+        const auto* receipts = tinyos::kernel::vfs::find("/receipts");
+        return install_info != nullptr && !install_info->directory &&
+            receipts != nullptr && receipts->directory &&
+            tinyos::kernel::vfs::can_modify_directory(receipts) &&
+            tinyos::kernel::vfs::validate_path(InstallReceiptPath);
+    }
+
+    void write_check_result(const char* label, bool passed)
+    {
+        tinyos::drivers::vga::write(passed ? "[ok]   " : "[fail] ");
+        tinyos::drivers::vga::write_line(label);
+    }
+
+    bool write_install_receipt()
+    {
+        if (!installer_mock_preflight_passes())
+        {
+            return false;
+        }
+
+        if (tinyos::kernel::vfs::find(InstallReceiptPath) == nullptr && !tinyos::kernel::vfs::create_file(InstallReceiptPath))
+        {
+            return false;
+        }
+
+        return tinyos::kernel::vfs::write_file(InstallReceiptPath, InstallReceiptText, sizeof(InstallReceiptText) - 1);
+    }
+
+    void print_install_check()
+    {
+        const auto* install_info = tinyos::kernel::vfs::find("/system/install.txt");
+        const auto* receipts = tinyos::kernel::vfs::find("/receipts");
+        tinyos::drivers::vga::write_line("TinyOS installer mock check:");
+        write_check_result("/system/install.txt readable contract", install_info != nullptr && !install_info->directory);
+        write_check_result("/receipts runtime directory", receipts != nullptr && receipts->directory);
+        write_check_result("/receipts accepts RAMFS writes", tinyos::kernel::vfs::can_modify_directory(receipts));
+        write_check_result("receipt path validates", tinyos::kernel::vfs::validate_path(InstallReceiptPath));
+        tinyos::drivers::vga::write("Receipt current: ");
+        tinyos::drivers::vga::write_line(install_receipt_current() ? "yes" : "not written");
+        tinyos::drivers::vga::write("Receipt path: ");
+        tinyos::drivers::vga::write_line(InstallReceiptPath);
+        tinyos::drivers::vga::write_line(installer_mock_preflight_passes() ? "Install mock preflight passed." : "Install mock preflight failed.");
+    }
+
+    void run_install_mock()
+    {
+        tinyos::drivers::vga::write_line("TinyOS terminal installer mock:");
+        tinyos::drivers::vga::write_line("  disk writes are disabled in this stage");
+        tinyos::drivers::vga::write("  receipt: ");
+        tinyos::drivers::vga::write_line(InstallReceiptPath);
+
+        if (!write_install_receipt())
+        {
+            tinyos::drivers::vga::write_line("Install mock failed.");
+            return;
+        }
+
+        tinyos::drivers::vga::write_line("Install mock receipt written.");
+        show_file(InstallReceiptPath);
+    }
+
+    void print_terminal_status()
+    {
+        const auto& arch_info = tinyos::arch::info();
+        tinyos::drivers::vga::write_line("TinyOS terminal status:");
+        tinyos::drivers::vga::write("Version       : ");
+        tinyos::drivers::vga::write(tinyos::config::Name);
+        tinyos::drivers::vga::write(" ");
+        tinyos::drivers::vga::write_line(tinyos::config::Version);
+        tinyos::drivers::vga::write("Architecture  : ");
+        tinyos::drivers::vga::write_line(arch_info.name);
+        tinyos::drivers::vga::write("CPU family    : ");
+        tinyos::drivers::vga::write_line(arch_info.cpu_family);
+        tinyos::drivers::vga::write("Current path  : ");
+        tinyos::drivers::vga::write_line(g_current_directory);
+        tinyos::drivers::vga::write("PIT ticks     : ");
+        write_uint64(tinyos::drivers::pit::ticks());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Scheduler ticks: ");
+        write_uint64(tinyos::kernel::sched::tick_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Usable memory : ");
+        write_uint64(tinyos::kernel::memory::map::usable_bytes() / (1024 * 1024));
+        tinyos::drivers::vga::write_line(" MiB");
+        tinyos::drivers::vga::write("Frames free   : ");
+        write_uint64(tinyos::kernel::memory::frames::free_frames());
+        tinyos::drivers::vga::write("/");
+        write_uint64(tinyos::kernel::memory::frames::total_frames());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Heap free     : ");
+        write_uint64(tinyos::kernel::memory::heap::free_bytes());
+        tinyos::drivers::vga::write("/");
+        write_uint64(tinyos::kernel::memory::heap::total_bytes());
+        tinyos::drivers::vga::write_line(" bytes");
+        tinyos::drivers::vga::write("RAMFS ready   : ");
+        write_yes_no(tinyos::kernel::vfs::ramfs::is_ready());
+        tinyos::drivers::vga::write("Block mount   : ");
+        write_yes_no(tinyos::kernel::vfs::block_mount_ready());
+        tinyos::drivers::vga::write("Tools ready   : ");
+        write_uint64(tinyos::kernel::admin::tools::ready_count());
+        tinyos::drivers::vga::write("/");
+        write_uint64(tinyos::kernel::admin::tools::count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Packages      : ");
+        write_uint64(tinyos::kernel::app::package::count());
+        tinyos::drivers::vga::write(" known, ");
+        write_uint64(tinyos::kernel::app::package::launch_ready_count());
+        tinyos::drivers::vga::write_line(" launch-ready");
+        tinyos::drivers::vga::write("Install receipt: ");
+        tinyos::drivers::vga::write_line(install_receipt_current() ? "current" : "not written");
+        tinyos::drivers::vga::write("System profile : ");
+        tinyos::drivers::vga::write_line(system_profile_contract_passes() ? "valid" : "invalid");
+    }
+
+    bool syscall_contract_valid()
+    {
+        return tinyos::kernel::syscall::validation_self_test() &&
+            tinyos::kernel::syscall::boundary_policy_validation_self_test() &&
+            tinyos::kernel::syscall::definition_validation_self_test() &&
+            tinyos::kernel::syscall::filter_policy_validation_self_test() &&
+            tinyos::kernel::syscall::resource_policy_validation_self_test();
+    }
+
+    void run_system_check()
+    {
+        size_t passed = 0;
+        size_t failed = 0;
+        tinyos::drivers::vga::write_line("TinyOS non-destructive system check:");
+        record_self_test_result("architecture manifest", tinyos::arch::validation_self_test(), passed, failed);
+        record_self_test_result("system requirements manifest", tinyos::kernel::platform::requirements::validation_self_test(), passed, failed);
+        record_self_test_result("PC platform contract", tinyos::kernel::platform::pc::validation_self_test(), passed, failed);
+        record_self_test_result("PC required device classes", tinyos::kernel::platform::pc::device_contract_satisfied(), passed, failed);
+        record_self_test_result("PIT configured", tinyos::drivers::pit::is_configured(), passed, failed);
+        record_self_test_result("scheduler ready", tinyos::kernel::sched::is_ready(), passed, failed);
+        record_self_test_result("frame allocator accounting", tinyos::kernel::memory::frames::accounting_valid(), passed, failed);
+        record_self_test_result("heap state", tinyos::kernel::memory::heap::state_valid(), passed, failed);
+        record_self_test_result("address space contract", tinyos::kernel::memory::address_space::validation_self_test(), passed, failed);
+        record_self_test_result("paging contract", tinyos::kernel::memory::paging::validation_self_test(), passed, failed);
+        record_self_test_result("runtime paging enabled", tinyos::kernel::memory::paging::is_runtime_enabled(), passed, failed);
+        record_self_test_result("VFS path validation", tinyos::kernel::vfs::validation_self_test(), passed, failed);
+        record_self_test_result("RAMFS ready", tinyos::kernel::vfs::ramfs::is_ready(), passed, failed);
+        record_self_test_result("block VFS contract", tinyos::kernel::vfs::blockfs::validation_self_test(), passed, failed);
+        record_self_test_result("boot modules valid", tinyos::kernel::initrd::modules::validation_passed(), passed, failed);
+        record_self_test_result("ELF loader contract", tinyos::kernel::elf::loader::validation_self_test(), passed, failed);
+        record_self_test_result("syscall contract bundle", syscall_contract_valid(), passed, failed);
+        record_self_test_result("runtime manifest", tinyos::kernel::app::runtime::validation_self_test(), passed, failed);
+        record_self_test_result("application manifest", tinyos::kernel::app::manifest::validation_self_test(), passed, failed);
+        record_self_test_result("TAPP registry", tinyos::kernel::app::package::validation_self_test(), passed, failed);
+        record_self_test_result("TAPP trust store", tinyos::kernel::security::trust::validation_self_test(), passed, failed);
+        record_self_test_result("TAPP package verifier", tinyos::kernel::app::package_verifier::validation_self_test(), passed, failed);
+        record_self_test_result("application launcher", tinyos::kernel::app::launcher::validation_self_test(), passed, failed);
+        record_self_test_result("system management tools", tinyos::kernel::admin::tools::validation_self_test(), passed, failed);
+        record_self_test_result("secure provisioning manifest", tinyos::kernel::provision::image::validation_self_test(), passed, failed);
+        record_self_test_result("system profile contract", system_profile_contract_passes(), passed, failed);
+        record_self_test_result("installer mock preflight", installer_mock_preflight_passes(), passed, failed);
+        record_self_test_result("terminal UI contract", tinyos::ui::terminal::validation_self_test(), passed, failed);
+        record_self_test_result("terminal panel contract", tinyos::ui::terminal::panel_validation_self_test(), passed, failed);
+        record_self_test_result("TUI widget contract", tinyos::ui::widgets::validation_self_test(), passed, failed);
+        record_self_test_result("TUI event bridge", tinyos::ui::widgets::event_bridge_validation_self_test(), passed, failed);
+        tinyos::drivers::vga::write("Passed: ");
+        write_uint64(passed);
+        tinyos::drivers::vga::write(" Failed: ");
+        write_uint64(failed);
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write_line(failed == 0 ? "System check passed." : "System check failed.");
+    }
+
+    void print_path_check(const char* path_text)
+    {
+        char path[MaxPathLength];
+        const char* rest = nullptr;
+        if (!copy_argument(path_text, path, sizeof(path), rest))
+        {
+            tinyos::drivers::vga::write_line("Usage: pathcheck <path>");
+            return;
+        }
+
+        char resolved[MaxPathLength];
+        const bool resolved_ok = resolve_shell_path(path, resolved, sizeof(resolved));
+        tinyos::drivers::vga::write_line("TinyOS path check:");
+        tinyos::drivers::vga::write("Input    : ");
+        tinyos::drivers::vga::write_line(path);
+        tinyos::drivers::vga::write("Resolved : ");
+        tinyos::drivers::vga::write_line(resolved_ok ? resolved : "invalid");
+        tinyos::drivers::vga::write("Valid    : ");
+        write_yes_no(resolved_ok);
+        if (!resolved_ok)
+        {
+            return;
+        }
+
+        const auto* node = tinyos::kernel::vfs::find(resolved);
+        tinyos::drivers::vga::write("Exists   : ");
+        write_yes_no(node != nullptr);
+        if (node == nullptr)
+        {
+            return;
+        }
+
+        tinyos::drivers::vga::write("Type     : ");
+        tinyos::drivers::vga::write_line(node->directory ? "directory" : "file");
+        tinyos::drivers::vga::write("Writable : ");
+        write_yes_no(node->writable);
+        tinyos::drivers::vga::write("Mode     : ");
+        write_octal_mode(tinyos::kernel::vfs::access_mode(node));
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Can enter: ");
+        write_yes_no(tinyos::kernel::vfs::can_enter_directory(node));
+        tinyos::drivers::vga::write("Can list : ");
+        write_yes_no(tinyos::kernel::vfs::can_list_directory(node));
+        tinyos::drivers::vga::write("Can modify: ");
+        write_yes_no(tinyos::kernel::vfs::can_modify_directory(node));
+        if (!node->directory)
+        {
+            tinyos::drivers::vga::write("Size     : ");
+            write_uint64(node->size);
+            tinyos::drivers::vga::write("/");
+            write_uint64(node->capacity);
+            tinyos::drivers::vga::write_line(" bytes");
+        }
     }
 
     void cleanup_fs_self_test_paths()
@@ -1620,6 +1968,28 @@ namespace
         print_admin_tool_entry(*tool);
     }
 
+    void print_tool_risk_info()
+    {
+        tinyos::drivers::vga::write_line("State-writing and high-risk tools:");
+        tinyos::drivers::vga::write("State-writing count: ");
+        write_uint64(tinyos::kernel::admin::tools::write_tool_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("High-risk count    : ");
+        write_uint64(tinyos::kernel::admin::tools::high_risk_count());
+        tinyos::drivers::vga::put_char('\n');
+
+        for (size_t index = 0; index < tinyos::kernel::admin::tools::count(); ++index)
+        {
+            const auto* tool = tinyos::kernel::admin::tools::at(index);
+            if (tool == nullptr || (!tool->writes_state && !tool->high_risk))
+            {
+                continue;
+            }
+
+            print_admin_tool_entry(*tool);
+        }
+    }
+
     void print_image_step(const tinyos::kernel::provision::image::Step& step)
     {
         tinyos::drivers::vga::write("  - ");
@@ -1708,6 +2078,9 @@ namespace
         tinyos::drivers::vga::write_line("  credential.bootstrap=prompt, hash before storage, no plaintext secrets");
         tinyos::drivers::vga::write_line("Host entry point:");
         tinyos::drivers::vga::write_line("  scripts/tinyos-image.sh install-plan|check-install-profile");
+        tinyos::drivers::vga::write_line("Target mock:");
+        tinyos::drivers::vga::write_line("  installcheck validates RAMFS receipt readiness");
+        tinyos::drivers::vga::write_line("  install writes /receipts/install.receipt without disk writes");
         tinyos::drivers::vga::write_line("RAMFS metadata:");
         show_file("/system/install.txt");
     }
@@ -1967,8 +2340,11 @@ namespace
     const HelpCommand CoreHelp[] = {
         { "help", "open the interactive command browser", "help", nullptr },
         { "helpui", "open the interactive command browser", "helpui", nullptr },
+        { "helpsearch", "search terminal command help", "helpsearch <text>", nullptr },
         { "helplist", "print the classic command list", "helplist", "helplist" },
         { "fileui", "open the terminal file browser", "fileui", "fileui" },
+        { "status", "show compact terminal system dashboard", "status", "status" },
+        { "syscheck", "run non-destructive system health checks", "syscheck", "syscheck" },
         { "aliases", "show compatibility aliases", "aliases", "aliases" },
         { "clear", "clear the terminal", "clear", "clear" },
         { "version", "show TinyOS version", "version", "version" },
@@ -1988,6 +2364,7 @@ namespace
         { "view", "compatibility alias for show", "view <path>", nullptr },
         { "cat", "compatibility alias for show", "cat <path>", nullptr },
         { "describe", "show RAMFS node metadata", "describe <path>", nullptr },
+        { "pathcheck", "validate and inspect a VFS path", "pathcheck <path>", nullptr },
         { "fileinfo", "compatibility alias for describe", "fileinfo <path>", nullptr },
         { "mkdir", "create RAMFS directory", "mkdir <path>", nullptr },
         { "touch", "create writable RAMFS file", "touch <path>", nullptr },
@@ -2021,6 +2398,7 @@ namespace
         { "tools", "list management tools", "tools", "tools" },
         { "toolinfo", "show management tool summary", "toolinfo", "toolinfo" },
         { "tool", "show one management tool", "tool <command>", nullptr },
+        { "riskinfo", "list state-writing and high-risk tools", "riskinfo", "riskinfo" },
         { "runtimeinfo", "show language runtime manifest", "runtimeinfo", "runtimeinfo" },
         { "appinfo", "show app capability profiles", "appinfo", "appinfo" },
         { "launchinfo", "show app launch policy checks", "launchinfo", "launchinfo" },
@@ -2036,6 +2414,10 @@ namespace
         { "provisioninfo", "show provisioning workflow", "provisioninfo", "provisioninfo" },
         { "deployinfo", "show remote deployment plan", "deployinfo", "deployinfo" },
         { "installinfo", "show installed-system contract", "installinfo", "installinfo" },
+        { "installcheck", "validate installer mock preflight", "installcheck", "installcheck" },
+        { "install", "write mock install receipt to RAMFS", "install", nullptr },
+        { "profileinfo", "show active system profile", "profileinfo", "profileinfo" },
+        { "profilecheck", "validate active system profile", "profilecheck", "profilecheck" },
         { "sysinfo", "show syscall ABI scaffold status", "sysinfo", "sysinfo" },
         { "userinfo", "show user transition scaffold status", "userinfo", "userinfo" },
         { "elfinfo", "show ELF loader scaffold state", "elfinfo", "elfinfo" },
@@ -2104,6 +2486,93 @@ namespace
         { "UI", UiHelp, sizeof(UiHelp) / sizeof(UiHelp[0]) },
         { "Diagnostics", DiagnosticsHelp, sizeof(DiagnosticsHelp) / sizeof(DiagnosticsHelp[0]) }
     };
+
+    char ascii_lower(char value)
+    {
+        if (value >= 'A' && value <= 'Z')
+        {
+            return static_cast<char>(value - 'A' + 'a');
+        }
+
+        return value;
+    }
+
+    bool contains_text(const char* text, const char* query)
+    {
+        if (text == nullptr || query == nullptr || query[0] == '\0')
+        {
+            return false;
+        }
+
+        const size_t text_length = tinyos::core::string::length(text);
+        const size_t query_length = tinyos::core::string::length(query);
+        if (query_length > text_length)
+        {
+            return false;
+        }
+
+        for (size_t offset = 0; offset + query_length <= text_length; ++offset)
+        {
+            size_t matched = 0;
+            while (matched < query_length && ascii_lower(text[offset + matched]) == ascii_lower(query[matched]))
+            {
+                ++matched;
+            }
+
+            if (matched == query_length)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool help_command_matches(const HelpCommand& command, const char* query)
+    {
+        return contains_text(command.name, query) ||
+            contains_text(command.summary, query) ||
+            contains_text(command.usage, query);
+    }
+
+    void print_help_search(const char* text)
+    {
+        char query[MaxPathLength];
+        const char* rest = nullptr;
+        if (!copy_argument(text, query, sizeof(query), rest))
+        {
+            tinyos::drivers::vga::write_line("Usage: helpsearch <text>");
+            return;
+        }
+
+        size_t matches = 0;
+        tinyos::drivers::vga::write("Help search: ");
+        tinyos::drivers::vga::write_line(query);
+        for (size_t category_index = 0; category_index < sizeof(HelpCategories) / sizeof(HelpCategories[0]); ++category_index)
+        {
+            const auto& category = HelpCategories[category_index];
+            for (size_t command_index = 0; command_index < category.count; ++command_index)
+            {
+                const auto& command = category.commands[command_index];
+                if (!help_command_matches(command, query))
+                {
+                    continue;
+                }
+
+                tinyos::drivers::vga::write("  ");
+                tinyos::drivers::vga::write(category.name);
+                tinyos::drivers::vga::write("/ ");
+                tinyos::drivers::vga::write(command.name);
+                tinyos::drivers::vga::write(" - ");
+                tinyos::drivers::vga::write_line(command.summary);
+                ++matches;
+            }
+        }
+
+        tinyos::drivers::vga::write("Matches: ");
+        write_uint64(matches);
+        tinyos::drivers::vga::put_char('\n');
+    }
 
     void wait_for_key()
     {
@@ -2242,8 +2711,11 @@ namespace
     {
         tinyos::drivers::vga::write_line("Available commands:");
         tinyos::drivers::vga::write_line("  helpui   - interactive terminal command browser");
+        tinyos::drivers::vga::write_line("  helpsearch - search command help text");
         tinyos::drivers::vga::write_line("  fileui   - interactive terminal file browser");
         tinyos::drivers::vga::write_line("  helplist - print this classic command list");
+        tinyos::drivers::vga::write_line("  status   - compact terminal system dashboard");
+        tinyos::drivers::vga::write_line("  syscheck - run non-destructive system checks");
         tinyos::drivers::vga::write_line("  desktop* - Alpha desktop prototypes; development only, incomplete");
         tinyos::drivers::vga::write_line("  help     - show this help");
         tinyos::drivers::vga::write_line("  clear    - clear the screen");
@@ -2256,6 +2728,7 @@ namespace
         tinyos::drivers::vga::write_line("  fsmap    - show TinyOS RAMFS tree");
         tinyos::drivers::vga::write_line("  show     - print TinyOS RAMFS file");
         tinyos::drivers::vga::write_line("  describe - show TinyOS RAMFS node details");
+        tinyos::drivers::vga::write_line("  pathcheck - validate and inspect a VFS path");
         tinyos::drivers::vga::write_line("  write    - overwrite writable TinyOS RAMFS file");
         tinyos::drivers::vga::write_line("  copy/cp  - copy readable RAMFS file");
         tinyos::drivers::vga::write_line("  move/mv  - move runtime RAMFS file or directory");
@@ -2297,6 +2770,7 @@ namespace
         tinyos::drivers::vga::write_line("  tools    - list system management tools");
         tinyos::drivers::vga::write_line("  toolinfo - show management tool summary");
         tinyos::drivers::vga::write_line("  tool     - show one management tool");
+        tinyos::drivers::vga::write_line("  riskinfo - list state-writing and high-risk tools");
         tinyos::drivers::vga::write_line("  runtimeinfo - show language/runtime manifest");
         tinyos::drivers::vga::write_line("  appinfo - show app capability profiles");
         tinyos::drivers::vga::write_line("  launchinfo - show app launch policy checks");
@@ -2312,6 +2786,10 @@ namespace
         tinyos::drivers::vga::write_line("  provisioninfo - show provisioning workflow");
         tinyos::drivers::vga::write_line("  deployinfo - show remote deployment plan");
         tinyos::drivers::vga::write_line("  installinfo - show installed-system contract");
+        tinyos::drivers::vga::write_line("  installcheck - validate installer mock preflight");
+        tinyos::drivers::vga::write_line("  install  - write mock install receipt to RAMFS");
+        tinyos::drivers::vga::write_line("  profileinfo - show active system profile");
+        tinyos::drivers::vga::write_line("  profilecheck - validate active system profile");
         tinyos::drivers::vga::write_line("  requirements - show minimum system requirements");
         tinyos::drivers::vga::write_line("  platforminfo - show platform compatibility manifest");
         tinyos::drivers::vga::write_line("  pcinfo - show PC platform initialization contract");
@@ -2594,6 +3072,18 @@ namespace tinyos::shell
             }
 
             show_file_info(resolved);
+            return;
+        }
+
+        if (core::string::starts_with(command, "pathcheck "))
+        {
+            print_path_check(command + 9);
+            return;
+        }
+
+        if (core::string::compare(command, "pathcheck") == 0)
+        {
+            drivers::vga::write_line("Usage: pathcheck <path>");
             return;
         }
 
@@ -2997,6 +3487,12 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::compare(command, "riskinfo") == 0)
+        {
+            print_tool_risk_info();
+            return;
+        }
+
         if (core::string::compare(command, "tools") == 0)
         {
             print_admin_tools();
@@ -3180,6 +3676,30 @@ namespace tinyos::shell
         if (core::string::compare(command, "installinfo") == 0)
         {
             print_install_info();
+            return;
+        }
+
+        if (core::string::compare(command, "installcheck") == 0)
+        {
+            print_install_check();
+            return;
+        }
+
+        if (core::string::compare(command, "install") == 0)
+        {
+            run_install_mock();
+            return;
+        }
+
+        if (core::string::compare(command, "profileinfo") == 0)
+        {
+            print_profile_info();
+            return;
+        }
+
+        if (core::string::compare(command, "profilecheck") == 0)
+        {
+            print_profile_check();
             return;
         }
 
@@ -3881,6 +4401,30 @@ namespace tinyos::shell
         if (core::string::compare(command, "help") == 0 || core::string::compare(command, "helpui") == 0)
         {
             run_help_ui();
+            return;
+        }
+
+        if (core::string::starts_with(command, "helpsearch "))
+        {
+            print_help_search(command + 10);
+            return;
+        }
+
+        if (core::string::compare(command, "helpsearch") == 0)
+        {
+            drivers::vga::write_line("Usage: helpsearch <text>");
+            return;
+        }
+
+        if (core::string::compare(command, "status") == 0)
+        {
+            print_terminal_status();
+            return;
+        }
+
+        if (core::string::compare(command, "syscheck") == 0)
+        {
+            run_system_check();
             return;
         }
 

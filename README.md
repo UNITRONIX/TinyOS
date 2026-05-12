@@ -14,11 +14,11 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 
 - The current reference target is `i686` on QEMU PC hardware, booted as a `GRUB` Multiboot ISO.
 - The documented minimum runtime envelope is still 32 MiB RAM; lower-memory runs are experimental probes before any baseline change.
-- TinyOS is terminal-first today, with VGA text output, PS/2 keyboard input, shell diagnostics and RAMFS metadata.
+- TinyOS is terminal-first today, with VGA text output, PS/2 keyboard input, `status`/`syscheck` diagnostics, risk listing, active profile checks, path inspection and RAMFS metadata.
 - The GUI path is planned incrementally through renderer, terminal, widget and event scaffolds before a richer desktop becomes the default.
 - Security work is treated as a high-priority track: trusted package metadata, image/provisioning contracts, integrity diagnostics and password-hashing policy are documented before broader runtime privileges are enabled.
 - Project provisioning is host-first for now, with signed/encrypted artifacts, isolated project workspaces, device variants and remote access kept behind explicit opt-in policy.
-- Installed-system support is currently a ready contract: `examples/install.profile`, `install-plan`, `check-install-profile`, `/system/install.txt` and `installinfo` exist, while real disk installation is planned after persistent storage and filesystem contracts mature.
+- Installed-system support is currently a ready contract plus a RAMFS mock: `examples/install.profile`, `install-plan`, `check-install-profile`, `/system/install.txt`, `/system/profile.txt`, `installinfo`, `installcheck`, `install`, `profileinfo`, `profilecheck` and `/receipts/install.receipt` exist, while real disk installation is planned after persistent storage and filesystem contracts mature.
 - Future portability targets include `x86_64` and `aarch64`, but they should only be promoted after repeatable boot, storage and smoke tests exist for each target.
 
 ## Features
@@ -27,7 +27,7 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 - text mode `VGA` output
 - polling-based `PS/2` keyboard input
 - tiny text shell
-- shell diagnostics and TinyOS-native RAMFS tools such as `files`, `fsmap`, `show`, `describe` and `write`
+- shell diagnostics and TinyOS-native RAMFS tools such as `status`, `syscheck`, `riskinfo`, `profileinfo`, `profilecheck`, `helpsearch`, `pathcheck`, `files`, `fsmap`, `show`, `describe` and `write`
 - static TinyOS device registry with `devices` diagnostics
 - RAM-backed block device scaffold with `blockinfo` diagnostics
 - read-only block VFS mount under `/volumes` with `storageinfo` diagnostics
@@ -42,7 +42,7 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 - `.tapp` application package registry, trust store and install-gate checks with `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `trustinfo` and `trust`
 - system management tool manifest with `tools`, `toolinfo` and `tool <command>` diagnostics
 - secure image/provisioning manifest with `imageinfo`, `provisioninfo` and `deployinfo` diagnostics
-- installed-system contract with `installinfo` diagnostics and host install-profile validation
+- installed-system contract with `installinfo`, `installcheck`, RAMFS `install` mock, active RAMFS profile checks and host install-profile validation
 - project provisioning workbench plan for isolated workspaces, device variants, resource budgets and remote access
 - host `.tapp` signing helpers: `keygen-app`, `trust-app`, `sign-app` and `verify-app`
 - documented minimum runtime target: `i686`, Multiboot ISO, VGA text mode, PS/2 keyboard and 32 MiB RAM

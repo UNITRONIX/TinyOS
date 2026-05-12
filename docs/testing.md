@@ -73,6 +73,30 @@ Validate install-profile safety rules without writing disks:
 make install-profile-check
 ```
 
+Inside TinyOS, the installer mock can be checked manually without writing disks:
+
+```text
+installcheck
+install
+show /receipts/install.receipt
+profileinfo
+profilecheck
+show /system/profile.txt
+```
+
+Inside the terminal, use the non-destructive operational checks before and after manual feature testing:
+
+```text
+status
+syscheck
+riskinfo
+profileinfo
+profilecheck
+pathcheck /system/tools.txt
+pathcheck /system/profile.txt
+helpsearch install
+```
+
 If the build toolchain is not installed yet but `build/tinyos.iso` already exists, run the existing artifact through QEMU:
 
 ```sh

@@ -302,6 +302,7 @@ Current groundwork:
 - text-grid fill/clear renderer primitives;
 - `renderinfo`, `rendertest` and `renderfilltest` shell diagnostics;
 - terminal UI scaffold with a status row and content region;
+- terminal-first operational diagnostics through `status`, `syscheck`, `riskinfo`, `profileinfo`, `profilecheck`, `pathcheck` and `helpsearch`;
 - terminal clear/panel helpers over renderer primitives;
 - `terminalinfo`, `terminaltest`, `terminalclear` and `terminalpaneltest` shell diagnostics;
 - first TUI widget scaffold with label and button drawing;

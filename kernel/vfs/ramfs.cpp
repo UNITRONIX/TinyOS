@@ -7,17 +7,18 @@ namespace
     constexpr size_t MaxRuntimeFiles = 8;
     constexpr size_t MaxRuntimeNameLength = 48;
     constexpr size_t MaxRuntimeFileBytes = 512;
-    constexpr char ReadmeText[] = "TinyOS RAMFS\nUse pwd, cd, files, fsmap, show, describe, mkdir, touch, write, copy, move, remove, chmod and fstest. Use tools for the management command manifest. Compatibility aliases are optional.\n";
-    constexpr char ShellText[] = "kernel-shell=active\nfuture-userland-shell=planned\n";
-    constexpr char SystemText[] = "name=TinyOS\narch=i686\nstorage=ramfs\n";
+    constexpr char ReadmeText[] = "TinyOS RAMFS\nUse status, syscheck, riskinfo, pathcheck and helpsearch for terminal-first diagnostics. Use pwd, cd, files, fsmap, show, describe, mkdir, touch, write, copy, move, remove, chmod and fstest for files. Use /receipts for mock install and provisioning receipts. Use tools for the management command manifest. Compatibility aliases are optional.\n";
+    constexpr char ShellText[] = "kernel-shell=active\nterminal-dashboard=status\nterminal-self-check=syscheck\npath-diagnostics=pathcheck\ncommand-discovery=helpsearch\nrisk-diagnostics=riskinfo\nfuture-userland-shell=planned\n";
+    constexpr char SystemText[] = "name=TinyOS\narch=i686\nstorage=ramfs\nprofile=/system/profile.txt\ndiagnostics=status,syscheck,riskinfo,pathcheck,helpsearch,profileinfo,profilecheck\n";
     constexpr char RequirementsText[] = "arch=i686\nboot=grub-multiboot-iso\nminimum-ram=32MiB\nminimum-ram-probe=make test-minimal-probe\nrecommended-ram=128MiB\ndisplay=vga-text-80x25\ninput=ps2-keyboard\nemulator=qemu-system-i386\n";
     constexpr char RuntimeText[] = "active=native-c-elf32,native-cpp-elf32\nabi=tinyos-native-i686-v0\nplanned=wasm32-sandbox,tiny-bytecode,tiny-script\nsecurity=capability-gated\nselfhost=planned-native-toolchain\n";
     constexpr char AppsText[] = "ready=system-shell\nplanned=example-system-tool,desktop-shell,web-gui-host,selfhost-toolchain,bytecode-service\npolicy=runtime-capability-subset\nlauncher=profile-check-only\nsecurity=least-privilege-before-launch\ncommands=appinfo,launchinfo,launchcheck\n";
     constexpr char TappText[] = "extension=.tapp\nformat=tinyos-tapp-v0\nsignature=detached-rsa-sha256\nreceipt=.sig.receipt\nready=system-shell.tapp\nvalid=example-system-tool.tapp\nplanned=desktop-shell.tapp,web-gui-host.tapp,selfhost-toolchain.tapp\ncommands=tappinfo,tapps,tapp,tappcheck,tappverify\nhost-tools=keygen-app,trust-app,sign-app,verify-app\npolicy=signed-manifest-required,payload-hash-required,capability-subset-required\nverifier=install-gate-contract\n";
     constexpr char TrustText[] = "store=tapp-trust-v0\nready=tinyos-dev-app-signing\nplanned=tinyos-release-app-root,tinyos-image-signing-root,tinyos-recovery-root\nrevoked=tinyos-revoked-test-key\nalgorithm=rsa-sha256\ndev-key=build/keys/tapp-dev-public.pem\nhost-tool=scripts/tinyos-image.sh trust-app\ncommands=trustinfo,trust\npolicy=development-key-not-for-release,revoked-keys-never-match\n";
-    constexpr char ToolsText[] = "ready=help,helpui,helplist,fileui,tools,toolinfo,tool,pwd,cd,files,fsmap,show,describe,mkdir,touch,chmod,write,copy,move,remove,fstest,devices,device,blockinfo,storageinfo,meminfo,frameinfo,heapinfo,paginginfo,addrspaceinfo,runtimeinfo,appinfo,launchinfo,launchcheck,tappinfo,tapps,tapp,tappcheck,tappverify,trustinfo,trust,imageinfo,provisioninfo,deployinfo,installinfo,securityinfo,integritycheck,renderinfo,terminalinfo,widgetinfo,uieventinfo,schedinfo,taskinfo,timerinfo,uptime,reboot\nplanned=mount,ps,kill,service,useradd,install,installcheck,hostname,netconfig,passwd,whoami,id,package,tappinstall,tappremove,imagebuild,imagesign,imageencrypt,keygen,provisionui,provisioninit,provisionconfig,provisionvariant,provisionapi,provisionresources,remoteaccess,terminaltheme,videomode,deploy,provision,rollback,netinfo\npolicy=high-risk-tools-must-be-explicit\n";
+    constexpr char ToolsText[] = "ready=help,helpui,helpsearch,helplist,fileui,status,syscheck,riskinfo,profileinfo,profilecheck,tools,toolinfo,tool,pwd,cd,files,fsmap,show,describe,pathcheck,mkdir,touch,chmod,write,copy,move,remove,fstest,devices,device,blockinfo,storageinfo,meminfo,frameinfo,heapinfo,paginginfo,addrspaceinfo,runtimeinfo,appinfo,launchinfo,launchcheck,tappinfo,tapps,tapp,tappcheck,tappverify,trustinfo,trust,imageinfo,provisioninfo,deployinfo,installinfo,installcheck,install,securityinfo,integritycheck,renderinfo,terminalinfo,widgetinfo,uieventinfo,schedinfo,taskinfo,timerinfo,uptime,reboot\nplanned=mount,ps,kill,service,useradd,hostname,netconfig,passwd,whoami,id,package,tappinstall,tappremove,imagebuild,imagesign,imageencrypt,keygen,provisionui,provisioninit,provisionconfig,provisionvariant,provisionapi,provisionresources,remoteaccess,terminaltheme,videomode,deploy,provision,rollback,netinfo\npolicy=high-risk-tools-must-be-explicit\n";
     constexpr char ProvisioningText[] = "pipeline=project-workspace,provision-config,device-variants,project-api,resource-budget,app-bundle,app-signature,system-profile,encryption-default,image-manifest,image-build,image-sign,image-encrypt,remote-folder-access,deploy-check,deploy-ssh,target-verify,rollback-slot\nhost-tool=scripts/tinyos-image.sh\nready-contracts=app-bundle,app-signature,system-profile,encryption-default,image-manifest,deploy-check,deploy-receipt\nplanned-host-tools=provisioninit,provisionconfig,provisionvariant,provisionresources,imagebuild,imagesign,imageencrypt,keygen,remoteaccess,deploy\nplanned-kernel=provisionapi,provisionui,terminaltheme,videomode,target-verify,rollback-slot\ntransport=ssh-sftp-now,tinylink-later\npolicy=isolated-workspace,sign-before-deploy,encrypt-by-default,deploy-check-before-transport,remote-access-opt-in,rollback-before-activate\n";
-    constexpr char InstallText[] = "state=ready-contract\nmedia=iso-current,disk-install-planned\nprofile=examples/install.profile\nhost-tools=install-plan,check-install-profile\ncommands=installinfo\ninputs=device.name,network.mode,user.name,credential.bootstrap,admin.mode\ncredential-policy=prompt-only,password-hashing-required,no-plaintext-secrets\nadmin-policy=shared-bootstrap-development-only,separate-secret-or-key-release\nprovisioning=available-after-first-boot\n";
+    constexpr char InstallText[] = "state=ready-contract,ready-mock\nmedia=iso-current,disk-install-planned\nprofile=examples/install.profile\nhost-tools=install-plan,check-install-profile\ncommands=installinfo,installcheck,install\nreceipt=/receipts/install.receipt\ninputs=device.name,network.mode,user.name,credential.bootstrap,admin.mode\nmock-policy=ramfs-receipt-only,no-disk-writes\ncredential-policy=prompt-only,password-hashing-required,no-plaintext-secrets\nadmin-policy=shared-bootstrap-development-only,separate-secret-or-key-release\nprovisioning=available-after-first-boot\n";
+    constexpr char ProfileText[] = "tinyos.profile.version=0\nstate=ramfs-default\nsource=/system/profile.txt\ndevice.name=tinyos-dev-vm\ndevice.variant=qemu-i686-terminal\nboot.target=i686-pc-qemu\nnetwork.mode=disabled\nuser.bootstrap=developer\ncredential.bootstrap=prompt\nadmin.mode=same-bootstrap-secret\nsecurity.password_hashing=required\nsecurity.plaintext_secrets=forbidden\nprovisioning.encryption=required\nprovisioning.remote_access=disabled\nstorage.persistence=ramfs-only\ninstall.state=mock\n";
     constexpr char UiText[] = "renderer=text-grid\nrenderer-primitives=fill-rect,clear-area\nterminal=status-row-plus-content\nterminal-panels=clear,panel\nwidgets=label,button\nwidget-events=dispatch,activate\nevents=ui-event-queue\ncommands=renderinfo,rendertest,renderfilltest,terminalinfo,terminaltest,terminalclear,terminalpaneltest,widgetinfo,widgettest,widgetdispatch,widgetactiontest,uieventinfo,uieventpump,uieventpeek,uieventtest\n";
     constexpr char ConsoleText[] = "console device placeholder\n";
     constexpr char BlockDeviceText[] = "name=ram-block0\nclass=block\nsector-size=512\nsectors=8\nwritable=true\n";
@@ -33,6 +34,7 @@ namespace
     tinyos::kernel::vfs::Node g_system = { "system", true, nullptr, nullptr, 0, 0, false, &g_root };
     tinyos::kernel::vfs::Node g_devices = { "devices", true, nullptr, nullptr, 0, 0, false, &g_root };
     tinyos::kernel::vfs::Node g_users = { "users", true, nullptr, nullptr, 0, 0, false, &g_root };
+    tinyos::kernel::vfs::Node g_receipts = { "receipts", true, nullptr, nullptr, 0, 0, false, &g_root };
     tinyos::kernel::vfs::Node g_readme = { "readme.txt", false, ReadmeText, nullptr, sizeof(ReadmeText) - 1, 0, false, &g_root };
     tinyos::kernel::vfs::Node g_shell_info = { "shell.txt", false, ShellText, nullptr, sizeof(ShellText) - 1, 0, false, &g_apps };
     tinyos::kernel::vfs::Node g_system_info = { "system.txt", false, SystemText, nullptr, sizeof(SystemText) - 1, 0, false, &g_system };
@@ -44,6 +46,7 @@ namespace
     tinyos::kernel::vfs::Node g_tools_info = { "tools.txt", false, ToolsText, nullptr, sizeof(ToolsText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_provisioning_info = { "provisioning.txt", false, ProvisioningText, nullptr, sizeof(ProvisioningText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_install_info = { "install.txt", false, InstallText, nullptr, sizeof(InstallText) - 1, 0, false, &g_system };
+    tinyos::kernel::vfs::Node g_profile_info = { "profile.txt", false, ProfileText, nullptr, sizeof(ProfileText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_ui_info = { "ui.txt", false, UiText, nullptr, sizeof(UiText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_console = { "console", false, ConsoleText, nullptr, sizeof(ConsoleText) - 1, 0, false, &g_devices };
     tinyos::kernel::vfs::Node g_example_tapp = { "example-system-tool.tapp", false, ExampleTappText, nullptr, sizeof(ExampleTappText) - 1, 0, false, &g_apps };
@@ -67,6 +70,7 @@ namespace
         &g_system,
         &g_devices,
         &g_users,
+        &g_receipts,
         &g_readme,
         &g_shell_info,
         &g_system_info,
@@ -78,6 +82,7 @@ namespace
         &g_tools_info,
         &g_provisioning_info,
         &g_install_info,
+        &g_profile_info,
         &g_ui_info,
         &g_example_tapp,
         &g_console,

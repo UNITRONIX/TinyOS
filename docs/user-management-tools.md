@@ -4,12 +4,12 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 
 ## Ready tools
 
-- Shell: `help`, `helpui`, `helplist`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
-- Files: `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `mkdir`, `touch`, `chmod`, `write`, `copy`, `move`, `remove`, `fstest`, `ramfsinfo`, `vfsinfo`
+- Shell: `help`, `helpui`, `helpsearch`, `helplist`, `status`, `syscheck`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
+- Files: `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `pathcheck`, `mkdir`, `touch`, `chmod`, `write`, `copy`, `move`, `remove`, `fstest`, `ramfsinfo`, `vfsinfo`
 - Storage and devices: `blockinfo`, `storageinfo`, `devices`, `device`, `fbinfo`
 - Memory: `meminfo`, `frameinfo`, `heapinfo`, `heaptest`, `paginginfo`, `addrspaceinfo`
-- Runtime and apps: `runtimeinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `installinfo`, `sysinfo`, `userinfo`, `elfinfo`, `modulesinfo`
-- Security: `securityinfo`, `integritycheck`, `requirements`, `trustinfo`, `trust`
+- Runtime and apps: `runtimeinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `installinfo`, `installcheck`, `install`, `sysinfo`, `userinfo`, `elfinfo`, `modulesinfo`
+- Security: `riskinfo`, `profileinfo`, `profilecheck`, `securityinfo`, `integritycheck`, `requirements`, `trustinfo`, `trust`
 - UI and input: `renderinfo`, `terminalinfo`, `widgetinfo`, `uieventinfo`, `inputinfo`, `keyboardinfo`
 - Scheduling and time: `schedinfo`, `taskinfo`, `contextinfo`, `timerinfo`, `uptime`
 - Power and debug: `reboot`, `int3`, `panic`
@@ -22,14 +22,25 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 - Development and distribution: `package`, `tappinstall`, `tappremove`, `imagebuild`, `imagesign`, `imageencrypt`, `keygen`, `provisionui`, `provisioninit`, `provisionconfig`, `provisionvariant`, `provisionapi`, `provisionresources`, `remoteaccess`, `terminaltheme`, `videomode`, `deploy`, `provision`, `rollback`
 - Networking: `netinfo`
 
-## Future installer tools
+## Installer tools
 
-- `install` should start the terminal installer from boot media.
-- `installcheck` should validate the install profile without writing disks.
+- `installcheck` validates the current installer mock preflight without writing disks.
+- `install` writes a mock install receipt to `/receipts/install.receipt` in RAMFS and performs no disk writes.
+- `profileinfo` shows the active RAMFS system profile from `/system/profile.txt`.
+- `profilecheck` validates the active system profile policy before persistent install profiles exist.
 - `hostname` should set the installed device name once persistent configuration exists.
 - `netconfig` should manage network mode, address, gateway and DNS once networking exists.
 - `passwd` should rotate user or administrator credentials once password hashing exists.
 - `whoami` and `id` should expose active identity after userspace identities exist.
+
+## Terminal diagnostics
+
+- `status` prints a compact system dashboard for version, architecture, ticks, memory, VFS, tools, package and install-receipt state.
+- `syscheck` runs non-destructive health checks across architecture, platform, memory, VFS, app/package, syscall, provisioning, system profile and terminal contracts.
+- `riskinfo` lists management commands that write state or are marked high risk in the kernel tool manifest.
+- `profileinfo` and `profilecheck` expose and validate the current system identity/security profile.
+- `pathcheck <path>` resolves a shell path and reports validity, metadata and permissions.
+- `helpsearch <text>` searches command names, usage and summaries without opening the interactive help UI.
 
 ## Host package tools
 

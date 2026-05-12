@@ -69,6 +69,21 @@ scripts/tinyos-image.sh check-install-profile examples/install.profile
 make install-profile-check
 ```
 
+Target-side mock validation is available in the TinyOS shell:
+
+```text
+installcheck
+install
+show /receipts/install.receipt
+profileinfo
+profilecheck
+show /system/profile.txt
+```
+
+The current `install` command is a mock. It writes `/receipts/install.receipt` in RAMFS and performs no disk writes.
+
+The current active system profile is also a mock-safe RAMFS contract. `/system/profile.txt` mirrors the default development target identity, keeps remote access disabled, requires password hashing policy and records that persistence is still RAMFS-only.
+
 ## Credential Policy
 
 A shared user/admin password is acceptable only as an early development convenience or an explicit single-user device profile. The safer contract is:
@@ -163,7 +178,7 @@ The correct path is incremental: document the pattern now, add host-side profile
 
 1. Document the install profile and architecture support matrix.
 2. Add host validation for install profiles.
-3. Add a terminal installer mock that writes a receipt to RAMFS.
+3. Add a terminal installer mock that writes a receipt to RAMFS. Current status: ready mock through `installcheck`, `install` and `/receipts/install.receipt`.
 4. Add persistent disk image creation in host tools.
 5. Add a QEMU disk boot test for the reference `i686` target.
 6. Add user/admin credential storage with password hashing.

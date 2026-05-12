@@ -166,21 +166,25 @@ print_install_plan()
 {
     cat <<'PLAN'
 TinyOS installed-system plan:
-  1. check-install-profile - validate installer inputs without writing disks
-  2. installinfo           - show the installed-system contract inside TinyOS
-  3. install mock          - future terminal installer receipt in RAMFS
-  4. disk image            - future host-side persistent disk image output
-  5. disk boot test        - future QEMU boot from installed TinyOS disk
+1. check-install-profile - validate installer inputs without writing disks
+2. installinfo           - show the installed-system contract inside TinyOS
+3. installcheck          - validate target-side RAMFS receipt readiness
+4. install mock          - write /receipts/install.receipt without disk writes
+5. disk image            - future host-side persistent disk image output
+6. disk boot test        - future QEMU boot from installed TinyOS disk
 
 Current host command status:
-  ready: install-plan, check-install-profile
-  planned: install, installcheck, hostname, netconfig, passwd, whoami, id
+ready: install-plan, check-install-profile
+
+Current target command status:
+ready: installinfo, installcheck, install
+planned: hostname, netconfig, passwd, whoami, id
 
 Default safety policy:
-  credential.bootstrap=prompt
-  security.password_hashing=required
-  security.plaintext_secrets=forbidden
-  provisioning.remote_access=disabled
+credential.bootstrap=prompt
+security.password_hashing=required
+security.plaintext_secrets=forbidden
+provisioning.remote_access=disabled
 PLAN
 }
 

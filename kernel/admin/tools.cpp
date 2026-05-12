@@ -13,11 +13,17 @@ namespace
     const Tool g_tools[] = {
         { "help", "show shell commands", Category::Shell, State::Ready, false, false },
         { "helpui", "open interactive command browser", Category::Shell, State::Ready, true, false },
+        { "helpsearch", "search terminal command help", Category::Shell, State::Ready, false, false },
         { "helplist", "print classic command list", Category::Shell, State::Ready, false, false },
         { "fileui", "open terminal file browser", Category::Files, State::Ready, true, false },
         { "tools", "list management tools", Category::Shell, State::Ready, false, false },
         { "toolinfo", "show management tool manifest summary", Category::Shell, State::Ready, false, false },
         { "tool", "show one management tool", Category::Shell, State::Ready, false, false },
+        { "status", "show compact terminal system dashboard", Category::Shell, State::Ready, false, false },
+        { "syscheck", "run non-destructive system health checks", Category::Security, State::Ready, false, false },
+        { "riskinfo", "list state-writing and high-risk tools", Category::Security, State::Ready, false, false },
+        { "profileinfo", "show active system profile", Category::Security, State::Ready, false, false },
+        { "profilecheck", "validate active system profile", Category::Security, State::Ready, false, false },
         { "aliases", "show compatibility aliases", Category::Shell, State::Ready, false, false },
         { "clear", "clear console screen", Category::Shell, State::Ready, true, false },
         { "pwd", "show current shell directory", Category::Files, State::Ready, false, false },
@@ -29,6 +35,7 @@ namespace
         { "fsmap", "show RAMFS tree", Category::Files, State::Ready, false, false },
         { "show", "print RAMFS file", Category::Files, State::Ready, false, false },
         { "describe", "show RAMFS node metadata", Category::Files, State::Ready, false, false },
+        { "pathcheck", "validate and inspect a VFS path", Category::Files, State::Ready, false, false },
         { "write", "overwrite writable RAMFS file", Category::Files, State::Ready, true, true },
         { "copy", "copy readable RAMFS file", Category::Files, State::Ready, true, false },
         { "move", "move runtime RAMFS node", Category::Files, State::Ready, true, true },
@@ -62,6 +69,8 @@ namespace
         { "provisioninfo", "show provisioning workflow", Category::Runtime, State::Ready, false, false },
         { "deployinfo", "show remote deployment plan", Category::Runtime, State::Ready, false, false },
         { "installinfo", "show installed-system contract", Category::Runtime, State::Ready, false, false },
+        { "installcheck", "validate installer mock preflight", Category::Development, State::Ready, false, false },
+        { "install", "write mock install receipt to RAMFS", Category::Development, State::Ready, true, false },
         { "sysinfo", "show syscall ABI scaffold", Category::Runtime, State::Ready, false, false },
         { "userinfo", "show user transition scaffold", Category::Runtime, State::Ready, false, false },
         { "elfinfo", "show ELF loader scaffold", Category::Runtime, State::Ready, false, false },
@@ -94,8 +103,6 @@ namespace
         { "kill", "stop a process", Category::Scheduling, State::Planned, true, true },
         { "service", "manage system services", Category::Scheduling, State::Planned, true, true },
         { "useradd", "create user identity", Category::Security, State::Planned, true, true },
-        { "install", "start terminal installer", Category::Development, State::Planned, true, true },
-        { "installcheck", "validate install profile", Category::Development, State::Planned, false, false },
         { "hostname", "set installed device name", Category::Devices, State::Planned, true, false },
         { "netconfig", "configure network profile", Category::Devices, State::Planned, true, true },
         { "passwd", "rotate account credential", Category::Security, State::Planned, true, true },
@@ -248,6 +255,13 @@ namespace tinyos::kernel::admin::tools
             write_tool_count() >= 8 &&
             high_risk_count() >= 5 &&
             find("files") != nullptr &&
+            find("helpsearch") != nullptr &&
+            find("status") != nullptr &&
+            find("syscheck") != nullptr &&
+            find("riskinfo") != nullptr &&
+            find("profileinfo") != nullptr &&
+            find("profilecheck") != nullptr &&
+            find("pathcheck") != nullptr &&
             find("runtimeinfo") != nullptr &&
             find("appinfo") != nullptr &&
             find("launchcheck") != nullptr &&
@@ -256,6 +270,7 @@ namespace tinyos::kernel::admin::tools
             find("trustinfo") != nullptr &&
             find("imageinfo") != nullptr &&
             find("installinfo") != nullptr &&
+            find("install") != nullptr &&
             find("imageencrypt") != nullptr &&
             find("installcheck") != nullptr &&
             find("provisioninit") != nullptr &&

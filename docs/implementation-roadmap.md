@@ -146,6 +146,7 @@ TinyOS currently provides:
 - [x] add initrd/module loading skeleton
 - [x] validate boot module metadata before ELF scanning
 - [x] add TinyOS-native RAMFS browsing, viewing and simple edit tools in shell
+- [x] add terminal path diagnostics with `pathcheck`
 
 ### Phase 6 - syscall and userspace prep
 - [x] define syscall ABI
@@ -199,13 +200,19 @@ TinyOS currently provides:
 - [x] add RAMFS `/system/requirements.txt`
 - [x] add `make test-minimal` for the 32 MiB QEMU boot envelope
 - [~] add `make test-minimal-probe` for lower-memory experiments before changing the documented baseline
+- [x] add compact terminal dashboard through `status`
+- [x] add non-destructive system health checks through `syscheck`
+- [x] add terminal risk listing through `riskinfo`
+- [x] add command discovery through `helpsearch`
+- [x] add active system profile metadata through `/system/profile.txt`, `profileinfo` and `profilecheck`
 
 ### Installed system pattern
 - [x] document the target installer and installed-system flow in `docs/installed-system-pattern.md`
 - [x] define an install profile file format for device name, network, user and admin policy
 - [x] add host validation for install profiles
 - [x] expose installed-system metadata through RAMFS and `installinfo`
-- [ ] add a terminal installer mock that writes an install receipt to RAMFS
+- [x] add a terminal installer mock that writes an install receipt to RAMFS
+- [x] expose a safe RAMFS first-boot profile before persistent installed configuration exists
 - [ ] add persistent disk image creation after block storage and filesystem contracts mature
 - [ ] add QEMU disk-boot smoke tests for the reference target
 - [ ] add password hashing and administrator policy before real installed identities are enabled
