@@ -137,7 +137,7 @@ namespace tinyos::kernel::vfs
 
     size_t child_count(const Node* node)
     {
-        if (!g_ready)
+        if (!g_ready || !can_list_directory(node))
         {
             return 0;
         }
@@ -152,7 +152,7 @@ namespace tinyos::kernel::vfs
 
     const Node* child_at(const Node* node, size_t index)
     {
-        if (!g_ready)
+        if (!g_ready || !can_list_directory(node))
         {
             return nullptr;
         }
@@ -256,6 +256,21 @@ namespace tinyos::kernel::vfs
         }
 
         return ramfs::access_mode(node);
+    }
+
+    bool can_enter_directory(const Node* node)
+    {
+        return g_ready && node != nullptr && node->directory && (access_mode(node) & 0100) == 0100;
+    }
+
+    bool can_list_directory(const Node* node)
+    {
+        return g_ready && node != nullptr && node->directory && (access_mode(node) & 0500) == 0500;
+    }
+
+    bool can_modify_directory(const Node* node)
+    {
+        return g_ready && node != nullptr && node->directory && (access_mode(node) & 0300) == 0300;
     }
 
     bool set_access_mode(const char* path, uint16_t mode)

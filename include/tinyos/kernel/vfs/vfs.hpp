@@ -34,5 +34,8 @@ namespace tinyos::kernel::vfs
     bool copy_file(const char* source_path, const char* destination_path);
     bool move(const char* source_path, const char* destination_path);
     uint16_t access_mode(const Node* node);
+    bool can_enter_directory(const Node* node);
+    bool can_list_directory(const Node* node);
+    bool can_modify_directory(const Node* node);
     bool set_access_mode(const char* path, uint16_t mode);
 }

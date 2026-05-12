@@ -5,7 +5,7 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 ## Ready tools
 
 - Shell: `help`, `helpui`, `helplist`, `tools`, `toolinfo`, `tool`, `aliases`, `clear`
-- Files: `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `mkdir`, `touch`, `chmod`, `write`, `copy`, `move`, `remove`, `ramfsinfo`, `vfsinfo`
+- Files: `fileui`, `pwd`, `cd`, `files`, `fsmap`, `show`, `describe`, `mkdir`, `touch`, `chmod`, `write`, `copy`, `move`, `remove`, `fstest`, `ramfsinfo`, `vfsinfo`
 - Storage and devices: `blockinfo`, `storageinfo`, `devices`, `device`, `fbinfo`
 - Memory: `meminfo`, `frameinfo`, `heapinfo`, `heaptest`, `paginginfo`, `addrspaceinfo`
 - Runtime and apps: `runtimeinfo`, `appinfo`, `launchinfo`, `launchcheck`, `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `imageinfo`, `provisioninfo`, `deployinfo`, `sysinfo`, `userinfo`, `elfinfo`, `modulesinfo`

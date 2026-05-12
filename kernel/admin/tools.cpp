@@ -33,6 +33,7 @@ namespace
         { "copy", "copy readable RAMFS file", Category::Files, State::Ready, true, false },
         { "move", "move runtime RAMFS node", Category::Files, State::Ready, true, true },
         { "remove", "remove runtime RAMFS node", Category::Files, State::Ready, true, true },
+        { "fstest", "run RAMFS file operation self-test", Category::Files, State::Ready, true, false },
         { "ramfsinfo", "show RAMFS state", Category::Files, State::Ready, false, false },
         { "vfsinfo", "show VFS state", Category::Files, State::Ready, false, false },
         { "blockinfo", "show RAM block device", Category::Storage, State::Ready, false, false },

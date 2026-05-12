@@ -353,6 +353,12 @@ namespace
             return;
         }
 
+        if (!tinyos::kernel::vfs::can_list_directory(node))
+        {
+            tinyos::drivers::vga::write_line("Directory not readable.");
+            return;
+        }
+
         for (size_t index = 0; index < tinyos::kernel::vfs::child_count(node); ++index)
         {
             print_node_entry(tinyos::kernel::vfs::child_at(node, index));
@@ -380,6 +386,16 @@ namespace
         tinyos::drivers::vga::put_char('\n');
         if (!node->directory)
         {
+            return;
+        }
+
+        if (!tinyos::kernel::vfs::can_list_directory(node))
+        {
+            for (size_t index = 0; index <= depth; ++index)
+            {
+                tinyos::drivers::vga::write("  ");
+            }
+            tinyos::drivers::vga::write_line("<permission denied>");
             return;
         }
 
@@ -431,8 +447,15 @@ namespace
         if (node->directory)
         {
             tinyos::drivers::vga::write("Children : ");
-            write_uint64(tinyos::kernel::vfs::child_count(node));
-            tinyos::drivers::vga::put_char('\n');
+            if (tinyos::kernel::vfs::can_list_directory(node))
+            {
+                write_uint64(tinyos::kernel::vfs::child_count(node));
+                tinyos::drivers::vga::put_char('\n');
+            }
+            else
+            {
+                tinyos::drivers::vga::write_line("permission denied");
+            }
         }
         else
         {
@@ -473,6 +496,114 @@ namespace
         tinyos::drivers::vga::write_line("File updated.");
     }
 
+    bool buffer_equals(const char* data, size_t size, const char* expected)
+    {
+        if (data == nullptr || expected == nullptr)
+        {
+            return false;
+        }
+
+        const size_t expected_size = tinyos::core::string::length(expected);
+        if (size != expected_size)
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < size; ++index)
+        {
+            if (data[index] != expected[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void record_self_test_result(const char* name, bool passed, size_t& passed_count, size_t& failed_count)
+    {
+        tinyos::drivers::vga::write(passed ? "[ok]   " : "[fail] ");
+        tinyos::drivers::vga::write_line(name);
+        if (passed)
+        {
+            ++passed_count;
+        }
+        else
+        {
+            ++failed_count;
+        }
+    }
+
+    bool file_contains(const char* path, const char* expected)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        const char* data = nullptr;
+        size_t size = 0;
+        return tinyos::kernel::vfs::read_file(node, data, size) && buffer_equals(data, size, expected);
+    }
+
+    void cleanup_fs_self_test_paths()
+    {
+        (void)tinyos::kernel::vfs::set_access_mode("/users/fstest/source.txt", 0600);
+        (void)tinyos::kernel::vfs::set_access_mode("/users/fstest/copy.txt", 0600);
+        (void)tinyos::kernel::vfs::set_access_mode("/users/fstest/moved.txt", 0600);
+        (void)tinyos::kernel::vfs::set_access_mode("/users/fstest", 0700);
+        (void)tinyos::kernel::vfs::remove("/users/fstest/moved.txt");
+        (void)tinyos::kernel::vfs::remove("/users/fstest/copy.txt");
+        (void)tinyos::kernel::vfs::remove("/users/fstest/source.txt");
+        (void)tinyos::kernel::vfs::remove("/users/fstest");
+    }
+
+    bool run_fs_self_test()
+    {
+        size_t passed = 0;
+        size_t failed = 0;
+        constexpr const char* DirectoryPath = "/users/fstest";
+        constexpr const char* SourcePath = "/users/fstest/source.txt";
+        constexpr const char* CopyPath = "/users/fstest/copy.txt";
+        constexpr const char* MovedPath = "/users/fstest/moved.txt";
+
+        cleanup_fs_self_test_paths();
+        tinyos::drivers::vga::write_line("RAMFS file operation self-test:");
+        record_self_test_result("create directory", tinyos::kernel::vfs::create_directory(DirectoryPath), passed, failed);
+        record_self_test_result("directory visible", tinyos::kernel::vfs::find(DirectoryPath) != nullptr, passed, failed);
+        record_self_test_result("create file", tinyos::kernel::vfs::create_file(SourcePath), passed, failed);
+        record_self_test_result("write file", tinyos::kernel::vfs::write_file(SourcePath, "alpha", 5), passed, failed);
+        record_self_test_result("read written file", file_contains(SourcePath, "alpha"), passed, failed);
+        record_self_test_result("copy file", tinyos::kernel::vfs::copy_file(SourcePath, CopyPath), passed, failed);
+        record_self_test_result("read copied file", file_contains(CopyPath, "alpha"), passed, failed);
+        record_self_test_result("move copied file", tinyos::kernel::vfs::move(CopyPath, MovedPath), passed, failed);
+        record_self_test_result("old copy path removed", tinyos::kernel::vfs::find(CopyPath) == nullptr, passed, failed);
+        record_self_test_result("moved file visible", file_contains(MovedPath, "alpha"), passed, failed);
+        record_self_test_result("reject non-empty directory remove", !tinyos::kernel::vfs::remove(DirectoryPath), passed, failed);
+        record_self_test_result("set read-only mode", tinyos::kernel::vfs::set_access_mode(SourcePath, 0400), passed, failed);
+        record_self_test_result("reject write without owner write bit", !tinyos::kernel::vfs::write_file(SourcePath, "blocked", 7), passed, failed);
+        record_self_test_result("restore writable mode", tinyos::kernel::vfs::set_access_mode(SourcePath, 0600), passed, failed);
+        record_self_test_result("rewrite writable file", tinyos::kernel::vfs::write_file(SourcePath, "omega", 5), passed, failed);
+        record_self_test_result("read rewritten file", file_contains(SourcePath, "omega"), passed, failed);
+        record_self_test_result("remove moved file", tinyos::kernel::vfs::remove(MovedPath), passed, failed);
+        record_self_test_result("remove source file", tinyos::kernel::vfs::remove(SourcePath), passed, failed);
+        record_self_test_result("set no-read directory mode", tinyos::kernel::vfs::set_access_mode(DirectoryPath, 0300), passed, failed);
+        const auto* no_read_directory = tinyos::kernel::vfs::find(DirectoryPath);
+        record_self_test_result("deny directory listing without owner read bit", !tinyos::kernel::vfs::can_list_directory(no_read_directory) && tinyos::kernel::vfs::child_count(no_read_directory) == 0, passed, failed);
+        record_self_test_result("allow directory mutation with write and execute bits", tinyos::kernel::vfs::create_file(SourcePath), passed, failed);
+        record_self_test_result("remove file from no-read directory", tinyos::kernel::vfs::remove(SourcePath), passed, failed);
+        record_self_test_result("set no-execute directory mode", tinyos::kernel::vfs::set_access_mode(DirectoryPath, 0600), passed, failed);
+        const auto* no_execute_directory = tinyos::kernel::vfs::find(DirectoryPath);
+        record_self_test_result("deny directory enter without owner execute bit", !tinyos::kernel::vfs::can_enter_directory(no_execute_directory), passed, failed);
+        record_self_test_result("deny directory mutation without owner execute bit", !tinyos::kernel::vfs::create_file(SourcePath), passed, failed);
+        record_self_test_result("restore directory mode", tinyos::kernel::vfs::set_access_mode(DirectoryPath, 0700), passed, failed);
+        record_self_test_result("remove empty directory", tinyos::kernel::vfs::remove(DirectoryPath), passed, failed);
+
+        cleanup_fs_self_test_paths();
+        tinyos::drivers::vga::write("Passed: ");
+        write_uint64(passed);
+        tinyos::drivers::vga::write(" Failed: ");
+        write_uint64(failed);
+        tinyos::drivers::vga::put_char('\n');
+        return failed == 0;
+    }
+
     size_t clamped_fileui_selection(const char* path, size_t selected)
     {
         const auto* node = tinyos::kernel::vfs::find(path);
@@ -489,6 +620,11 @@ namespace
     {
         const auto* node = tinyos::kernel::vfs::find(path);
         if (node == nullptr || !node->directory)
+        {
+            return nullptr;
+        }
+
+        if (!tinyos::kernel::vfs::can_list_directory(node))
         {
             return nullptr;
         }
@@ -511,6 +647,12 @@ namespace
         if (node == nullptr || !node->directory)
         {
             tinyos::drivers::vga::write_line("Directory not found.");
+            return;
+        }
+
+        if (!tinyos::kernel::vfs::can_list_directory(node))
+        {
+            tinyos::drivers::vga::write_line("Directory not readable.");
             return;
         }
 
@@ -632,6 +774,12 @@ namespace
                 {
                     if (child->directory)
                     {
+                        if (!tinyos::kernel::vfs::can_enter_directory(child))
+                        {
+                            fileui_message("Directory not executable.");
+                            continue;
+                        }
+
                         (void)copy_path_string(current_path, sizeof(current_path), selected_path);
                         selected = 0;
                     }
@@ -1834,6 +1982,7 @@ namespace
         { "remove", "remove runtime file or empty directory", "remove <path>", nullptr },
         { "rm", "compatibility alias for remove", "rm <path>", nullptr },
         { "chmod", "change RAMFS access mode", "chmod <mode> <path>", nullptr },
+        { "fstest", "run RAMFS file operation self-test", "fstest", "fstest" },
         { "ramfsinfo", "show RAMFS state", "ramfsinfo", "ramfsinfo" },
         { "vfsinfo", "show VFS state", "vfsinfo", "vfsinfo" }
     };
@@ -2092,6 +2241,7 @@ namespace
         tinyos::drivers::vga::write_line("  copy/cp  - copy readable RAMFS file");
         tinyos::drivers::vga::write_line("  move/mv  - move runtime RAMFS file or directory");
         tinyos::drivers::vga::write_line("  remove/rm - remove runtime RAMFS file or empty directory");
+        tinyos::drivers::vga::write_line("  fstest   - run RAMFS file operation self-test");
         tinyos::drivers::vga::write_line("  aliases  - show compatibility command aliases");
         tinyos::drivers::vga::write_line("  devices  - show TinyOS device registry");
         tinyos::drivers::vga::write_line("  device   - show one registered device");
@@ -2242,6 +2392,12 @@ namespace tinyos::shell
             if (node == nullptr || !node->directory)
             {
                 drivers::vga::write_line("Directory not found.");
+                return;
+            }
+
+            if (!kernel::vfs::can_enter_directory(node))
+            {
+                drivers::vga::write_line("Directory not executable.");
                 return;
             }
 
@@ -2510,6 +2666,12 @@ namespace tinyos::shell
             }
 
             drivers::vga::write_line(kernel::vfs::remove(resolved) ? "Path removed." : "Remove failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "fstest") == 0)
+        {
+            drivers::vga::write_line(run_fs_self_test() ? "Filesystem self-test passed." : "Filesystem self-test failed.");
             return;
         }
 
