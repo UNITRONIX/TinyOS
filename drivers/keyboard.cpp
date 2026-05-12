@@ -43,7 +43,7 @@ namespace
     volatile size_t g_read_index = 0;
     volatile size_t g_write_index = 0;
     volatile bool g_interrupt_input_enabled = false;
-    bool g_ignore_extended_scancode = false;
+    bool g_extended_scancode = false;
     volatile uint64_t g_irq_scancode_count = 0;
     volatile uint64_t g_polled_scancode_count = 0;
     volatile uint64_t g_ignored_scancode_count = 0;
@@ -132,15 +132,59 @@ namespace
 
         if (scancode == ExtendedPrefix0 || scancode == ExtendedPrefix1)
         {
-            g_ignore_extended_scancode = true;
-            ++g_ignored_scancode_count;
+            g_extended_scancode = true;
             return false;
         }
 
-        if (g_ignore_extended_scancode)
+        if (g_extended_scancode)
         {
-            g_ignore_extended_scancode = false;
-            ++g_ignored_scancode_count;
+            g_extended_scancode = false;
+            const bool released = (scancode & 0x80) != 0;
+            const uint8_t make = static_cast<uint8_t>(scancode & 0x7F);
+            if (released)
+            {
+                ++g_ignored_scancode_count;
+                return false;
+            }
+
+            switch (make)
+            {
+            case 0x4B:
+                character = tinyos::drivers::keyboard::KeyLeft;
+                return true;
+            case 0x4D:
+                character = tinyos::drivers::keyboard::KeyRight;
+                return true;
+            case 0x48:
+                character = tinyos::drivers::keyboard::KeyUp;
+                return true;
+            case 0x50:
+                character = tinyos::drivers::keyboard::KeyDown;
+                return true;
+            default:
+                ++g_ignored_scancode_count;
+                return false;
+            }
+        }
+
+        if (scancode == 0x4B || scancode == 0x4D || scancode == 0x48 || scancode == 0x50)
+        {
+            switch (scancode)
+            {
+            case 0x4B:
+                character = tinyos::drivers::keyboard::KeyLeft;
+                return true;
+            case 0x4D:
+                character = tinyos::drivers::keyboard::KeyRight;
+                return true;
+            case 0x48:
+                character = tinyos::drivers::keyboard::KeyUp;
+                return true;
+            case 0x50:
+                character = tinyos::drivers::keyboard::KeyDown;
+                return true;
+            }
+
             return false;
         }
 
@@ -206,7 +250,7 @@ namespace tinyos::drivers::keyboard
         g_read_index = 0;
         g_write_index = 0;
         g_interrupt_input_enabled = false;
-        g_ignore_extended_scancode = false;
+        g_extended_scancode = false;
         g_irq_scancode_count = 0;
         g_polled_scancode_count = 0;
         g_ignored_scancode_count = 0;
@@ -318,6 +362,11 @@ namespace tinyos::drivers::keyboard
                 continue;
             }
 
+            if (is_special_key(character))
+            {
+                continue;
+            }
+
             if (!core::memory::buffer_check(max_length, index + 2))
             {
                 continue;
@@ -328,6 +377,11 @@ namespace tinyos::drivers::keyboard
             buffer[index] = '\0';
             tinyos::drivers::vga::put_char(character);
         }
+    }
+
+    bool is_special_key(char character)
+    {
+        return character == KeyLeft || character == KeyRight || character == KeyUp || character == KeyDown;
     }
 
     size_t buffered_character_count()

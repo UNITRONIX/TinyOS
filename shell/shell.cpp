@@ -60,6 +60,8 @@ namespace
     constexpr size_t MaxPathLength = 96;
     char g_current_directory[MaxPathLength] = "/";
 
+    void wait_for_key();
+
     void debug_shell_checkpoint(const char* stage)
     {
 #if defined(TINYOS_DEBUG_BOOT)
@@ -253,10 +255,10 @@ namespace
         return true;
     }
 
-    bool resolve_shell_path(const char* input, char* output, size_t output_size)
+    bool resolve_path_from(const char* base, const char* input, char* output, size_t output_size)
     {
         input = tinyos::core::string::skip_spaces(input);
-        if (input == nullptr || output == nullptr || output_size == 0)
+        if (base == nullptr || input == nullptr || output == nullptr || output_size == 0)
         {
             return false;
         }
@@ -268,7 +270,7 @@ namespace
                 return false;
             }
         }
-        else if (!copy_path_string(output, output_size, g_current_directory))
+        else if (!copy_path_string(output, output_size, base))
         {
             return false;
         }
@@ -301,6 +303,16 @@ namespace
         }
 
         return tinyos::kernel::vfs::validate_path(output);
+    }
+
+    bool resolve_shell_path(const char* input, char* output, size_t output_size)
+    {
+        return resolve_path_from(g_current_directory, input, output, output_size);
+    }
+
+    bool build_child_path(const char* parent, const char* name, char* output, size_t output_size)
+    {
+        return resolve_path_from(parent, name, output, output_size);
     }
 
     void write_buffer(const char* data, size_t size)
@@ -459,6 +471,238 @@ namespace
         }
 
         tinyos::drivers::vga::write_line("File updated.");
+    }
+
+    size_t clamped_fileui_selection(const char* path, size_t selected)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        const size_t count = tinyos::kernel::vfs::child_count(node);
+        if (count == 0)
+        {
+            return 0;
+        }
+
+        return selected < count ? selected : count - 1;
+    }
+
+    const tinyos::kernel::vfs::Node* selected_fileui_node(const char* path, size_t selected)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        if (node == nullptr || !node->directory)
+        {
+            return nullptr;
+        }
+
+        return tinyos::kernel::vfs::child_at(node, selected);
+    }
+
+    void draw_file_ui(const char* path, size_t selected)
+    {
+        const auto* node = tinyos::kernel::vfs::find(path);
+        const size_t count = tinyos::kernel::vfs::child_count(node);
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write_line("TinyOS FileUI");
+        tinyos::drivers::vga::write_line("Up/Down select, Enter/Right open, Left parent, Q/Esc exit");
+        tinyos::drivers::vga::write_line("N file, M dir, E edit, D remove, C copy, R move");
+        tinyos::drivers::vga::write("Path: ");
+        tinyos::drivers::vga::write_line(path);
+        tinyos::drivers::vga::write_line("");
+
+        if (node == nullptr || !node->directory)
+        {
+            tinyos::drivers::vga::write_line("Directory not found.");
+            return;
+        }
+
+        if (count == 0)
+        {
+            tinyos::drivers::vga::write_line("<empty>");
+            return;
+        }
+
+        size_t first = 0;
+        constexpr size_t VisibleRows = 15;
+        if (selected >= VisibleRows)
+        {
+            first = selected - VisibleRows + 1;
+        }
+
+        for (size_t offset = 0; offset < VisibleRows && first + offset < count; ++offset)
+        {
+            const size_t index = first + offset;
+            const auto* child = tinyos::kernel::vfs::child_at(node, index);
+            tinyos::drivers::vga::write(index == selected ? "> " : "  ");
+            print_node_entry(child);
+        }
+    }
+
+    bool fileui_selected_path(const char* directory, size_t selected, char* output, size_t output_size)
+    {
+        const auto* child = selected_fileui_node(directory, selected);
+        return child != nullptr && child->name != nullptr && build_child_path(directory, child->name, output, output_size);
+    }
+
+    bool prompt_fileui_path(const char* base, const char* prompt, char* output, size_t output_size)
+    {
+        char input[MaxInputLength];
+        tinyos::drivers::vga::write(prompt);
+        tinyos::drivers::keyboard::read_line(input, sizeof(input));
+        if (input[0] == '\0')
+        {
+            return false;
+        }
+
+        return resolve_path_from(base, input, output, output_size);
+    }
+
+    bool confirm_fileui_action(const char* prompt)
+    {
+        tinyos::drivers::vga::write(prompt);
+        tinyos::drivers::vga::write(" [y/N] ");
+        const char key = tinyos::drivers::keyboard::read_char();
+        tinyos::drivers::vga::put_char('\n');
+        return key == 'y' || key == 'Y';
+    }
+
+    void fileui_message(const char* message)
+    {
+        tinyos::drivers::vga::write_line(message);
+        wait_for_key();
+    }
+
+    void fileui_show_selected(const char* current_path, size_t selected)
+    {
+        char selected_path[MaxPathLength];
+        if (!fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)))
+        {
+            fileui_message("Nothing selected.");
+            return;
+        }
+
+        tinyos::drivers::vga::clear();
+        show_file_info(selected_path);
+        tinyos::drivers::vga::write_line("");
+        show_file(selected_path);
+        wait_for_key();
+    }
+
+    void run_file_ui()
+    {
+        char current_path[MaxPathLength];
+        if (!copy_path_string(current_path, sizeof(current_path), g_current_directory))
+        {
+            (void)copy_path_string(current_path, sizeof(current_path), "/");
+        }
+
+        size_t selected = 0;
+        for (;;)
+        {
+            selected = clamped_fileui_selection(current_path, selected);
+            draw_file_ui(current_path, selected);
+            const char key = tinyos::drivers::keyboard::read_char();
+            const auto* current_node = tinyos::kernel::vfs::find(current_path);
+            const size_t count = tinyos::kernel::vfs::child_count(current_node);
+
+            if (key == 'q' || key == 'Q' || key == 27)
+            {
+                tinyos::drivers::vga::clear();
+                return;
+            }
+            if (key == tinyos::drivers::keyboard::KeyUp && count != 0)
+            {
+                selected = selected == 0 ? count - 1 : selected - 1;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyDown && count != 0)
+            {
+                selected = (selected + 1) % count;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyLeft)
+            {
+                (void)pop_path_segment(current_path);
+                selected = 0;
+                continue;
+            }
+            if ((key == tinyos::drivers::keyboard::KeyRight || key == '\n') && count != 0)
+            {
+                char selected_path[MaxPathLength];
+                const auto* child = selected_fileui_node(current_path, selected);
+                if (child != nullptr && build_child_path(current_path, child->name, selected_path, sizeof(selected_path)))
+                {
+                    if (child->directory)
+                    {
+                        (void)copy_path_string(current_path, sizeof(current_path), selected_path);
+                        selected = 0;
+                    }
+                    else
+                    {
+                        fileui_show_selected(current_path, selected);
+                    }
+                }
+                continue;
+            }
+            if (key == 'n' || key == 'N')
+            {
+                char path[MaxPathLength];
+                if (prompt_fileui_path(current_path, "New file: ", path, sizeof(path)))
+                {
+                    fileui_message(tinyos::kernel::vfs::create_file(path) ? "File created." : "File create failed.");
+                }
+                continue;
+            }
+            if (key == 'm' || key == 'M')
+            {
+                char path[MaxPathLength];
+                if (prompt_fileui_path(current_path, "New directory: ", path, sizeof(path)))
+                {
+                    fileui_message(tinyos::kernel::vfs::create_directory(path) ? "Directory created." : "Directory create failed.");
+                }
+                continue;
+            }
+            if ((key == 'e' || key == 'E') && count != 0)
+            {
+                char selected_path[MaxPathLength];
+                char text[MaxInputLength];
+                if (fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)))
+                {
+                    tinyos::drivers::vga::write("Text: ");
+                    tinyos::drivers::keyboard::read_line(text, sizeof(text));
+                    edit_file(selected_path, text);
+                    wait_for_key();
+                }
+                continue;
+            }
+            if ((key == 'd' || key == 'D') && count != 0)
+            {
+                char selected_path[MaxPathLength];
+                if (fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)) && confirm_fileui_action("Remove selected path?"))
+                {
+                    fileui_message(tinyos::kernel::vfs::remove(selected_path) ? "Path removed." : "Remove failed.");
+                }
+                continue;
+            }
+            if ((key == 'c' || key == 'C') && count != 0)
+            {
+                char selected_path[MaxPathLength];
+                char destination[MaxPathLength];
+                if (fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)) && prompt_fileui_path(current_path, "Copy to: ", destination, sizeof(destination)))
+                {
+                    fileui_message(tinyos::kernel::vfs::copy_file(selected_path, destination) ? "File copied." : "Copy failed.");
+                }
+                continue;
+            }
+            if ((key == 'r' || key == 'R') && count != 0)
+            {
+                char selected_path[MaxPathLength];
+                char destination[MaxPathLength];
+                if (fileui_selected_path(current_path, selected, selected_path, sizeof(selected_path)) && prompt_fileui_path(current_path, "Move to: ", destination, sizeof(destination)))
+                {
+                    fileui_message(tinyos::kernel::vfs::move(selected_path, destination) ? "Path moved." : "Move failed.");
+                }
+                continue;
+            }
+        }
     }
 
     void print_device_entry(size_t index, const tinyos::kernel::device::Device& device)
@@ -1539,20 +1783,196 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::kernel::platform::requirements::validation_self_test() ? "ok" : "failed");
     }
 
-    void print_help()
+    struct HelpCommand
+    {
+        const char* name;
+        const char* summary;
+        const char* usage;
+    };
+
+    struct HelpCategory
+    {
+        const char* name;
+        const HelpCommand* commands;
+        size_t count;
+    };
+
+    const HelpCommand CoreHelp[] = {
+        { "clear", "clear the terminal", "clear" },
+        { "version", "show TinyOS version", "version" },
+        { "requirements", "show machine requirements", "requirements" },
+        { "platforminfo", "show platform manifest", "platforminfo" },
+        { "securityinfo", "show security counters", "securityinfo" },
+        { "reboot", "reboot the machine", "reboot" }
+    };
+
+    const HelpCommand FileHelp[] = {
+        { "pwd", "show current directory", "pwd" },
+        { "cd", "change directory", "cd <path>" },
+        { "files", "list files", "files [path]" },
+        { "fsmap", "show file tree", "fsmap [path]" },
+        { "mkdir", "create directory", "mkdir <path>" },
+        { "touch", "create writable file", "touch <path>" },
+        { "write", "overwrite file text", "write <path> <text>" },
+        { "copy", "copy readable file", "copy <source> <destination>" },
+        { "move", "move runtime file or directory", "move <source> <destination>" },
+        { "remove", "remove runtime file or empty directory", "remove <path>" },
+        { "chmod", "change access mode", "chmod <mode> <path>" }
+    };
+
+    const HelpCommand RuntimeHelp[] = {
+        { "tools", "list management tools", "tools" },
+        { "runtimeinfo", "show runtime manifest", "runtimeinfo" },
+        { "appinfo", "show app profiles", "appinfo" },
+        { "tappinfo", "show TAPP summary", "tappinfo" },
+        { "tappverify", "verify TAPP install gate", "tappverify <package>" },
+        { "trustinfo", "show trust store", "trustinfo" },
+        { "imageinfo", "show secure image pipeline", "imageinfo" }
+    };
+
+    const HelpCommand DiagnosticsHelp[] = {
+        { "meminfo", "show memory map summary", "meminfo" },
+        { "heapinfo", "show kernel heap state", "heapinfo" },
+        { "frameinfo", "show frame allocator state", "frameinfo" },
+        { "paginginfo", "show paging state", "paginginfo" },
+        { "irqinfo", "show IRQ counters", "irqinfo" },
+        { "keyboardinfo", "show keyboard driver state", "keyboardinfo" },
+        { "uptime", "show PIT ticks", "uptime" }
+    };
+
+    const HelpCommand UiHelp[] = {
+        { "help", "open this command browser", "help" },
+        { "helplist", "print classic command list", "helplist" },
+        { "fileui", "open terminal file browser", "fileui" },
+        { "terminalinfo", "show terminal UI scaffold", "terminalinfo" },
+        { "widgetinfo", "show widget scaffold", "widgetinfo" },
+        { "desktop", "Alpha desktop prototype", "desktop" },
+        { "desktopinfo", "Alpha desktop state", "desktopinfo" }
+    };
+
+    const HelpCategory HelpCategories[] = {
+        { "Core", CoreHelp, sizeof(CoreHelp) / sizeof(CoreHelp[0]) },
+        { "Files", FileHelp, sizeof(FileHelp) / sizeof(FileHelp[0]) },
+        { "Runtime", RuntimeHelp, sizeof(RuntimeHelp) / sizeof(RuntimeHelp[0]) },
+        { "Diagnostics", DiagnosticsHelp, sizeof(DiagnosticsHelp) / sizeof(DiagnosticsHelp[0]) },
+        { "Terminal", UiHelp, sizeof(UiHelp) / sizeof(UiHelp[0]) }
+    };
+
+    void wait_for_key()
+    {
+        tinyos::drivers::vga::write_line("");
+        tinyos::drivers::vga::write("Press any key to continue...");
+        (void)tinyos::drivers::keyboard::read_char();
+    }
+
+    void draw_help_ui(size_t category_index, size_t selected_index)
+    {
+        const auto& category = HelpCategories[category_index];
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write_line("TinyOS HelpUI");
+        tinyos::drivers::vga::write_line("Left/Right category, Up/Down command, Enter details, Q/Esc exit");
+        tinyos::drivers::vga::write_line("Desktop-related commands are Alpha development tools and may be incomplete.");
+        tinyos::drivers::vga::write_line("");
+        tinyos::drivers::vga::write("Category ");
+        write_uint64(category_index + 1);
+        tinyos::drivers::vga::write("/");
+        write_uint64(sizeof(HelpCategories) / sizeof(HelpCategories[0]));
+        tinyos::drivers::vga::write(": ");
+        tinyos::drivers::vga::write_line(category.name);
+        tinyos::drivers::vga::write_line("");
+
+        for (size_t index = 0; index < category.count; ++index)
+        {
+            tinyos::drivers::vga::write(index == selected_index ? "> " : "  ");
+            tinyos::drivers::vga::write(category.commands[index].name);
+            tinyos::drivers::vga::write(" - ");
+            tinyos::drivers::vga::write_line(category.commands[index].summary);
+        }
+    }
+
+    void show_help_command(const HelpCommand& command)
+    {
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write("Command: ");
+        tinyos::drivers::vga::write_line(command.name);
+        tinyos::drivers::vga::write("Summary: ");
+        tinyos::drivers::vga::write_line(command.summary);
+        tinyos::drivers::vga::write("Usage  : ");
+        tinyos::drivers::vga::write_line(command.usage);
+        wait_for_key();
+    }
+
+    void run_help_ui()
+    {
+        size_t category_index = 0;
+        size_t selected_index = 0;
+        constexpr size_t CategoryCount = sizeof(HelpCategories) / sizeof(HelpCategories[0]);
+
+        for (;;)
+        {
+            if (selected_index >= HelpCategories[category_index].count)
+            {
+                selected_index = 0;
+            }
+
+            draw_help_ui(category_index, selected_index);
+            const char key = tinyos::drivers::keyboard::read_char();
+            if (key == 'q' || key == 'Q' || key == 27)
+            {
+                tinyos::drivers::vga::clear();
+                return;
+            }
+            if (key == tinyos::drivers::keyboard::KeyLeft)
+            {
+                category_index = category_index == 0 ? CategoryCount - 1 : category_index - 1;
+                selected_index = 0;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyRight)
+            {
+                category_index = (category_index + 1) % CategoryCount;
+                selected_index = 0;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyUp)
+            {
+                selected_index = selected_index == 0 ? HelpCategories[category_index].count - 1 : selected_index - 1;
+                continue;
+            }
+            if (key == tinyos::drivers::keyboard::KeyDown)
+            {
+                selected_index = (selected_index + 1) % HelpCategories[category_index].count;
+                continue;
+            }
+            if (key == '\n')
+            {
+                show_help_command(HelpCategories[category_index].commands[selected_index]);
+            }
+        }
+    }
+
+    void print_help_list()
     {
         tinyos::drivers::vga::write_line("Available commands:");
+        tinyos::drivers::vga::write_line("  helpui   - interactive terminal command browser");
+        tinyos::drivers::vga::write_line("  fileui   - interactive terminal file browser");
+        tinyos::drivers::vga::write_line("  helplist - print this classic command list");
+        tinyos::drivers::vga::write_line("  desktop* - Alpha desktop prototypes; development only, incomplete");
         tinyos::drivers::vga::write_line("  help     - show this help");
         tinyos::drivers::vga::write_line("  clear    - clear the screen");
         tinyos::drivers::vga::write_line("  pwd      - show current directory");
         tinyos::drivers::vga::write_line("  cd       - change current directory");
         tinyos::drivers::vga::write_line("  mkdir    - create RAMFS directory");
+        tinyos::drivers::vga::write_line("  touch    - create writable RAMFS file");
         tinyos::drivers::vga::write_line("  chmod    - change RAMFS access mode");
         tinyos::drivers::vga::write_line("  files    - list TinyOS RAMFS path");
         tinyos::drivers::vga::write_line("  fsmap    - show TinyOS RAMFS tree");
         tinyos::drivers::vga::write_line("  show     - print TinyOS RAMFS file");
         tinyos::drivers::vga::write_line("  describe - show TinyOS RAMFS node details");
         tinyos::drivers::vga::write_line("  write    - overwrite writable TinyOS RAMFS file");
+        tinyos::drivers::vga::write_line("  copy/cp  - copy readable RAMFS file");
+        tinyos::drivers::vga::write_line("  move/mv  - move runtime RAMFS file or directory");
+        tinyos::drivers::vga::write_line("  remove/rm - remove runtime RAMFS file or empty directory");
         tinyos::drivers::vga::write_line("  aliases  - show compatibility command aliases");
         tinyos::drivers::vga::write_line("  devices  - show TinyOS device registry");
         tinyos::drivers::vga::write_line("  device   - show one registered device");
@@ -1731,6 +2151,27 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::starts_with(command, "touch "))
+        {
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(command + 5, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::create_file(resolved) ? "File created." : "File create failed.");
+            return;
+        }
+
         if (core::string::starts_with(command, "chmod "))
         {
             char mode_text[8];
@@ -1883,6 +2324,76 @@ namespace tinyos::shell
             return;
         }
 
+        if (core::string::starts_with(command, "copy ") || core::string::starts_with(command, "cp "))
+        {
+            char source[MaxPathLength];
+            char destination[MaxPathLength];
+            const char* rest = nullptr;
+            const char* arguments = core::string::starts_with(command, "copy ") ? command + 5 : command + 2;
+            if (!copy_argument(arguments, source, sizeof(source), rest) || !copy_argument(rest, destination, sizeof(destination), rest))
+            {
+                drivers::vga::write_line("Usage: copy <source> <destination>");
+                return;
+            }
+
+            char resolved_source[MaxPathLength];
+            char resolved_destination[MaxPathLength];
+            if (!resolve_shell_path(source, resolved_source, sizeof(resolved_source)) || !resolve_shell_path(destination, resolved_destination, sizeof(resolved_destination)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::copy_file(resolved_source, resolved_destination) ? "File copied." : "Copy failed.");
+            return;
+        }
+
+        if (core::string::starts_with(command, "move ") || core::string::starts_with(command, "mv "))
+        {
+            char source[MaxPathLength];
+            char destination[MaxPathLength];
+            const char* rest = nullptr;
+            const char* arguments = core::string::starts_with(command, "move ") ? command + 5 : command + 2;
+            if (!copy_argument(arguments, source, sizeof(source), rest) || !copy_argument(rest, destination, sizeof(destination), rest))
+            {
+                drivers::vga::write_line("Usage: move <source> <destination>");
+                return;
+            }
+
+            char resolved_source[MaxPathLength];
+            char resolved_destination[MaxPathLength];
+            if (!resolve_shell_path(source, resolved_source, sizeof(resolved_source)) || !resolve_shell_path(destination, resolved_destination, sizeof(resolved_destination)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::move(resolved_source, resolved_destination) ? "Path moved." : "Move failed.");
+            return;
+        }
+
+        if (core::string::starts_with(command, "remove ") || core::string::starts_with(command, "rm "))
+        {
+            char path[MaxPathLength];
+            const char* rest = nullptr;
+            const char* arguments = core::string::starts_with(command, "remove ") ? command + 7 : command + 2;
+            if (!copy_argument(arguments, path, sizeof(path), rest))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            char resolved[MaxPathLength];
+            if (!resolve_shell_path(path, resolved, sizeof(resolved)))
+            {
+                drivers::vga::write_line("Invalid path.");
+                return;
+            }
+
+            drivers::vga::write_line(kernel::vfs::remove(resolved) ? "Path removed." : "Remove failed.");
+            return;
+        }
+
         if (core::string::compare(command, "aliases") == 0)
         {
             drivers::vga::write_line("Compatibility aliases:");
@@ -1894,6 +2405,9 @@ namespace tinyos::shell
             drivers::vga::write_line("  mkdir    -> create RAMFS directory");
             drivers::vga::write_line("  chmod    -> change RAMFS access mode");
             drivers::vga::write_line("  edit     -> write");
+            drivers::vga::write_line("  cp       -> copy");
+            drivers::vga::write_line("  mv       -> move");
+            drivers::vga::write_line("  rm       -> remove");
             drivers::vga::write_line("  devlist  -> devices");
             return;
         }
@@ -3057,9 +3571,21 @@ namespace tinyos::shell
             return;
         }
 
-        if (core::string::compare(command, "help") == 0)
+        if (core::string::compare(command, "help") == 0 || core::string::compare(command, "helpui") == 0)
         {
-            print_help();
+            run_help_ui();
+            return;
+        }
+
+        if (core::string::compare(command, "helplist") == 0)
+        {
+            print_help_list();
+            return;
+        }
+
+        if (core::string::compare(command, "fileui") == 0)
+        {
+            run_file_ui();
             return;
         }
 

@@ -16,6 +16,10 @@ namespace tinyos::kernel::vfs::ramfs
     bool read_file(const Node* node, const char*& data, size_t& size);
     bool write_file(const char* path, const char* data, size_t size);
     bool create_directory(const char* path);
+    bool create_file(const char* path);
+    bool remove(const char* path);
+    bool copy_file(const char* source_path, const char* destination_path);
+    bool move(const char* source_path, const char* destination_path);
     uint16_t access_mode(const Node* node);
     bool set_access_mode(const char* path, uint16_t mode);
 }

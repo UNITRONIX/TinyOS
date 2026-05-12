@@ -87,6 +87,56 @@ namespace
         TINYOS_ASSERT(tinyos::kernel::device::register_device(name, device_class, state, unit, flags), "Device registry rejected a core device.");
     }
 
+    void write_decimal(uint64_t value)
+    {
+        char buffer[21];
+        buffer[20] = '\0';
+
+        int index = 19;
+        do
+        {
+            buffer[index] = static_cast<char>('0' + (value % 10));
+            value /= 10;
+            --index;
+        } while (value != 0 && index >= 0);
+
+        tinyos::drivers::vga::write(&buffer[index + 1]);
+    }
+
+    void show_terminal_boot_summary()
+    {
+        const auto& requirements = tinyos::kernel::platform::requirements::current();
+        const auto& platform = tinyos::kernel::platform::requirements::platform();
+
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write(tinyos::config::Name);
+        tinyos::drivers::vga::write(" ");
+        tinyos::drivers::vga::write(tinyos::config::Version);
+        tinyos::drivers::vga::write_line(" terminal session");
+        tinyos::drivers::vga::write_line("Project: modular low-resource OS for IoT and portable targets");
+        tinyos::drivers::vga::write_line("");
+
+        tinyos::drivers::vga::write("Machine : ");
+        tinyos::drivers::vga::write_line(platform.name);
+        tinyos::drivers::vga::write("CPU     : ");
+        tinyos::drivers::vga::write_line(requirements.architecture);
+        tinyos::drivers::vga::write("Boot    : ");
+        tinyos::drivers::vga::write_line(requirements.boot_protocol);
+        tinyos::drivers::vga::write("Console : ");
+        tinyos::drivers::vga::write_line(requirements.display);
+        tinyos::drivers::vga::write("Input   : ");
+        tinyos::drivers::vga::write_line(requirements.input);
+        tinyos::drivers::vga::write("Memory  : ");
+        write_decimal(tinyos::kernel::memory::map::usable_bytes() / (1024 * 1024));
+        tinyos::drivers::vga::write_line(" MiB usable");
+        tinyos::drivers::vga::write("Runtime : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::vfs::is_ready() ? "kernel shell + RAMFS ready" : "kernel shell ready");
+        tinyos::drivers::vga::write_line("");
+        tinyos::drivers::vga::write_line("Type 'help' for commands, 'helpui' for the terminal command browser.");
+        tinyos::drivers::vga::write_line("Desktop commands are Alpha development tools and may be incomplete.");
+        tinyos::drivers::vga::write_line("");
+    }
+
     void record_multiboot_framebuffer(uint32_t multiboot_info_addr)
     {
         if (multiboot_info_addr == 0)
@@ -418,13 +468,10 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
             tinyos::ui::terminal::initialize();
         }
     #endif
-    tinyos::api::print("Architecture: ");
-    tinyos::api::print(tinyos::config::Architecture);
-    tinyos::api::print("\n");
+    show_terminal_boot_summary();
 #if defined(TINYOS_DEBUG_BOOT)
     tinyos::api::print("Debug boot mode active.\n");
 #endif
-    tinyos::api::print("Type 'help' to list commands.\n\n");
 
     debug_boot_checkpoint("entering shell");
     tinyos::shell::run();

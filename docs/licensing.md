@@ -19,3 +19,9 @@ If a fully permissive boot artifact is required later, evaluate a boot path whos
 ## Naming note
 
 Directory and command names are not license inheritance by themselves. Still, TinyOS should use its own primary names for clarity and identity, while optional aliases can help users who already know Unix-style shells.
+
+## Commercial-readiness note
+
+Apache-2.0 allows commercial use and private redistribution, but a later commercial edition or dual-license path should keep ownership and contribution records clean. Before accepting outside contributions, decide whether the project needs a Developer Certificate of Origin, contributor agreement, or another lightweight provenance process.
+
+Avoid importing GPL/copyleft code into kernel, drivers, shell, package tools, documentation examples, UI assets, or test fixtures unless the project intentionally accepts the distribution obligations for that artifact. When implementing familiar terminal behavior, write original code from public specifications and project design notes rather than copying another shell or operating system implementation.

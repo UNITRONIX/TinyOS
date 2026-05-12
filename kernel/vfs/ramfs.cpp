@@ -4,8 +4,10 @@
 namespace
 {
     constexpr size_t MaxRuntimeDirectories = 8;
+    constexpr size_t MaxRuntimeFiles = 8;
     constexpr size_t MaxRuntimeNameLength = 48;
-    constexpr char ReadmeText[] = "TinyOS RAMFS\nUse pwd, cd, files, fsmap, show, describe, mkdir and write. Use tools for the management command manifest. Compatibility aliases are optional.\n";
+    constexpr size_t MaxRuntimeFileBytes = 512;
+    constexpr char ReadmeText[] = "TinyOS RAMFS\nUse pwd, cd, files, fsmap, show, describe, mkdir, touch, write, copy, move, remove and chmod. Use tools for the management command manifest. Compatibility aliases are optional.\n";
     constexpr char ShellText[] = "kernel-shell=active\nfuture-userland-shell=planned\n";
     constexpr char SystemText[] = "name=TinyOS\narch=i686\nstorage=ramfs\n";
     constexpr char RequirementsText[] = "arch=i686\nboot=grub-multiboot-iso\nminimum-ram=32MiB\nrecommended-ram=128MiB\ndisplay=vga-text-80x25\ninput=ps2-keyboard\nemulator=qemu-system-i386\n";
@@ -13,7 +15,7 @@ namespace
     constexpr char AppsText[] = "ready=system-shell\nplanned=example-system-tool,desktop-shell,web-gui-host,selfhost-toolchain,bytecode-service\npolicy=runtime-capability-subset\nlauncher=profile-check-only\nsecurity=least-privilege-before-launch\ncommands=appinfo,launchinfo,launchcheck\n";
     constexpr char TappText[] = "extension=.tapp\nformat=tinyos-tapp-v0\nsignature=detached-rsa-sha256\nreceipt=.sig.receipt\nready=system-shell.tapp\nvalid=example-system-tool.tapp\nplanned=desktop-shell.tapp,web-gui-host.tapp,selfhost-toolchain.tapp\ncommands=tappinfo,tapps,tapp,tappcheck,tappverify\nhost-tools=keygen-app,trust-app,sign-app,verify-app\npolicy=signed-manifest-required,payload-hash-required,capability-subset-required\nverifier=install-gate-contract\n";
     constexpr char TrustText[] = "store=tapp-trust-v0\nready=tinyos-dev-app-signing\nplanned=tinyos-release-app-root,tinyos-image-signing-root,tinyos-recovery-root\nrevoked=tinyos-revoked-test-key\nalgorithm=rsa-sha256\ndev-key=build/keys/tapp-dev-public.pem\nhost-tool=scripts/tinyos-image.sh trust-app\ncommands=trustinfo,trust\npolicy=development-key-not-for-release,revoked-keys-never-match\n";
-    constexpr char ToolsText[] = "ready=help,tools,toolinfo,tool,pwd,cd,files,fsmap,show,describe,mkdir,chmod,write,devices,device,blockinfo,storageinfo,meminfo,frameinfo,heapinfo,paginginfo,addrspaceinfo,runtimeinfo,appinfo,launchinfo,launchcheck,tappinfo,tapps,tapp,tappcheck,tappverify,trustinfo,trust,imageinfo,provisioninfo,deployinfo,securityinfo,integritycheck,renderinfo,terminalinfo,widgetinfo,uieventinfo,schedinfo,taskinfo,timerinfo,uptime,reboot\nplanned=copy,remove,mount,ps,kill,service,useradd,package,tappinstall,tappremove,imagebuild,imagesign,imageencrypt,keygen,deploy,provision,rollback,netinfo\npolicy=high-risk-tools-must-be-explicit\n";
+    constexpr char ToolsText[] = "ready=help,helpui,helplist,fileui,tools,toolinfo,tool,pwd,cd,files,fsmap,show,describe,mkdir,touch,chmod,write,copy,move,remove,devices,device,blockinfo,storageinfo,meminfo,frameinfo,heapinfo,paginginfo,addrspaceinfo,runtimeinfo,appinfo,launchinfo,launchcheck,tappinfo,tapps,tapp,tappcheck,tappverify,trustinfo,trust,imageinfo,provisioninfo,deployinfo,securityinfo,integritycheck,renderinfo,terminalinfo,widgetinfo,uieventinfo,schedinfo,taskinfo,timerinfo,uptime,reboot\nplanned=mount,ps,kill,service,useradd,package,tappinstall,tappremove,imagebuild,imagesign,imageencrypt,keygen,deploy,provision,rollback,netinfo\npolicy=high-risk-tools-must-be-explicit\n";
     constexpr char ProvisioningText[] = "pipeline=app-bundle,app-signature,system-profile,image-manifest,image-build,image-sign,image-encrypt,deploy-check,deploy-ssh,target-verify,rollback-slot\nhost-tool=scripts/tinyos-image.sh\nready-contracts=app-bundle,app-signature,system-profile,image-manifest,deploy-check,deploy-receipt\nplanned-host-tools=imagebuild,imagesign,imageencrypt,keygen,deploy\nplanned-kernel=target-verify,rollback-slot\ntransport=ssh-sftp-now,tinylink-later\npolicy=sign-before-deploy,encrypt-per-target,deploy-check-before-transport,rollback-before-activate\n";
     constexpr char UiText[] = "renderer=text-grid\nrenderer-primitives=fill-rect,clear-area\nterminal=status-row-plus-content\nterminal-panels=clear,panel\nwidgets=label,button\nwidget-events=dispatch,activate\nevents=ui-event-queue\ncommands=renderinfo,rendertest,renderfilltest,terminalinfo,terminaltest,terminalclear,terminalpaneltest,widgetinfo,widgettest,widgetdispatch,widgetactiontest,uieventinfo,uieventpump,uieventpeek,uieventtest\n";
     constexpr char ConsoleText[] = "console device placeholder\n";
@@ -51,6 +53,11 @@ namespace
     char g_runtime_directory_names[MaxRuntimeDirectories][MaxRuntimeNameLength + 1];
     bool g_runtime_directory_used[MaxRuntimeDirectories];
     uint16_t g_runtime_directory_modes[MaxRuntimeDirectories];
+    tinyos::kernel::vfs::Node g_runtime_files[MaxRuntimeFiles];
+    char g_runtime_file_names[MaxRuntimeFiles][MaxRuntimeNameLength + 1];
+    char g_runtime_file_data[MaxRuntimeFiles][MaxRuntimeFileBytes + 1];
+    bool g_runtime_file_used[MaxRuntimeFiles];
+    uint16_t g_runtime_file_modes[MaxRuntimeFiles];
 
     tinyos::kernel::vfs::Node* g_nodes[] = {
         &g_root,
@@ -111,6 +118,14 @@ namespace
             }
         }
 
+        for (size_t index = 0; index < MaxRuntimeFiles; ++index)
+        {
+            if (g_runtime_file_used[index])
+            {
+                ++count;
+            }
+        }
+
         return count;
     }
 
@@ -132,6 +147,21 @@ namespace
             if (runtime_index == 0)
             {
                 return &g_runtime_directories[slot];
+            }
+
+            --runtime_index;
+        }
+
+        for (size_t slot = 0; slot < MaxRuntimeFiles; ++slot)
+        {
+            if (!g_runtime_file_used[slot])
+            {
+                continue;
+            }
+
+            if (runtime_index == 0)
+            {
+                return &g_runtime_files[slot];
             }
 
             --runtime_index;
@@ -164,6 +194,20 @@ namespace
         for (size_t index = 0; index < MaxRuntimeDirectories; ++index)
         {
             if (g_runtime_directory_used[index] && &g_runtime_directories[index] == node)
+            {
+                result = index;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool runtime_file_index(const tinyos::kernel::vfs::Node* node, size_t& result)
+    {
+        for (size_t index = 0; index < MaxRuntimeFiles; ++index)
+        {
+            if (g_runtime_file_used[index] && &g_runtime_files[index] == node)
             {
                 result = index;
                 return true;
@@ -267,6 +311,132 @@ namespace
 
         return node->writable_data != nullptr ? node->writable_data : node->readonly_data;
     }
+
+    bool directory_allows_changes(const tinyos::kernel::vfs::Node* node)
+    {
+        return node != nullptr && node->directory && (tinyos::kernel::vfs::ramfs::access_mode(node) & 0300) == 0300;
+    }
+
+    bool split_parent_leaf(const char* path, tinyos::kernel::vfs::Node*& parent, const char*& leaf, size_t& leaf_length)
+    {
+        parent = nullptr;
+        leaf = nullptr;
+        leaf_length = 0;
+        if (path == nullptr || path[0] != '/' || path[1] == '\0')
+        {
+            return false;
+        }
+
+        parent = &g_root;
+        const char* cursor = path;
+        while (*cursor == '/')
+        {
+            ++cursor;
+        }
+
+        while (*cursor != '\0')
+        {
+            const char* segment = cursor;
+            size_t length = 0;
+            while (cursor[length] != '\0' && cursor[length] != '/')
+            {
+                ++length;
+            }
+
+            cursor += length;
+            while (*cursor == '/')
+            {
+                ++cursor;
+            }
+
+            if (*cursor == '\0')
+            {
+                leaf = segment;
+                leaf_length = length;
+                return leaf_length != 0 && leaf_length <= MaxRuntimeNameLength;
+            }
+
+            parent = child_by_segment(parent, segment, length);
+            if (parent == nullptr || !parent->directory)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    void copy_name(char* destination, const char* source, size_t length)
+    {
+        for (size_t index = 0; index < length; ++index)
+        {
+            destination[index] = source[index];
+        }
+
+        destination[length] = '\0';
+    }
+
+    bool create_runtime_file(const char* path, const char* data, size_t size)
+    {
+        if (!g_ready || path == nullptr || path[0] != '/' || find_mutable(path) != nullptr || size > MaxRuntimeFileBytes)
+        {
+            return false;
+        }
+
+        tinyos::kernel::vfs::Node* parent = nullptr;
+        const char* leaf = nullptr;
+        size_t leaf_length = 0;
+        if (!split_parent_leaf(path, parent, leaf, leaf_length) || child_by_segment(parent, leaf, leaf_length) != nullptr || !directory_allows_changes(parent))
+        {
+            return false;
+        }
+
+        for (size_t slot = 0; slot < MaxRuntimeFiles; ++slot)
+        {
+            if (g_runtime_file_used[slot])
+            {
+                continue;
+            }
+
+            copy_name(g_runtime_file_names[slot], leaf, leaf_length);
+            for (size_t index = 0; index < size; ++index)
+            {
+                g_runtime_file_data[slot][index] = data != nullptr ? data[index] : '\0';
+            }
+            g_runtime_file_data[slot][size] = '\0';
+
+            auto* node = &g_runtime_files[slot];
+            node->name = g_runtime_file_names[slot];
+            node->directory = false;
+            node->readonly_data = nullptr;
+            node->writable_data = g_runtime_file_data[slot];
+            node->size = size;
+            node->capacity = MaxRuntimeFileBytes;
+            node->writable = true;
+            node->parent = parent;
+            g_runtime_file_modes[slot] = 0644;
+            g_runtime_file_used[slot] = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool is_descendant_of(const tinyos::kernel::vfs::Node* node, const tinyos::kernel::vfs::Node* possible_ancestor)
+    {
+        const auto* current = node;
+        while (current != nullptr)
+        {
+            if (current == possible_ancestor)
+            {
+                return true;
+            }
+
+            current = current->parent;
+        }
+
+        return false;
+    }
 }
 
 namespace tinyos::kernel::vfs::ramfs
@@ -283,6 +453,14 @@ namespace tinyos::kernel::vfs::ramfs
             g_runtime_directory_used[index] = false;
             g_runtime_directory_names[index][0] = '\0';
             g_runtime_directory_modes[index] = 0755;
+        }
+
+        for (size_t index = 0; index < MaxRuntimeFiles; ++index)
+        {
+            g_runtime_file_used[index] = false;
+            g_runtime_file_names[index][0] = '\0';
+            g_runtime_file_data[index][0] = '\0';
+            g_runtime_file_modes[index] = 0644;
         }
 
         g_ready = true;
@@ -400,45 +578,10 @@ namespace tinyos::kernel::vfs::ramfs
             return false;
         }
 
-        auto* parent = &g_root;
-        const char* cursor = path;
-        while (*cursor == '/')
-        {
-            ++cursor;
-        }
-
+        tinyos::kernel::vfs::Node* parent = nullptr;
         const char* leaf = nullptr;
         size_t leaf_length = 0;
-        while (*cursor != '\0')
-        {
-            const char* segment = cursor;
-            size_t length = 0;
-            while (cursor[length] != '\0' && cursor[length] != '/')
-            {
-                ++length;
-            }
-
-            cursor += length;
-            while (*cursor == '/')
-            {
-                ++cursor;
-            }
-
-            if (*cursor == '\0')
-            {
-                leaf = segment;
-                leaf_length = length;
-                break;
-            }
-
-            parent = child_by_segment(parent, segment, length);
-            if (parent == nullptr || !parent->directory)
-            {
-                return false;
-            }
-        }
-
-        if (leaf == nullptr || leaf_length == 0 || leaf_length > MaxRuntimeNameLength || child_by_segment(parent, leaf, leaf_length) != nullptr)
+        if (!split_parent_leaf(path, parent, leaf, leaf_length) || child_by_segment(parent, leaf, leaf_length) != nullptr || !directory_allows_changes(parent))
         {
             return false;
         }
@@ -450,11 +593,7 @@ namespace tinyos::kernel::vfs::ramfs
                 continue;
             }
 
-            for (size_t index = 0; index < leaf_length; ++index)
-            {
-                g_runtime_directory_names[slot][index] = leaf[index];
-            }
-            g_runtime_directory_names[slot][leaf_length] = '\0';
+            copy_name(g_runtime_directory_names[slot], leaf, leaf_length);
 
             auto* node = &g_runtime_directories[slot];
             node->name = g_runtime_directory_names[slot];
@@ -473,6 +612,110 @@ namespace tinyos::kernel::vfs::ramfs
         return false;
     }
 
+    bool create_file(const char* path)
+    {
+        return create_runtime_file(path, nullptr, 0);
+    }
+
+    bool remove(const char* path)
+    {
+        if (!g_ready || path == nullptr || path[0] != '/')
+        {
+            return false;
+        }
+
+        auto* node = find_mutable(path);
+        if (node == nullptr || node == &g_root || !directory_allows_changes(node->parent))
+        {
+            return false;
+        }
+
+        size_t index = 0;
+        if (runtime_file_index(node, index))
+        {
+            for (size_t offset = 0; offset <= MaxRuntimeFileBytes; ++offset)
+            {
+                g_runtime_file_data[index][offset] = '\0';
+            }
+            g_runtime_file_names[index][0] = '\0';
+            g_runtime_file_modes[index] = 0644;
+            g_runtime_file_used[index] = false;
+            return true;
+        }
+
+        if (runtime_directory_index(node, index))
+        {
+            if (tinyos::kernel::vfs::ramfs::child_count(node) != 0)
+            {
+                return false;
+            }
+
+            g_runtime_directory_names[index][0] = '\0';
+            g_runtime_directory_modes[index] = 0755;
+            g_runtime_directory_used[index] = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool copy_file(const char* source_path, const char* destination_path)
+    {
+        const auto* source = find_mutable(source_path);
+        const char* data = nullptr;
+        size_t size = 0;
+        if (!tinyos::kernel::vfs::ramfs::read_file(source, data, size) || find_mutable(destination_path) != nullptr)
+        {
+            return false;
+        }
+
+        return create_runtime_file(destination_path, data, size);
+    }
+
+    bool move(const char* source_path, const char* destination_path)
+    {
+        if (!g_ready || source_path == nullptr || destination_path == nullptr || find_mutable(destination_path) != nullptr)
+        {
+            return false;
+        }
+
+        auto* node = find_mutable(source_path);
+        if (node == nullptr || node == &g_root || !directory_allows_changes(node->parent))
+        {
+            return false;
+        }
+
+        tinyos::kernel::vfs::Node* new_parent = nullptr;
+        const char* leaf = nullptr;
+        size_t leaf_length = 0;
+        if (!split_parent_leaf(destination_path, new_parent, leaf, leaf_length) || child_by_segment(new_parent, leaf, leaf_length) != nullptr || !directory_allows_changes(new_parent))
+        {
+            return false;
+        }
+
+        if (node->directory && is_descendant_of(new_parent, node))
+        {
+            return false;
+        }
+
+        size_t index = 0;
+        if (runtime_file_index(node, index))
+        {
+            copy_name(g_runtime_file_names[index], leaf, leaf_length);
+            g_runtime_files[index].parent = new_parent;
+            return true;
+        }
+
+        if (runtime_directory_index(node, index))
+        {
+            copy_name(g_runtime_directory_names[index], leaf, leaf_length);
+            g_runtime_directories[index].parent = new_parent;
+            return true;
+        }
+
+        return false;
+    }
+
     uint16_t access_mode(const Node* node)
     {
         size_t index = 0;
@@ -484,6 +727,11 @@ namespace tinyos::kernel::vfs::ramfs
         if (runtime_directory_index(node, index))
         {
             return g_runtime_directory_modes[index];
+        }
+
+        if (runtime_file_index(node, index))
+        {
+            return g_runtime_file_modes[index];
         }
 
         return 0;
@@ -507,6 +755,12 @@ namespace tinyos::kernel::vfs::ramfs
         if (runtime_directory_index(node, index))
         {
             g_runtime_directory_modes[index] = mode;
+            return true;
+        }
+
+        if (runtime_file_index(node, index))
+        {
+            g_runtime_file_modes[index] = mode;
             return true;
         }
 

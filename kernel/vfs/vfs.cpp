@@ -203,6 +203,46 @@ namespace tinyos::kernel::vfs
         return ramfs::create_directory(path);
     }
 
+    bool create_file(const char* path)
+    {
+        if (!g_ready || !validate_path(path) || blockfs::find(path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::create_file(path);
+    }
+
+    bool remove(const char* path)
+    {
+        if (!g_ready || !validate_path(path) || blockfs::find(path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::remove(path);
+    }
+
+    bool copy_file(const char* source_path, const char* destination_path)
+    {
+        if (!g_ready || !validate_path(source_path) || !validate_path(destination_path) || blockfs::find(source_path) != nullptr || blockfs::find(destination_path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::copy_file(source_path, destination_path);
+    }
+
+    bool move(const char* source_path, const char* destination_path)
+    {
+        if (!g_ready || !validate_path(source_path) || !validate_path(destination_path) || blockfs::find(source_path) != nullptr || blockfs::find(destination_path) != nullptr)
+        {
+            return false;
+        }
+
+        return ramfs::move(source_path, destination_path);
+    }
+
     uint16_t access_mode(const Node* node)
     {
         if (!g_ready || node == nullptr)
