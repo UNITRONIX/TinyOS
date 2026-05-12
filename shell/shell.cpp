@@ -1788,6 +1788,7 @@ namespace
         const char* name;
         const char* summary;
         const char* usage;
+        const char* run_command;
     };
 
     struct HelpCategory
@@ -1798,64 +1799,142 @@ namespace
     };
 
     const HelpCommand CoreHelp[] = {
-        { "clear", "clear the terminal", "clear" },
-        { "version", "show TinyOS version", "version" },
-        { "requirements", "show machine requirements", "requirements" },
-        { "platforminfo", "show platform manifest", "platforminfo" },
-        { "securityinfo", "show security counters", "securityinfo" },
-        { "reboot", "reboot the machine", "reboot" }
+        { "help", "open the interactive command browser", "help", nullptr },
+        { "helpui", "open the interactive command browser", "helpui", nullptr },
+        { "helplist", "print the classic command list", "helplist", "helplist" },
+        { "fileui", "open the terminal file browser", "fileui", "fileui" },
+        { "aliases", "show compatibility aliases", "aliases", "aliases" },
+        { "clear", "clear the terminal", "clear", "clear" },
+        { "version", "show TinyOS version", "version", "version" },
+        { "echo", "print text", "echo <text>", nullptr },
+        { "requirements", "show minimum machine requirements", "requirements", "requirements" },
+        { "reboot", "reboot the machine", "reboot", nullptr }
     };
 
     const HelpCommand FileHelp[] = {
-        { "pwd", "show current directory", "pwd" },
-        { "cd", "change directory", "cd <path>" },
-        { "files", "list files", "files [path]" },
-        { "fsmap", "show file tree", "fsmap [path]" },
-        { "mkdir", "create directory", "mkdir <path>" },
-        { "touch", "create writable file", "touch <path>" },
-        { "write", "overwrite file text", "write <path> <text>" },
-        { "copy", "copy readable file", "copy <source> <destination>" },
-        { "move", "move runtime file or directory", "move <source> <destination>" },
-        { "remove", "remove runtime file or empty directory", "remove <path>" },
-        { "chmod", "change access mode", "chmod <mode> <path>" }
+        { "pwd", "show current directory", "pwd", "pwd" },
+        { "cd", "change directory", "cd <path>", nullptr },
+        { "files", "list current or selected path", "files [path]", "files" },
+        { "ls", "compatibility alias for files", "ls [path]", "ls" },
+        { "fsmap", "show RAMFS tree", "fsmap [path]", "fsmap" },
+        { "tree", "compatibility alias for fsmap", "tree [path]", "tree" },
+        { "show", "print RAMFS file", "show <path>", nullptr },
+        { "view", "compatibility alias for show", "view <path>", nullptr },
+        { "cat", "compatibility alias for show", "cat <path>", nullptr },
+        { "describe", "show RAMFS node metadata", "describe <path>", nullptr },
+        { "fileinfo", "compatibility alias for describe", "fileinfo <path>", nullptr },
+        { "mkdir", "create RAMFS directory", "mkdir <path>", nullptr },
+        { "touch", "create writable RAMFS file", "touch <path>", nullptr },
+        { "write", "overwrite writable RAMFS file", "write <path> <text>", nullptr },
+        { "edit", "compatibility alias for write", "edit <path> <text>", nullptr },
+        { "copy", "copy readable RAMFS file", "copy <source> <destination>", nullptr },
+        { "cp", "compatibility alias for copy", "cp <source> <destination>", nullptr },
+        { "move", "move runtime file or directory", "move <source> <destination>", nullptr },
+        { "mv", "compatibility alias for move", "mv <source> <destination>", nullptr },
+        { "remove", "remove runtime file or empty directory", "remove <path>", nullptr },
+        { "rm", "compatibility alias for remove", "rm <path>", nullptr },
+        { "chmod", "change RAMFS access mode", "chmod <mode> <path>", nullptr },
+        { "ramfsinfo", "show RAMFS state", "ramfsinfo", "ramfsinfo" },
+        { "vfsinfo", "show VFS state", "vfsinfo", "vfsinfo" }
+    };
+
+    const HelpCommand DeviceHelp[] = {
+        { "devices", "list registered devices", "devices", "devices" },
+        { "devlist", "compatibility alias for devices", "devlist", "devlist" },
+        { "device", "show one registered device", "device <name>", nullptr },
+        { "blockinfo", "show RAM block device scaffold", "blockinfo", "blockinfo" },
+        { "storageinfo", "show block VFS mount scaffold", "storageinfo", "storageinfo" },
+        { "fbinfo", "show framebuffer surface scaffold", "fbinfo", "fbinfo" },
+        { "platforminfo", "show platform compatibility manifest", "platforminfo", "platforminfo" },
+        { "pcinfo", "show PC platform initialization contract", "pcinfo", "pcinfo" },
+        { "archinfo", "show architecture capability manifest", "archinfo", "archinfo" }
     };
 
     const HelpCommand RuntimeHelp[] = {
-        { "tools", "list management tools", "tools" },
-        { "runtimeinfo", "show runtime manifest", "runtimeinfo" },
-        { "appinfo", "show app profiles", "appinfo" },
-        { "tappinfo", "show TAPP summary", "tappinfo" },
-        { "tappverify", "verify TAPP install gate", "tappverify <package>" },
-        { "trustinfo", "show trust store", "trustinfo" },
-        { "imageinfo", "show secure image pipeline", "imageinfo" }
-    };
-
-    const HelpCommand DiagnosticsHelp[] = {
-        { "meminfo", "show memory map summary", "meminfo" },
-        { "heapinfo", "show kernel heap state", "heapinfo" },
-        { "frameinfo", "show frame allocator state", "frameinfo" },
-        { "paginginfo", "show paging state", "paginginfo" },
-        { "irqinfo", "show IRQ counters", "irqinfo" },
-        { "keyboardinfo", "show keyboard driver state", "keyboardinfo" },
-        { "uptime", "show PIT ticks", "uptime" }
+        { "tools", "list management tools", "tools", "tools" },
+        { "toolinfo", "show management tool summary", "toolinfo", "toolinfo" },
+        { "tool", "show one management tool", "tool <command>", nullptr },
+        { "runtimeinfo", "show language runtime manifest", "runtimeinfo", "runtimeinfo" },
+        { "appinfo", "show app capability profiles", "appinfo", "appinfo" },
+        { "launchinfo", "show app launch policy checks", "launchinfo", "launchinfo" },
+        { "launchcheck", "dry-check an app profile", "launchcheck <app-profile>", nullptr },
+        { "tappinfo", "show TAPP package registry summary", "tappinfo", "tappinfo" },
+        { "tapps", "list TAPP packages", "tapps", "tapps" },
+        { "tapp", "show one TAPP package", "tapp <package-or-app-name>", nullptr },
+        { "tappcheck", "dry-check TAPP launch readiness", "tappcheck <package-or-app-name>", nullptr },
+        { "tappverify", "verify TAPP install gate", "tappverify <package-or-app-name>", nullptr },
+        { "trustinfo", "show TAPP trust store", "trustinfo", "trustinfo" },
+        { "trust", "show one trust anchor", "trust <anchor-name>", nullptr },
+        { "imageinfo", "show secure image pipeline", "imageinfo", "imageinfo" },
+        { "provisioninfo", "show provisioning workflow", "provisioninfo", "provisioninfo" },
+        { "deployinfo", "show remote deployment plan", "deployinfo", "deployinfo" },
+        { "sysinfo", "show syscall ABI scaffold status", "sysinfo", "sysinfo" },
+        { "userinfo", "show user transition scaffold status", "userinfo", "userinfo" },
+        { "elfinfo", "show ELF loader scaffold state", "elfinfo", "elfinfo" },
+        { "modulesinfo", "show parsed boot modules", "modulesinfo", "modulesinfo" }
     };
 
     const HelpCommand UiHelp[] = {
-        { "help", "open this command browser", "help" },
-        { "helplist", "print classic command list", "helplist" },
-        { "fileui", "open terminal file browser", "fileui" },
-        { "terminalinfo", "show terminal UI scaffold", "terminalinfo" },
-        { "widgetinfo", "show widget scaffold", "widgetinfo" },
-        { "desktop", "Alpha desktop prototype", "desktop" },
-        { "desktopinfo", "Alpha desktop state", "desktopinfo" }
+        { "renderinfo", "show renderer scaffold state", "renderinfo", "renderinfo" },
+        { "cursorinfo", "show cursor scaffold state", "cursorinfo", "cursorinfo" },
+        { "rendertest", "draw a renderer test label", "rendertest", "rendertest" },
+        { "renderfilltest", "draw a renderer filled strip", "renderfilltest", "renderfilltest" },
+        { "terminalinfo", "show terminal UI scaffold state", "terminalinfo", "terminalinfo" },
+        { "terminaltest", "draw terminal UI test labels", "terminaltest", "terminaltest" },
+        { "terminalclear", "clear terminal UI regions", "terminalclear", "terminalclear" },
+        { "terminalpaneltest", "draw terminal UI panel", "terminalpaneltest", "terminalpaneltest" },
+        { "widgetinfo", "show TUI widget scaffold state", "widgetinfo", "widgetinfo" },
+        { "widgettest", "draw TUI widget demo", "widgettest", "widgettest" },
+        { "widgetdispatch", "dispatch queued UI events to widgets", "widgetdispatch", "widgetdispatch" },
+        { "widgetactiontest", "inject and dispatch widget action", "widgetactiontest", "widgetactiontest" },
+        { "uieventinfo", "show UI event queue state", "uieventinfo", "uieventinfo" },
+        { "uieventpump", "move input events into UI queue", "uieventpump", "uieventpump" },
+        { "uieventpeek", "read one UI event", "uieventpeek", "uieventpeek" },
+        { "uieventtest", "inject a UI test key event", "uieventtest", "uieventtest" },
+        { "inputinfo", "show generic input queue state", "inputinfo", "inputinfo" },
+        { "inputpeek", "read one generic input event", "inputpeek", "inputpeek" },
+        { "keyboardinfo", "show keyboard IRQ/input state", "keyboardinfo", "keyboardinfo" },
+        { "wminfo", "show window manager scaffold state", "wminfo", "wminfo" },
+        { "wmtest", "draw window manager demo", "wmtest", "wmtest" },
+        { "wmfocus", "cycle window focus", "wmfocus", "wmfocus" },
+        { "desktopinfo", "Alpha: show desktop shell prototype state", "desktopinfo", "desktopinfo" },
+        { "desktop", "Alpha: enter fullscreen desktop mode", "desktop", nullptr },
+        { "desktoptest", "Alpha: draw fullscreen desktop prototype", "desktoptest", nullptr },
+        { "desktopnext", "Alpha: select next desktop launcher item", "desktopnext", nullptr },
+        { "desktoplaunch", "Alpha: render selected launch request", "desktoplaunch", nullptr },
+        { "desktopdispatch", "Alpha: dispatch desktop input events", "desktopdispatch", nullptr },
+        { "desktopkeytest", "Alpha: test desktop keyboard flow", "desktopkeytest", nullptr },
+        { "desktopmousetest", "Alpha: test desktop mouse click flow", "desktopmousetest", nullptr }
+    };
+
+    const HelpCommand DiagnosticsHelp[] = {
+        { "meminfo", "show parsed memory map summary", "meminfo", "meminfo" },
+        { "frameinfo", "show physical frame allocator status", "frameinfo", "frameinfo" },
+        { "heapinfo", "show kernel heap status", "heapinfo", "heapinfo" },
+        { "heaptest", "run a simple heap self-test", "heaptest", "heaptest" },
+        { "paginginfo", "show prepared paging structures", "paginginfo", "paginginfo" },
+        { "addrspaceinfo", "show kernel address space scaffold", "addrspaceinfo", "addrspaceinfo" },
+        { "irqinfo", "show IRQ diagnostic counters", "irqinfo", "irqinfo" },
+        { "securityinfo", "show security scaffold status", "securityinfo", "securityinfo" },
+        { "integritycheck", "run allocator integrity check", "integritycheck", "integritycheck" },
+        { "schedinfo", "show scheduler scaffold state", "schedinfo", "schedinfo" },
+        { "taskinfo", "show kernel task scaffold state", "taskinfo", "taskinfo" },
+        { "contextinfo", "show i686 context ABI scaffold state", "contextinfo", "contextinfo" },
+        { "timerinfo", "show PIT configuration and ticks", "timerinfo", "timerinfo" },
+        { "uptime", "show PIT ticks", "uptime", "uptime" },
+        { "yield", "record a scheduler yield", "yield", "yield" },
+        { "sleeptest", "sleep for 10 PIT ticks", "sleeptest", "sleeptest" },
+        { "int3", "trigger breakpoint exception", "int3", nullptr },
+        { "panic", "trigger kernel panic", "panic", nullptr }
     };
 
     const HelpCategory HelpCategories[] = {
         { "Core", CoreHelp, sizeof(CoreHelp) / sizeof(CoreHelp[0]) },
         { "Files", FileHelp, sizeof(FileHelp) / sizeof(FileHelp[0]) },
+        { "Devices", DeviceHelp, sizeof(DeviceHelp) / sizeof(DeviceHelp[0]) },
         { "Runtime", RuntimeHelp, sizeof(RuntimeHelp) / sizeof(RuntimeHelp[0]) },
-        { "Diagnostics", DiagnosticsHelp, sizeof(DiagnosticsHelp) / sizeof(DiagnosticsHelp[0]) },
-        { "Terminal", UiHelp, sizeof(UiHelp) / sizeof(UiHelp[0]) }
+        { "UI", UiHelp, sizeof(UiHelp) / sizeof(UiHelp[0]) },
+        { "Diagnostics", DiagnosticsHelp, sizeof(DiagnosticsHelp) / sizeof(DiagnosticsHelp[0]) }
     };
 
     void wait_for_key()
@@ -1868,9 +1947,16 @@ namespace
     void draw_help_ui(size_t category_index, size_t selected_index)
     {
         const auto& category = HelpCategories[category_index];
+        constexpr size_t VisibleRows = 14;
+        size_t first = 0;
+        if (selected_index >= VisibleRows)
+        {
+            first = selected_index - VisibleRows + 1;
+        }
+
         tinyos::drivers::vga::clear();
         tinyos::drivers::vga::write_line("TinyOS HelpUI");
-        tinyos::drivers::vga::write_line("Left/Right category, Up/Down command, Enter details, Q/Esc exit");
+        tinyos::drivers::vga::write_line("Left/Right category, Up/Down command, Enter run/details, ? details, Q/Esc exit");
         tinyos::drivers::vga::write_line("Desktop-related commands are Alpha development tools and may be incomplete.");
         tinyos::drivers::vga::write_line("");
         tinyos::drivers::vga::write("Category ");
@@ -1879,15 +1965,25 @@ namespace
         write_uint64(sizeof(HelpCategories) / sizeof(HelpCategories[0]));
         tinyos::drivers::vga::write(": ");
         tinyos::drivers::vga::write_line(category.name);
+        tinyos::drivers::vga::write("Command ");
+        write_uint64(category.count == 0 ? 0 : selected_index + 1);
+        tinyos::drivers::vga::write("/");
+        write_uint64(category.count);
+        tinyos::drivers::vga::write_line("");
         tinyos::drivers::vga::write_line("");
 
-        for (size_t index = 0; index < category.count; ++index)
+        for (size_t offset = 0; offset < VisibleRows && first + offset < category.count; ++offset)
         {
+            const size_t index = first + offset;
             tinyos::drivers::vga::write(index == selected_index ? "> " : "  ");
             tinyos::drivers::vga::write(category.commands[index].name);
+            tinyos::drivers::vga::write(category.commands[index].run_command != nullptr ? " * " : "   ");
             tinyos::drivers::vga::write(" - ");
             tinyos::drivers::vga::write_line(category.commands[index].summary);
         }
+
+        tinyos::drivers::vga::write_line("");
+        tinyos::drivers::vga::write_line("* Enter runs this command; commands without * show details/usage.");
     }
 
     void show_help_command(const HelpCommand& command)
@@ -1899,6 +1995,24 @@ namespace
         tinyos::drivers::vga::write_line(command.summary);
         tinyos::drivers::vga::write("Usage  : ");
         tinyos::drivers::vga::write_line(command.usage);
+        tinyos::drivers::vga::write("Run    : ");
+        tinyos::drivers::vga::write_line(command.run_command != nullptr ? "Enter from HelpUI" : "manual command input required");
+        wait_for_key();
+    }
+
+    void run_help_command(const HelpCommand& command)
+    {
+        if (command.run_command == nullptr)
+        {
+            show_help_command(command);
+            return;
+        }
+
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write("Running: ");
+        tinyos::drivers::vga::write_line(command.run_command);
+        tinyos::drivers::vga::write_line("");
+        tinyos::shell::execute(command.run_command);
         wait_for_key();
     }
 
@@ -1944,9 +2058,14 @@ namespace
                 selected_index = (selected_index + 1) % HelpCategories[category_index].count;
                 continue;
             }
-            if (key == '\n')
+            if (key == '?')
             {
                 show_help_command(HelpCategories[category_index].commands[selected_index]);
+                continue;
+            }
+            if (key == '\n')
+            {
+                run_help_command(HelpCategories[category_index].commands[selected_index]);
             }
         }
     }
