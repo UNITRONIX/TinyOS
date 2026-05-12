@@ -4,6 +4,8 @@ TinyOS provisioning should grow from an image helper into a developer workbench 
 
 The workbench is a host-first feature. Kernel support should expose manifests, diagnostics and target-side verification, while host tools should create folders, keys, variants and deployable images.
 
+Installed-system expectations are tracked in `docs/installed-system-pattern.md`. The installer creates the first bootable disk system and local identity; the provisioning workbench prepares project-specific media, variants and deployable artifacts after that baseline exists.
+
 ## Goals
 
 - Create an isolated project workspace instead of mixing project files with the repository root.
@@ -134,3 +136,4 @@ The provisioning terminal should use the existing text-grid renderer first:
 - Keep remote access disabled until configured.
 - Require explicit confirmation for high-risk commands that write keys, deploy images or change remote access.
 - Keep every new provisioning slice bootable and visible through diagnostics.
+- Treat installer credentials as local system setup data, not provisioning profile data; profiles and receipts must never contain plaintext passwords.

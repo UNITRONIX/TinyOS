@@ -61,6 +61,7 @@ namespace
         { "imageinfo", "show secure image pipeline", Category::Runtime, State::Ready, false, false },
         { "provisioninfo", "show provisioning workflow", Category::Runtime, State::Ready, false, false },
         { "deployinfo", "show remote deployment plan", Category::Runtime, State::Ready, false, false },
+        { "installinfo", "show installed-system contract", Category::Runtime, State::Ready, false, false },
         { "sysinfo", "show syscall ABI scaffold", Category::Runtime, State::Ready, false, false },
         { "userinfo", "show user transition scaffold", Category::Runtime, State::Ready, false, false },
         { "elfinfo", "show ELF loader scaffold", Category::Runtime, State::Ready, false, false },
@@ -93,6 +94,13 @@ namespace
         { "kill", "stop a process", Category::Scheduling, State::Planned, true, true },
         { "service", "manage system services", Category::Scheduling, State::Planned, true, true },
         { "useradd", "create user identity", Category::Security, State::Planned, true, true },
+        { "install", "start terminal installer", Category::Development, State::Planned, true, true },
+        { "installcheck", "validate install profile", Category::Development, State::Planned, false, false },
+        { "hostname", "set installed device name", Category::Devices, State::Planned, true, false },
+        { "netconfig", "configure network profile", Category::Devices, State::Planned, true, true },
+        { "passwd", "rotate account credential", Category::Security, State::Planned, true, true },
+        { "whoami", "show active identity", Category::Security, State::Planned, false, false },
+        { "id", "show identity and permissions", Category::Security, State::Planned, false, false },
         { "package", "manage system packages", Category::Development, State::Planned, true, true },
         { "tappinstall", "install a TAPP package", Category::Development, State::Planned, true, true },
         { "tappremove", "remove a TAPP package", Category::Development, State::Planned, true, true },
@@ -247,7 +255,9 @@ namespace tinyos::kernel::admin::tools
             find("tappverify") != nullptr &&
             find("trustinfo") != nullptr &&
             find("imageinfo") != nullptr &&
+            find("installinfo") != nullptr &&
             find("imageencrypt") != nullptr &&
+            find("installcheck") != nullptr &&
             find("provisioninit") != nullptr &&
             find("provisionresources") != nullptr &&
             find("remoteaccess") != nullptr &&

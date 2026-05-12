@@ -79,6 +79,27 @@ Completion criteria:
 - debug ISO gives serial checkpoints;
 - the raw image design does not require privileged host operations during normal builds.
 
+## Stage 1B - installed system pattern
+
+Goal: define how the ISO eventually becomes an installed TinyOS system on a virtual or physical disk.
+
+Reference document: `docs/installed-system-pattern.md`
+
+Tasks:
+
+- define a terminal-first installer flow for ISO boot media;
+- collect device name, network profile, primary user and administrator policy;
+- keep shared user/admin bootstrap passwords limited to development or single-user profiles;
+- store credentials as separate salted hashes when user and admin secrets are derived from the same installer input;
+- write install receipts and first-boot profiles;
+- keep the installed system able to run provisioning tools after first boot.
+
+Completion criteria:
+
+- install profile format is documented and host-validated;
+- terminal installer mock can write a receipt without touching real disks;
+- reference `i686` QEMU disk install has a repeatable smoke test before expanding to `x86_64` or `aarch64`.
+
 ## Stage 2 - interrupts, timer and input
 
 Goal: move from polling-style interaction to controlled interrupt-driven operation.

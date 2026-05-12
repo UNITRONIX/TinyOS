@@ -4,6 +4,23 @@ TinyOS is a minimal freestanding `i686` kernel written in `C++` and booted by `G
 
 TinyOS source code and documentation are licensed under the Apache License 2.0 unless a file explicitly states otherwise. See `LICENSE` and `docs/licensing.md`.
 
+## AI-Assisted Development
+
+TinyOS is developed as an AI-assisted operating system project. AI assistance is used for planning, documentation, implementation slices, code review and test planning, while the repository keeps the project grounded in explicit source files, roadmaps and reproducible build/test commands.
+
+AI assistance is not a runtime dependency. The current TinyOS kernel does not include an AI subsystem; the AI-assisted part describes the development workflow used to grow the system gradually and safely.
+
+## Current Project Knowledge
+
+- The current reference target is `i686` on QEMU PC hardware, booted as a `GRUB` Multiboot ISO.
+- The documented minimum runtime envelope is still 32 MiB RAM; lower-memory runs are experimental probes before any baseline change.
+- TinyOS is terminal-first today, with VGA text output, PS/2 keyboard input, shell diagnostics and RAMFS metadata.
+- The GUI path is planned incrementally through renderer, terminal, widget and event scaffolds before a richer desktop becomes the default.
+- Security work is treated as a high-priority track: trusted package metadata, image/provisioning contracts, integrity diagnostics and password-hashing policy are documented before broader runtime privileges are enabled.
+- Project provisioning is host-first for now, with signed/encrypted artifacts, isolated project workspaces, device variants and remote access kept behind explicit opt-in policy.
+- Installed-system support is currently a ready contract: `examples/install.profile`, `install-plan`, `check-install-profile`, `/system/install.txt` and `installinfo` exist, while real disk installation is planned after persistent storage and filesystem contracts mature.
+- Future portability targets include `x86_64` and `aarch64`, but they should only be promoted after repeatable boot, storage and smoke tests exist for each target.
+
 ## Features
 
 - `GRUB` bootable kernel
@@ -25,6 +42,7 @@ TinyOS source code and documentation are licensed under the Apache License 2.0 u
 - `.tapp` application package registry, trust store and install-gate checks with `tappinfo`, `tapps`, `tapp`, `tappcheck`, `tappverify`, `trustinfo` and `trust`
 - system management tool manifest with `tools`, `toolinfo` and `tool <command>` diagnostics
 - secure image/provisioning manifest with `imageinfo`, `provisioninfo` and `deployinfo` diagnostics
+- installed-system contract with `installinfo` diagnostics and host install-profile validation
 - project provisioning workbench plan for isolated workspaces, device variants, resource budgets and remote access
 - host `.tapp` signing helpers: `keygen-app`, `trust-app`, `sign-app` and `verify-app`
 - documented minimum runtime target: `i686`, Multiboot ISO, VGA text mode, PS/2 keyboard and 32 MiB RAM
@@ -51,6 +69,7 @@ The default boot path starts the TinyOS terminal. The framebuffer desktop remain
 - `docs/os-roadmap.md` - staged plan for growing TinyOS into a real OS.
 - `docs/implementation-roadmap.md` - current implementation milestones.
 - `docs/security-roadmap.md` - security and hardening priorities.
+- `docs/installed-system-pattern.md` - target install flow and installed-system documentation pattern.
 - `docs/provisioning-workbench.md` - project provisioning workflow and tool plan.
 - `docs/system-requirements.md` - minimum and recommended runtime/build requirements.
 - `docs/licensing.md` - Apache-2.0 policy and third-party boundary notes.

@@ -12,7 +12,9 @@ TinyOS image helper
 Usage:
   scripts/tinyos-image.sh plan
     scripts/tinyos-image.sh provision-plan
+    scripts/tinyos-image.sh install-plan
   scripts/tinyos-image.sh check-profile [profile]
+    scripts/tinyos-image.sh check-install-profile [profile]
     scripts/tinyos-image.sh check-app [app.manifest|package.tapp]
     scripts/tinyos-image.sh pack-app [app.manifest] [output.tapp]
     scripts/tinyos-image.sh keygen-app [private-key.pem] [public-key.pem]
@@ -104,6 +106,13 @@ public_key_fingerprint()
     openssl pkey -pubin -in "$public_key" -outform DER 2>/dev/null | sha256_stdin_value
 }
 
+profile_field_value()
+{
+    local key=$1
+    local file=$2
+    awk -F= -v key="$key" '$1 == key { print $2; exit }' "$file"
+}
+
 print_plan()
 {
     cat <<'PLAN'
@@ -153,6 +162,28 @@ Default safety policy:
 PLAN
 }
 
+print_install_plan()
+{
+    cat <<'PLAN'
+TinyOS installed-system plan:
+  1. check-install-profile - validate installer inputs without writing disks
+  2. installinfo           - show the installed-system contract inside TinyOS
+  3. install mock          - future terminal installer receipt in RAMFS
+  4. disk image            - future host-side persistent disk image output
+  5. disk boot test        - future QEMU boot from installed TinyOS disk
+
+Current host command status:
+  ready: install-plan, check-install-profile
+  planned: install, installcheck, hostname, netconfig, passwd, whoami, id
+
+Default safety policy:
+  credential.bootstrap=prompt
+  security.password_hashing=required
+  security.plaintext_secrets=forbidden
+  provisioning.remote_access=disabled
+PLAN
+}
+
 check_profile()
 {
     local profile=${1:-examples/system.profile}
@@ -186,6 +217,100 @@ check_profile()
     done
 
     echo "Profile check passed: $profile"
+}
+
+check_install_profile()
+{
+    local profile=${1:-examples/install.profile}
+    if [[ ! -f "$profile" ]]; then
+        echo "Install profile not found: $profile" >&2
+        exit 1
+    fi
+
+    local required_patterns=(
+        '^profile.name='
+        '^install.mode='
+        '^install.media='
+        '^install.target='
+        '^target.arch='
+        '^target.platform='
+        '^disk.target='
+        '^disk.partition='
+        '^device.name='
+        '^network.mode='
+        '^user.name='
+        '^credential.bootstrap='
+        '^admin.mode='
+        '^security.password_hashing='
+        '^security.plaintext_secrets='
+        '^provisioning.encryption='
+        '^provisioning.remote_access='
+    )
+
+    local pattern
+    for pattern in "${required_patterns[@]}"; do
+        if ! grep -q "$pattern" "$profile"; then
+            echo "Install profile check failed: missing $pattern" >&2
+            exit 1
+        fi
+    done
+
+    if grep -Eq '(^|[.])password=' "$profile"; then
+        echo "Install profile check failed: plaintext password fields are forbidden." >&2
+        exit 1
+    fi
+
+    local bootstrap
+    local admin_mode
+    local password_hashing
+    local plaintext_secrets
+    local encryption
+    local remote_access
+    bootstrap=$(profile_field_value credential.bootstrap "$profile")
+    admin_mode=$(profile_field_value admin.mode "$profile")
+    password_hashing=$(profile_field_value security.password_hashing "$profile")
+    plaintext_secrets=$(profile_field_value security.plaintext_secrets "$profile")
+    encryption=$(profile_field_value provisioning.encryption "$profile")
+    remote_access=$(profile_field_value provisioning.remote_access "$profile")
+
+    if [[ "$bootstrap" != "prompt" ]]; then
+        echo "Install profile check failed: credential.bootstrap must be prompt." >&2
+        exit 1
+    fi
+
+    case "$admin_mode" in
+        disabled|same-bootstrap-secret|separate-secret|key-only)
+            ;;
+        *)
+            echo "Install profile check failed: invalid admin.mode: $admin_mode" >&2
+            exit 1
+            ;;
+    esac
+
+    if [[ "$password_hashing" != "required" ]]; then
+        echo "Install profile check failed: security.password_hashing must be required." >&2
+        exit 1
+    fi
+
+    if [[ "$plaintext_secrets" != "forbidden" ]]; then
+        echo "Install profile check failed: security.plaintext_secrets must be forbidden." >&2
+        exit 1
+    fi
+
+    if [[ "$encryption" != "required" ]]; then
+        echo "Install profile check failed: provisioning.encryption must be required." >&2
+        exit 1
+    fi
+
+    if [[ "$remote_access" != "disabled" ]]; then
+        echo "Install profile check failed: provisioning.remote_access must default to disabled." >&2
+        exit 1
+    fi
+
+    echo "Install profile check passed: $profile"
+    if [[ "$admin_mode" == "same-bootstrap-secret" ]]; then
+        echo "Install profile warning: shared bootstrap secret is for development or single-user profiles only."
+    fi
 }
 
 check_app_manifest()
@@ -633,8 +758,14 @@ case "$command_name" in
     provision-plan)
         print_provision_plan
         ;;
+    install-plan)
+        print_install_plan
+        ;;
     check-profile)
         check_profile "$@"
+        ;;
+    check-install-profile)
+        check_install_profile "$@"
         ;;
     check-app)
         check_app_manifest "$@"

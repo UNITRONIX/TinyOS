@@ -200,6 +200,16 @@ TinyOS currently provides:
 - [x] add `make test-minimal` for the 32 MiB QEMU boot envelope
 - [~] add `make test-minimal-probe` for lower-memory experiments before changing the documented baseline
 
+### Installed system pattern
+- [x] document the target installer and installed-system flow in `docs/installed-system-pattern.md`
+- [x] define an install profile file format for device name, network, user and admin policy
+- [x] add host validation for install profiles
+- [x] expose installed-system metadata through RAMFS and `installinfo`
+- [ ] add a terminal installer mock that writes an install receipt to RAMFS
+- [ ] add persistent disk image creation after block storage and filesystem contracts mature
+- [ ] add QEMU disk-boot smoke tests for the reference target
+- [ ] add password hashing and administrator policy before real installed identities are enabled
+
 ### Developer provisioning workbench
 - [x] document the provisioning workbench direction in `docs/provisioning-workbench.md`
 - [x] expose planned workbench stages through the provisioning manifest

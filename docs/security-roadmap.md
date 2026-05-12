@@ -46,6 +46,7 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 
 ### Stage 5 - permissions and module trust
 - identities and permission flags
+- password hashing and administrator unlock policy
 - module metadata validation
 - ABI compatibility checks
 - controlled loading policy
@@ -88,6 +89,7 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 - [ ] runtime paging protection
 - [ ] userspace isolation
 - [ ] permission model
+- [ ] password hashing and install-time credential policy
 - [~] trusted module policy
 
 ## Near-term security priorities
@@ -101,3 +103,4 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 7. connect signed image verification to the eventual provisioning agent
 8. connect `.tapp` detached signatures and payload hashes to real target-side cryptographic verification
 9. move development trust anchors into persistent, replaceable target storage
+10. keep shared user/admin bootstrap credentials limited to development or single-user install profiles

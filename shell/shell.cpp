@@ -1698,6 +1698,20 @@ namespace
         tinyos::drivers::vga::put_char('\n');
     }
 
+    void print_install_info()
+    {
+        tinyos::drivers::vga::write_line("Installed-system contract:");
+        tinyos::drivers::vga::write_line("  current: ISO boot on i686 QEMU reference target");
+        tinyos::drivers::vga::write_line("  planned: terminal installer, disk image, first-boot profile");
+        tinyos::drivers::vga::write_line("  future: x86_64 and aarch64 after repeatable boot tests");
+        tinyos::drivers::vga::write_line("Credential policy:");
+        tinyos::drivers::vga::write_line("  credential.bootstrap=prompt, hash before storage, no plaintext secrets");
+        tinyos::drivers::vga::write_line("Host entry point:");
+        tinyos::drivers::vga::write_line("  scripts/tinyos-image.sh install-plan|check-install-profile");
+        tinyos::drivers::vga::write_line("RAMFS metadata:");
+        show_file("/system/install.txt");
+    }
+
     void print_widget_info()
     {
         const auto* state = tinyos::ui::widgets::state();
@@ -2021,6 +2035,7 @@ namespace
         { "imageinfo", "show secure image pipeline", "imageinfo", "imageinfo" },
         { "provisioninfo", "show provisioning workflow", "provisioninfo", "provisioninfo" },
         { "deployinfo", "show remote deployment plan", "deployinfo", "deployinfo" },
+        { "installinfo", "show installed-system contract", "installinfo", "installinfo" },
         { "sysinfo", "show syscall ABI scaffold status", "sysinfo", "sysinfo" },
         { "userinfo", "show user transition scaffold status", "userinfo", "userinfo" },
         { "elfinfo", "show ELF loader scaffold state", "elfinfo", "elfinfo" },
@@ -2296,6 +2311,7 @@ namespace
         tinyos::drivers::vga::write_line("  imageinfo - show secure image pipeline");
         tinyos::drivers::vga::write_line("  provisioninfo - show provisioning workflow");
         tinyos::drivers::vga::write_line("  deployinfo - show remote deployment plan");
+        tinyos::drivers::vga::write_line("  installinfo - show installed-system contract");
         tinyos::drivers::vga::write_line("  requirements - show minimum system requirements");
         tinyos::drivers::vga::write_line("  platforminfo - show platform compatibility manifest");
         tinyos::drivers::vga::write_line("  pcinfo - show PC platform initialization contract");
@@ -3158,6 +3174,12 @@ namespace tinyos::shell
         if (core::string::compare(command, "deployinfo") == 0)
         {
             print_deploy_info();
+            return;
+        }
+
+        if (core::string::compare(command, "installinfo") == 0)
+        {
+            print_install_info();
             return;
         }
 

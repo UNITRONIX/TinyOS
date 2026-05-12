@@ -20,6 +20,16 @@ This document records the current tested runtime envelope. It is intentionally s
 - Serial output enabled for diagnostics during kernel work.
 - Headless QEMU smoke tests before interactive testing.
 
+## Target Install Runtime
+
+The current tested install media is still the QEMU ISO path for `i686`. The target install matrix is:
+
+- `i686` / QEMU PC: current boot reference, installer planned.
+- `x86_64` / QEMU PC: planned after the 32-bit reference path is stable.
+- `aarch64` / QEMU `virt`: planned after architecture and platform contracts are stable.
+- Disk install: planned after persistent block storage and filesystem support exist.
+- Terminal installer: planned, documented in `docs/installed-system-pattern.md`.
+
 ## Host Build Requirements
 
 - `make`

@@ -149,7 +149,7 @@ define require_tools
 	fi
 endef
 
-.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan image-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
+.PHONY: all iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
 
 all: check-build-tools $(TARGET)
 
@@ -204,8 +204,14 @@ image-plan:
 provision-plan:
 	bash scripts/tinyos-image.sh provision-plan
 
+install-plan:
+	bash scripts/tinyos-image.sh install-plan
+
 image-profile-check:
 	bash scripts/tinyos-image.sh check-profile examples/system.profile
+
+install-profile-check:
+	bash scripts/tinyos-image.sh check-install-profile examples/install.profile
 
 image-app-check:
 	bash scripts/tinyos-image.sh check-app examples/app.manifest

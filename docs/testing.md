@@ -67,6 +67,12 @@ make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
 
 This target runs `test-minimal` once per memory value and writes separate logs such as `build/boot-minimal-24M.log`.
 
+Validate install-profile safety rules without writing disks:
+
+```sh
+make install-profile-check
+```
+
 If the build toolchain is not installed yet but `build/tinyos.iso` already exists, run the existing artifact through QEMU:
 
 ```sh
