@@ -37,7 +37,7 @@ This list defines the user-facing tools needed to manage TinyOS as it grows from
 
 - `status` prints a compact system dashboard for version, architecture, ticks, memory, VFS, tools, package and install-receipt state.
 - `sysinfo` prints the TinyOS system information page: owner, author, license, version, architecture, boot profile, terminal tools and practical RAM probe range.
-- `syscheck` runs non-destructive health checks across architecture, platform, memory, VFS, app/package, syscall, provisioning, system profile and terminal contracts.
+- `syscheck` runs non-destructive health checks across architecture, platform, memory, VFS, app/package, syscall scheduling, initial process, provisioning, system profile and terminal contracts.
 - `riskinfo` lists management commands that write state or are marked high risk in the kernel tool manifest.
 - `profileinfo` and `profilecheck` expose and validate the current system identity/security profile.
 - `pathcheck <path>` resolves a shell path and reports validity, metadata and permissions.

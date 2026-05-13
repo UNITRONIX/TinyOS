@@ -206,6 +206,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::ui::terminal::initialize();
     TINYOS_ASSERT(tinyos::ui::terminal::validation_self_test(), "Terminal UI scaffold validation failed.");
     TINYOS_ASSERT(tinyos::ui::terminal::panel_validation_self_test(), "Terminal panel scaffold validation failed.");
+    TINYOS_ASSERT(tinyos::ui::terminal::style_validation_self_test(), "Terminal style contract validation failed.");
     TINYOS_ASSERT(tinyos::ui::renderer::pixel_contract_validation_self_test(), "Pixel renderer contract validation failed.");
     tinyos::ui::widgets::initialize();
     TINYOS_ASSERT(tinyos::ui::widgets::validation_self_test(), "TUI widget scaffold validation failed.");
@@ -274,6 +275,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::memory::paging::enable_runtime();
     TINYOS_ASSERT(tinyos::kernel::memory::paging::is_runtime_enabled(), "Runtime paging did not enable.");
     TINYOS_ASSERT(tinyos::kernel::memory::paging::active_page_directory_address() == tinyos::kernel::memory::paging::page_directory_address(), "Runtime paging CR3 mismatch.");
+    TINYOS_ASSERT(tinyos::kernel::memory::address_space::runtime_paging_policy_validation_self_test(), "Runtime paging policy validation failed.");
 
     if (const auto* linear = tinyos::kernel::device::framebuffer::linear_surface(); linear != nullptr)
     {
@@ -351,6 +353,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::provision::image::validation_self_test(), "Secure image provisioning manifest validation failed.");
     tinyos::kernel::user::transition::initialize();
     debug_boot_checkpoint("user transition scaffold ready");
+    TINYOS_ASSERT(tinyos::kernel::user::transition::validation_self_test(), "User transition init contract validation failed.");
     tinyos::kernel::security::integrity::initialize();
     debug_boot_checkpoint("security integrity scaffold ready");
     TINYOS_ASSERT(tinyos::kernel::security::integrity::boot_modules_valid(), "Boot module integrity self-test failed.");
@@ -360,6 +363,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::task::contexts_ready(), "Kernel task context preparation failed.");
     tinyos::kernel::sched::initialize();
     debug_boot_checkpoint("scheduler scaffold ready");
+    TINYOS_ASSERT(tinyos::kernel::sched::validation_self_test(), "Scheduler round-robin policy validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::sched::sleep_wake_validation_self_test(), "Scheduler sleep/wake validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::syscall::scheduling_validation_self_test(), "Syscall scheduling primitive validation failed.");
     tinyos::drivers::pit::initialize(100);
     register_device_or_panic("pit", tinyos::kernel::device::Class::Timer, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
     debug_boot_checkpoint("pit configured");
@@ -427,6 +433,8 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall definition table ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall filter policy ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall resource limit policy ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Syscall scheduling primitives ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Initial process contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Language runtime manifest ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Application capability profile scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TAPP package registry scaffold ready.");
@@ -474,6 +482,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address-space paging policy gap diagnostics ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Address-space paging policy applied to bootstrap tables.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Runtime paging enabled with protected bootstrap map.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Runtime paging policy self-test ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging structures prepared for bootstrap identity map.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Paging protection flag scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "PIT IRQ0 stable at 100 Hz.");
@@ -487,6 +496,8 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch ABI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler round-robin policy ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler sleep wake contract ready.");
     #if defined(TINYOS_GRAPHICAL_AUTOSTART) && !defined(TINYOS_TERMINAL_ONLY)
         if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
         {

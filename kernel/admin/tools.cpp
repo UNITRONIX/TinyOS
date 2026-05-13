@@ -95,7 +95,7 @@ namespace
         { "uieventinfo", "show UI event queue", Category::Ui, State::Ready, false, false },
         { "inputinfo", "show input queue", Category::Ui, State::Ready, false, false },
         { "keyboardinfo", "show keyboard driver", Category::Ui, State::Ready, false, false },
-        { "schedinfo", "show scheduler scaffold", Category::Scheduling, State::Ready, false, false },
+        { "schedinfo", "show scheduler policy state", Category::Scheduling, State::Ready, false, false },
         { "taskinfo", "show kernel tasks", Category::Scheduling, State::Ready, false, false },
         { "contextinfo", "show context switch ABI", Category::Scheduling, State::Ready, false, false },
         { "timerinfo", "show PIT timer", Category::Scheduling, State::Ready, false, false },

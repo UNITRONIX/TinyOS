@@ -14,8 +14,9 @@ namespace tinyos::kernel::syscall
         Close = 3,
         Spawn = 4,
         Exit = 5,
-        Sleep = 6,
-        Count = 7
+        Yield = 6,
+        Sleep = 7,
+        Count = 8
     };
 
     enum class Status : int32_t
@@ -112,6 +113,7 @@ namespace tinyos::kernel::syscall
     bool definition_validation_self_test();
     bool filter_policy_validation_self_test();
     bool resource_policy_validation_self_test();
+    bool scheduling_validation_self_test();
     size_t validation_failure_count();
     size_t rejected_call_count();
     bool throttle_active();

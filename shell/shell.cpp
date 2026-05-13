@@ -837,7 +837,8 @@ namespace
             tinyos::kernel::syscall::boundary_policy_validation_self_test() &&
             tinyos::kernel::syscall::definition_validation_self_test() &&
             tinyos::kernel::syscall::filter_policy_validation_self_test() &&
-            tinyos::kernel::syscall::resource_policy_validation_self_test();
+            tinyos::kernel::syscall::resource_policy_validation_self_test() &&
+            tinyos::kernel::syscall::scheduling_validation_self_test();
     }
 
     void run_system_check()
@@ -851,11 +852,14 @@ namespace
         record_self_test_result("PC required device classes", tinyos::kernel::platform::pc::device_contract_satisfied(), passed, failed);
         record_self_test_result("PIT configured", tinyos::drivers::pit::is_configured(), passed, failed);
         record_self_test_result("scheduler ready", tinyos::kernel::sched::is_ready(), passed, failed);
+        record_self_test_result("scheduler round-robin policy", tinyos::kernel::sched::validation_self_test(), passed, failed);
+        record_self_test_result("scheduler sleep/wake", tinyos::kernel::sched::sleep_wake_validation_self_test(), passed, failed);
         record_self_test_result("frame allocator accounting", tinyos::kernel::memory::frames::accounting_valid(), passed, failed);
         record_self_test_result("heap state", tinyos::kernel::memory::heap::state_valid(), passed, failed);
         record_self_test_result("address space contract", tinyos::kernel::memory::address_space::validation_self_test(), passed, failed);
         record_self_test_result("paging contract", tinyos::kernel::memory::paging::validation_self_test(), passed, failed);
         record_self_test_result("runtime paging enabled", tinyos::kernel::memory::paging::is_runtime_enabled(), passed, failed);
+        record_self_test_result("runtime paging policy", tinyos::kernel::memory::address_space::runtime_paging_policy_validation_self_test(), passed, failed);
         record_self_test_result("VFS path validation", tinyos::kernel::vfs::validation_self_test(), passed, failed);
         record_self_test_result("RAMFS ready", tinyos::kernel::vfs::ramfs::is_ready(), passed, failed);
         record_self_test_result("block VFS contract", tinyos::kernel::vfs::blockfs::validation_self_test(), passed, failed);
@@ -868,6 +872,7 @@ namespace
         record_self_test_result("TAPP trust store", tinyos::kernel::security::trust::validation_self_test(), passed, failed);
         record_self_test_result("TAPP package verifier", tinyos::kernel::app::package_verifier::validation_self_test(), passed, failed);
         record_self_test_result("application launcher", tinyos::kernel::app::launcher::validation_self_test(), passed, failed);
+        record_self_test_result("initial process contract", tinyos::kernel::user::transition::validation_self_test(), passed, failed);
         record_self_test_result("system management tools", tinyos::kernel::admin::tools::validation_self_test(), passed, failed);
         record_self_test_result("secure provisioning manifest", tinyos::kernel::provision::image::validation_self_test(), passed, failed);
         record_self_test_result("system profile contract", system_profile_contract_passes(), passed, failed);
@@ -2908,7 +2913,7 @@ namespace
         { "terminaltest", "draw terminal UI test labels", "terminaltest", "terminaltest" },
         { "terminalclear", "clear terminal UI regions", "terminalclear", "terminalclear" },
         { "terminalpaneltest", "draw terminal UI panel", "terminalpaneltest", "terminalpaneltest" },
-        { "terminalstyle", "draw styled terminal sections and options", "terminalstyle", "terminalstyle" },
+        { "terminalstyle", "draw styled terminal sections", "terminalstyle", "terminalstyle" },
         { "widgetinfo", "show TUI widget scaffold state", "widgetinfo", "widgetinfo" },
         { "widgettest", "draw TUI widget demo", "widgettest", "widgettest" },
         { "widgetdispatch", "dispatch queued UI events to widgets", "widgetdispatch", "widgetdispatch" },
@@ -3236,7 +3241,7 @@ namespace
         tinyos::drivers::vga::write_line("  terminaltest - draw terminal UI test labels");
         tinyos::drivers::vga::write_line("  terminalclear - clear terminal UI regions");
         tinyos::drivers::vga::write_line("  terminalpaneltest - draw terminal UI panel");
-        tinyos::drivers::vga::write_line("  terminalstyle - draw styled terminal sections/options");
+        tinyos::drivers::vga::write_line("  terminalstyle - draw styled terminal sections");
         tinyos::drivers::vga::write_line("  widgetinfo - show TUI widget scaffold state");
         tinyos::drivers::vga::write_line("  widgettest - draw TUI widget demo");
     #if !defined(TINYOS_TERMINAL_ONLY)
@@ -4361,6 +4366,8 @@ namespace tinyos::shell
             drivers::vga::write_line(kernel::syscall::filter_policy_validation_self_test() ? "ok" : "failed");
             drivers::vga::write("Limit test   : ");
             drivers::vga::write_line(kernel::syscall::resource_policy_validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Sched test   : ");
+            drivers::vga::write_line(kernel::syscall::scheduling_validation_self_test() ? "ok" : "failed");
             drivers::vga::write("Bad buffers  : ");
             write_uint64(kernel::syscall::validation_failure_count());
             drivers::vga::put_char('\n');
@@ -4402,12 +4409,28 @@ namespace tinyos::shell
             drivers::vga::write("Sleep calls     : ");
             write_uint64(kernel::sched::sleep_count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Wake events     : ");
+            write_uint64(kernel::sched::wake_event_count());
+            drivers::vga::put_char('\n');
             drivers::vga::write("Context switches: ");
             write_uint64(kernel::sched::context_switch_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Dispatch picks  : ");
+            write_uint64(kernel::sched::dispatch_decision_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Time slice ticks: ");
+            write_uint64(kernel::sched::time_slice_ticks());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Last selected  : ");
+            write_uint64(kernel::sched::last_selected_task_id());
             drivers::vga::put_char('\n');
             drivers::vga::write("Contexts ready  : ");
             write_uint64(kernel::task::prepared_context_count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Round-robin     : ");
+            drivers::vga::write_line(kernel::sched::round_robin_ready() ? "ready" : "blocked");
+            drivers::vga::write("Sleep/wake      : ");
+            drivers::vga::write_line(kernel::sched::sleep_wake_ready() ? "ready" : "blocked");
             drivers::vga::write("Preemption      : ");
             drivers::vga::write_line(kernel::sched::preemption_enabled() ? "enabled" : "not yet");
             return;
@@ -4501,6 +4524,20 @@ namespace tinyos::shell
             drivers::vga::write("Stack alignment     : ");
             write_uint64(kernel::user::transition::user_stack_alignment());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Init process       : ");
+            drivers::vga::write_line(kernel::user::transition::init_process_name());
+            drivers::vga::write("Init entry         : ");
+            drivers::vga::write_line(kernel::user::transition::init_entry_path());
+            drivers::vga::write("Init stack top     : ");
+            write_uint64(kernel::user::transition::init_user_stack_top());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Init stack bytes   : ");
+            write_uint64(kernel::user::transition::init_user_stack_bytes());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Init launch        : ");
+            drivers::vga::write_line(kernel::user::transition::init_launch_supported() ? "supported" : "contract-only");
+            drivers::vga::write("Init contract      : ");
+            drivers::vga::write_line(kernel::user::transition::validation_self_test() ? "ok" : "failed");
             return;
         }
 
@@ -4528,6 +4565,8 @@ namespace tinyos::shell
             drivers::vga::write("Paging gaps      : ");
             write_uint64(kernel::memory::address_space::paging_policy_gap_count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Runtime policy   : ");
+            drivers::vga::write_line(kernel::memory::address_space::runtime_paging_policy_validation_self_test() ? "ok" : "failed");
 
             for (size_t index = 0; index < kernel::memory::address_space::region_count(); ++index)
             {
@@ -4647,6 +4686,8 @@ namespace tinyos::shell
             drivers::vga::put_char('\n');
             drivers::vga::write("Self-test  : ");
             drivers::vga::write_line(kernel::memory::paging::validation_self_test() ? "ok" : "failed");
+            drivers::vga::write("Policy test: ");
+            drivers::vga::write_line(kernel::memory::address_space::runtime_paging_policy_validation_self_test() ? "ok" : "failed");
             return;
         }
 

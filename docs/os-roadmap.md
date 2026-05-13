@@ -184,6 +184,13 @@ Completion criteria:
 - timer-driven scheduling is stable;
 - a stuck non-critical task does not prevent panic diagnostics.
 
+Current groundwork:
+
+- scheduler tick accounting from PIT IRQ0;
+- round-robin scheduler policy selection and validation without active context switching yet;
+- sleep/wake task-state contract with wake events driven by scheduler ticks;
+- active context switching remains gated on an architecture switch implementation.
+
 ## Stage 5 - VFS, initrd and storage
 
 Goal: make files and devices first-class kernel objects.
@@ -225,6 +232,13 @@ Completion criteria:
 - the kernel starts `init`;
 - `init` can start a userland shell;
 - bad user arguments fail without corrupting the kernel.
+
+Current groundwork:
+
+- syscall table includes scheduler-backed `yield` and `sleep` primitives;
+- unimplemented file, spawn and exit syscalls remain filtered or unsupported;
+- initial `init` process contract records the future name, entry path and user stack envelope;
+- real ELF process start and userland shell execution remain future work.
 
 ## Stage 7 - device model and drivers
 
@@ -276,6 +290,13 @@ Completion criteria:
 - resource exhaustion fails in controlled ways;
 - module loading policy is explicit, even if modules remain static.
 
+Current groundwork:
+
+- runtime paging is enabled on the reference `i686` boot path;
+- address-space policy is applied to bootstrap page tables before runtime use;
+- runtime paging policy self-test validates CR3 and kernel/module page flags before shell entry;
+- userspace isolation and permission enforcement remain future work.
+
 ## Stage 9 - optional GUI path
 
 Goal: add graphical capability without making it required for debugging.
@@ -308,12 +329,13 @@ Current groundwork:
 - lighter `fileui` RAMFS browser with view, create, edit, remove, copy and move actions;
 - terminal clear/panel helpers over renderer primitives;
 - `terminalinfo`, `terminaltest`, `terminalclear` and `terminalpaneltest` shell diagnostics;
+- terminal style/color contract with segmented text rendering and `terminalstyle` diagnostics;
 - first TUI widget scaffold with label and button drawing;
 - widget event dispatch bridge for activation keys;
 - `widgetinfo`, `widgettest`, `widgetdispatch` and `widgetactiontest` shell diagnostics;
 - UI event queue scaffold over the generic input queue;
 - `uieventinfo`, `uieventpump`, `uieventpeek` and `uieventtest` shell diagnostics;
-- color terminal themes for provisioning and diagnostics are planned on top of the text-grid path;
+- color terminal themes for provisioning and diagnostics are planned on top of the stable text-grid style helpers;
 - framebuffer-backed higher-resolution terminal modes remain future work.
 
 ## Stage 9B - project provisioning workbench

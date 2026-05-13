@@ -18,7 +18,7 @@ TinyOS currently provides:
 - [x] Phase 1 - CPU exception foundation
 - [x] Phase 2 - PIT IRQ0 and keyboard IRQ1 enabled with diagnostics and polling fallback
 - [x] Phase 3 - memory map, allocator, heap and address-space scaffolds implemented
-- [~] Phase 4 - task and scheduler runtime scaffolds active, context switch not implemented yet
+- [~] Phase 4 - task and scheduler runtime scaffolds active, round-robin policy self-test implemented, context switch not implemented yet
 - [x] Phase 5 - RAMFS, VFS and initrd scaffolds implemented
 - [~] Phase 6 - syscall ABI scaffold started
 - [~] Device model - static device registry scaffold implemented
@@ -42,7 +42,7 @@ TinyOS currently provides:
   - [x] ELF metadata validation scaffold
   - [x] `.tapp` package manifest contract, host validation, detached signing and install-gate verifier
 - Near-term security priorities:
-  - [ ] paging protection in runtime
+  - [~] paging protection in runtime, with active bootstrap policy self-test
   - [x] allocator misuse detection beyond current consistency checks
   - [~] module trust and validation policy
   - [ ] permissions and userspace isolation
@@ -127,6 +127,12 @@ TinyOS currently provides:
 25. [x] add fullscreen desktop mode with keyboard navigation
 26. [x] add linear framebuffer metadata contract and pixel renderer primitives
 27. [x] add cursor scaffold for desktop pointer feedback
+28. [x] add terminal style/color contract with segmented text rendering and boot marker
+29. [x] add scheduler round-robin policy self-test before active context switching
+30. [x] add runtime paging policy self-test after enabling protected bootstrap paging
+31. [x] add scheduler sleep/wake task-state contract and boot marker
+32. [x] implement scheduler-backed `yield` and zero-tick `sleep` syscall primitives
+33. [x] add initial `init` process contract before real process launch
 
 ### Phase 4 - tasking
 - [x] add task descriptor
@@ -134,11 +140,12 @@ TinyOS currently provides:
 - [x] initialize scheduler during boot
 - [x] count scheduler ticks from PIT IRQ0
 - [x] add `taskinfo` and `schedinfo` diagnostics
-- [~] add idle task, `yield`, `sleep` scaffolds
+- [x] add idle task, `yield`, `sleep` scaffolds with sleep/wake validation
 - [x] add kernel stack ownership scaffold
 - [x] add i686 context switch ABI scaffold
+- [x] add round-robin scheduler policy selection and validation
 - [ ] implement active context switch
-- [ ] implement round-robin scheduler
+- [ ] wire round-robin policy to active context switching
 
 ### Phase 5 - file and object layer
 - [x] add `ramfs`
@@ -159,8 +166,11 @@ TinyOS currently provides:
 - [x] add secure image/provisioning manifest for future signed, encrypted and remotely deployed images
 - [~] define project provisioning workbench contracts for isolated workspaces, device variants, resource budgets, remote access and color terminal diagnostics
 - [x] add user/kernel transition stubs
+- [x] add scheduler-backed `yield` and `sleep` syscall primitives
+- [x] add initial `init` process contract for the future first user process
 - [x] add ELF loader skeleton
 - [x] add strict ELF metadata validation scaffold
+- [ ] start `init` as a real user process
 - [ ] move shell toward process-style architecture
 
 ### Device model groundwork
@@ -185,6 +195,7 @@ TinyOS currently provides:
 - [x] add terminal UI scaffold over renderer
 - [x] add terminal clear/panel helpers over renderer primitives
 - [x] add `terminalinfo`, `terminaltest`, `terminalclear` and `terminalpaneltest` shell diagnostics
+- [x] add terminal style/color contract, segmented text rendering and `terminalstyle` demo
 - [x] add first TUI widget scaffold with label and button drawing
 - [x] add UI event dispatch bridge for TUI widgets
 - [x] add `widgetinfo`, `widgettest`, `widgetdispatch` and `widgetactiontest` shell diagnostics

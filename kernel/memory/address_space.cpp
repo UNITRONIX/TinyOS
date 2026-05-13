@@ -475,4 +475,50 @@ namespace tinyos::kernel::memory::address_space
             && observed_boot_modules == g_boot_module_region_count
             && g_rejected_region_count == 0;
     }
+
+    bool runtime_paging_policy_validation_self_test()
+    {
+        if (!validation_self_test() || !paging::is_ready() || !paging::is_runtime_enabled())
+        {
+            return false;
+        }
+
+        if (paging::active_page_directory_address() != paging::page_directory_address())
+        {
+            return false;
+        }
+
+        if (paging_policy_gap_count() != 0 || g_kernel_section_region_count < 4)
+        {
+            return false;
+        }
+
+        size_t protected_pages = 0;
+        for (size_t region_index = 0; region_index < g_region_count; ++region_index)
+        {
+            const Region& region = g_regions[region_index];
+            if (region.type == RegionType::IdentityMapped)
+            {
+                continue;
+            }
+
+            if ((region.flags & paging::PageFlagUser) != 0)
+            {
+                return false;
+            }
+
+            for (uintptr_t offset = 0; offset < region.size; offset += frames::FrameSize)
+            {
+                const uintptr_t address = region.virtual_base + offset;
+                if (!paging_mapping_matches_region(region, address))
+                {
+                    return false;
+                }
+
+                ++protected_pages;
+            }
+        }
+
+        return protected_pages != 0;
+    }
 }

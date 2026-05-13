@@ -40,7 +40,7 @@ Run a headless boot smoke test in QEMU:
 make test-boot
 ```
 
-The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, context ABI and scheduler tick markers appear.
+The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, syscall scheduling primitives, initial process contract, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, terminal style contract, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, runtime paging policy self-test, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, context ABI, scheduler tick, scheduler round-robin policy and scheduler sleep/wake markers appear.
 
 Run a longer runtime stability check:
 
@@ -56,7 +56,7 @@ Run the current minimum runtime envelope test:
 make test-minimal
 ```
 
-By default this boots TinyOS with `MINIMAL_TEST_MEMORY=32M` and checks the boot, requirements, renderer, terminal UI, UI event queue and storage mount markers. Override it with `MINIMAL_TEST_MEMORY=64M` when comparing low-memory behavior.
+By default this boots TinyOS with `MINIMAL_TEST_MEMORY=32M` and checks the boot, requirements, renderer, terminal UI, terminal style, scheduler round-robin policy, scheduler sleep/wake, syscall scheduling primitives, initial process contract, runtime paging policy, UI event queue and storage mount markers. Override it with `MINIMAL_TEST_MEMORY=64M` when comparing low-memory behavior.
 
 Probe a small RAM range before lowering the documented baseline:
 

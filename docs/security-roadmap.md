@@ -77,7 +77,9 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 - [x] syscall definition table contract
 - [x] syscall filter policy scaffold
 - [x] syscall resource limit policy scaffold
+- [x] scheduler-backed `yield` and `sleep` syscall primitives
 - [x] user transition scaffold
+- [x] initial `init` process contract
 - [x] safer memory helpers and allocator hardening
 - [x] runtime capability masks
 - [x] application capability profile manifest
@@ -86,7 +88,7 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 - [x] secure image/provisioning manifest
 - [x] boot module metadata validation scaffold
 - [x] ELF metadata validation scaffold
-- [ ] runtime paging protection
+- [~] runtime paging protection policy self-test for the bootstrap identity map
 - [ ] userspace isolation
 - [ ] permission model
 - [ ] password hashing and install-time credential policy
@@ -97,8 +99,8 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 1. add safe memory helper functions
 2. add more `WARN_ON` categories for drivers and security policy checks
 3. add allocator misuse checks
-4. keep paging preparation out of boot path until validated
-5. validate syscall boundary inputs before real userspace arrives
+4. keep runtime paging policy self-tests in the boot path before expanding mappings
+5. keep scheduler syscall primitives covered by boot self-tests before real userspace arrives
 6. connect launch-policy checks to the eventual process launcher
 7. connect signed image verification to the eventual provisioning agent
 8. connect `.tapp` detached signatures and payload hashes to real target-side cryptographic verification

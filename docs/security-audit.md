@@ -16,7 +16,7 @@ Current audit date: 2026-05-10.
 - [x] Host app public-key trust receipts hashed PEM bytes. Fix: `trust-app` now records a canonical DER SHA-256 fingerprint and validates the public key before writing the trust manifest.
 - [x] Host deployment could copy unsigned or plaintext image artifacts if invoked directly. Fix: `deploy-check` now requires encrypted `.age` transport artifacts and adjacent signature evidence unless an explicit override is set.
 - [ ] Kernel still has no target-side cryptographic signature verification for `.tapp` payloads or images. Keep install gates closed for non-builtin packages until this exists.
-- [ ] User/kernel isolation, runtime paging protection and permission enforcement are still scaffolds. Do not execute untrusted application payloads until these stages are complete.
+- [~] Runtime paging now has a bootstrap policy self-test for kernel/module page flags, but user/kernel isolation and permission enforcement are still scaffolds. Do not execute untrusted application payloads until these stages are complete.
 
 ## Secret Scan Result
 

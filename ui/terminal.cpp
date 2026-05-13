@@ -27,17 +27,17 @@ namespace
     constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionOne[] = {
         { "> ", tinyos::ui::terminal::Style::Selected },
         { "Open HelpUI", tinyos::ui::terminal::Style::Selected },
-        { "  ready", tinyos::ui::terminal::Style::Success }
+        { " ready", tinyos::ui::terminal::Style::Success }
     };
     constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionTwo[] = {
         { "  ", tinyos::ui::terminal::Style::Dim },
         { "Terminal theme", tinyos::ui::terminal::Style::Accent },
-        { "  planned", tinyos::ui::terminal::Style::Warning }
+        { " planned", tinyos::ui::terminal::Style::Warning }
     };
     constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionThree[] = {
         { "  ", tinyos::ui::terminal::Style::Dim },
         { "Diagnostics", tinyos::ui::terminal::Style::Normal },
-        { "  safe", tinyos::ui::terminal::Style::Success }
+        { " safe", tinyos::ui::terminal::Style::Success }
     };
 
     tinyos::ui::terminal::State g_state = {};
@@ -127,6 +127,33 @@ namespace tinyos::ui::terminal
         return true;
     }
 
+    uint8_t attribute_for_style(Style style)
+    {
+        switch (style)
+        {
+        case Style::Normal:
+            return ContentAttribute;
+        case Style::Status:
+            return StatusAttribute;
+        case Style::Accent:
+            return AccentAttribute;
+        case Style::Success:
+            return SuccessAttribute;
+        case Style::Warning:
+            return WarningAttribute;
+        case Style::Error:
+            return ErrorAttribute;
+        case Style::Selected:
+            return SelectedAttribute;
+        case Style::Panel:
+            return PanelAttribute;
+        case Style::Dim:
+            return DimAttribute;
+        }
+
+        return ContentAttribute;
+    }
+
     bool clear_status()
     {
         if (!text_ready())
@@ -161,33 +188,6 @@ namespace tinyos::ui::terminal
 
         ++g_clear_operations;
         return true;
-    }
-
-    uint8_t attribute_for_style(Style style)
-    {
-        switch (style)
-        {
-        case Style::Normal:
-            return ContentAttribute;
-        case Style::Status:
-            return StatusAttribute;
-        case Style::Accent:
-            return AccentAttribute;
-        case Style::Success:
-            return SuccessAttribute;
-        case Style::Warning:
-            return WarningAttribute;
-        case Style::Error:
-            return ErrorAttribute;
-        case Style::Selected:
-            return SelectedAttribute;
-        case Style::Panel:
-            return PanelAttribute;
-        case Style::Dim:
-            return DimAttribute;
-        }
-
-        return ContentAttribute;
     }
 
     bool write_line(uint32_t row, const char* text, uint8_t attribute)
@@ -304,38 +304,32 @@ namespace tinyos::ui::terminal
             return false;
         }
 
-        if (!draw_status("TinyOS terminal UI | styled sections and options", Style::Status))
+        if (!draw_status("TinyOS terminal styles", Style::Status))
         {
             return false;
         }
 
-        if (!draw_panel(0, 11, "Styled terminal sections"))
+        if (!draw_panel(1, 8, "Styled terminal demo"))
         {
             return false;
         }
 
-        if (!write_segments(2, 2, ColorDemoOverview, sizeof(ColorDemoOverview) / sizeof(ColorDemoOverview[0])))
-        {
-            return false;
-        }
-        if (!write_line(4, "  Options can use semantic colors without ANSI parsing.", Style::Normal))
-        {
-            return false;
-        }
-        if (!write_segments(6, 2, ColorDemoOptionOne, sizeof(ColorDemoOptionOne) / sizeof(ColorDemoOptionOne[0])))
-        {
-            return false;
-        }
-        if (!write_segments(7, 2, ColorDemoOptionTwo, sizeof(ColorDemoOptionTwo) / sizeof(ColorDemoOptionTwo[0])))
-        {
-            return false;
-        }
-        if (!write_segments(8, 2, ColorDemoOptionThree, sizeof(ColorDemoOptionThree) / sizeof(ColorDemoOptionThree[0])))
+        if (!write_segments(3, 3, ColorDemoOverview, sizeof(ColorDemoOverview) / sizeof(ColorDemoOverview[0])))
         {
             return false;
         }
 
-        return write_line(12, "Run terminalstyle again after terminalclear to redraw the demo.", Style::Dim);
+        if (!write_segments(5, 3, ColorDemoOptionOne, sizeof(ColorDemoOptionOne) / sizeof(ColorDemoOptionOne[0])))
+        {
+            return false;
+        }
+
+        if (!write_segments(6, 3, ColorDemoOptionTwo, sizeof(ColorDemoOptionTwo) / sizeof(ColorDemoOptionTwo[0])))
+        {
+            return false;
+        }
+
+        return write_segments(7, 3, ColorDemoOptionThree, sizeof(ColorDemoOptionThree) / sizeof(ColorDemoOptionThree[0]));
     }
 
     uint64_t status_update_count()

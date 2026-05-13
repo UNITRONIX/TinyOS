@@ -38,4 +38,5 @@ namespace tinyos::kernel::memory::address_space
     size_t apply_paging_policy();
     size_t paging_policy_gap_count();
     bool validation_self_test();
+    bool runtime_paging_policy_validation_self_test();
 }

@@ -1,4 +1,5 @@
 #include <tinyos/kernel/klog.hpp>
+#include <tinyos/kernel/sched/scheduler.hpp>
 #include <tinyos/kernel/syscall/syscall.hpp>
 
 namespace
@@ -33,7 +34,8 @@ namespace
         { tinyos::kernel::syscall::Number::Close, "close", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
         { tinyos::kernel::syscall::Number::Spawn, "spawn", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
         { tinyos::kernel::syscall::Number::Exit, "exit", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
-        { tinyos::kernel::syscall::Number::Sleep, "sleep", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false }
+        { tinyos::kernel::syscall::Number::Yield, "yield", 0, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
+        { tinyos::kernel::syscall::Number::Sleep, "sleep", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true }
     };
 
     bool g_ready = false;
@@ -298,8 +300,23 @@ namespace tinyos::kernel::syscall
         case Number::Close:
         case Number::Spawn:
         case Number::Exit:
-        case Number::Sleep:
             return make_result(Status::Unsupported);
+        case Number::Yield:
+            if (!tinyos::kernel::sched::is_ready())
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            tinyos::kernel::sched::yield();
+            return make_result(Status::Ok, static_cast<uint32_t>(tinyos::kernel::sched::yield_count()));
+        case Number::Sleep:
+            if (!tinyos::kernel::sched::is_ready())
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            tinyos::kernel::sched::sleep_ticks(request.arg0);
+            return make_result(Status::Ok, static_cast<uint32_t>(tinyos::kernel::sched::sleep_count()));
         case Number::Count:
             break;
         }
@@ -388,7 +405,7 @@ namespace tinyos::kernel::syscall
     {
         return g_filter_policy.deny_unimplemented &&
             g_filter_policy.count_filtered_as_rejected &&
-            implemented_definition_count() == 0;
+            implemented_definition_count() == 2;
     }
 
     bool resource_policy_validation_self_test()
@@ -402,6 +419,28 @@ namespace tinyos::kernel::syscall
         return g_resource_policy.max_rejected_calls_before_throttle != 0 &&
             g_resource_policy.throttle_after_rejections &&
             throttled;
+    }
+
+    bool scheduling_validation_self_test()
+    {
+        if (!tinyos::kernel::sched::is_ready())
+        {
+            return false;
+        }
+
+        const size_t rejected_before = g_rejected_call_count;
+        const uint64_t yields_before = tinyos::kernel::sched::yield_count();
+        const uint64_t dispatch_before = tinyos::kernel::sched::dispatch_decision_count();
+        const Request yield_request = { static_cast<uint32_t>(Number::Yield), 0, 0, 0, 0 };
+        const Request sleep_zero_request = { static_cast<uint32_t>(Number::Sleep), 0, 0, 0, 0 };
+
+        const bool yield_ok = dispatch(yield_request).status == Status::Ok;
+        const bool sleep_zero_ok = dispatch(sleep_zero_request).status == Status::Ok;
+        return yield_ok &&
+            sleep_zero_ok &&
+            g_rejected_call_count == rejected_before &&
+            tinyos::kernel::sched::yield_count() >= yields_before + 2 &&
+            tinyos::kernel::sched::dispatch_decision_count() >= dispatch_before + 2;
     }
 
     size_t validation_failure_count()
