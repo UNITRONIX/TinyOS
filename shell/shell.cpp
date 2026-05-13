@@ -874,6 +874,7 @@ namespace
         record_self_test_result("installer mock preflight", installer_mock_preflight_passes(), passed, failed);
         record_self_test_result("terminal UI contract", tinyos::ui::terminal::validation_self_test(), passed, failed);
         record_self_test_result("terminal panel contract", tinyos::ui::terminal::panel_validation_self_test(), passed, failed);
+        record_self_test_result("terminal style contract", tinyos::ui::terminal::style_validation_self_test(), passed, failed);
         record_self_test_result("TUI widget contract", tinyos::ui::widgets::validation_self_test(), passed, failed);
         record_self_test_result("TUI event bridge", tinyos::ui::widgets::event_bridge_validation_self_test(), passed, failed);
         tinyos::drivers::vga::write("Passed: ");
@@ -2907,6 +2908,7 @@ namespace
         { "terminaltest", "draw terminal UI test labels", "terminaltest", "terminaltest" },
         { "terminalclear", "clear terminal UI regions", "terminalclear", "terminalclear" },
         { "terminalpaneltest", "draw terminal UI panel", "terminalpaneltest", "terminalpaneltest" },
+        { "terminalstyle", "draw styled terminal sections and options", "terminalstyle", "terminalstyle" },
         { "widgetinfo", "show TUI widget scaffold state", "widgetinfo", "widgetinfo" },
         { "widgettest", "draw TUI widget demo", "widgettest", "widgettest" },
         { "widgetdispatch", "dispatch queued UI events to widgets", "widgetdispatch", "widgetdispatch" },
@@ -3234,6 +3236,7 @@ namespace
         tinyos::drivers::vga::write_line("  terminaltest - draw terminal UI test labels");
         tinyos::drivers::vga::write_line("  terminalclear - clear terminal UI regions");
         tinyos::drivers::vga::write_line("  terminalpaneltest - draw terminal UI panel");
+        tinyos::drivers::vga::write_line("  terminalstyle - draw styled terminal sections/options");
         tinyos::drivers::vga::write_line("  widgetinfo - show TUI widget scaffold state");
         tinyos::drivers::vga::write_line("  widgettest - draw TUI widget demo");
     #if !defined(TINYOS_TERMINAL_ONLY)
@@ -3807,6 +3810,12 @@ namespace tinyos::shell
         if (core::string::compare(command, "terminalpaneltest") == 0)
         {
             drivers::vga::write_line(tinyos::ui::terminal::render_panel_self_test() ? "Terminal panel test drawn." : "Terminal panel test failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "terminalstyle") == 0)
+        {
+            drivers::vga::write_line(tinyos::ui::terminal::render_color_demo() ? "Terminal style demo drawn." : "Terminal style demo failed.");
             return;
         }
 

@@ -9,6 +9,36 @@ namespace
     constexpr uint8_t SelfTestAttribute = 0x0A;
     constexpr uint8_t ContentAttribute = 0x07;
     constexpr uint8_t PanelAttribute = 0x17;
+    constexpr uint8_t AccentAttribute = 0x0B;
+    constexpr uint8_t SuccessAttribute = 0x0A;
+    constexpr uint8_t WarningAttribute = 0x0E;
+    constexpr uint8_t ErrorAttribute = 0x0C;
+    constexpr uint8_t SelectedAttribute = 0x2F;
+    constexpr uint8_t DimAttribute = 0x08;
+
+    constexpr tinyos::ui::terminal::TextSegment ColorDemoOverview[] = {
+        { "section ", tinyos::ui::terminal::Style::Accent },
+        { "status", tinyos::ui::terminal::Style::Success },
+        { " / ", tinyos::ui::terminal::Style::Dim },
+        { "warning", tinyos::ui::terminal::Style::Warning },
+        { " / ", tinyos::ui::terminal::Style::Dim },
+        { "error", tinyos::ui::terminal::Style::Error }
+    };
+    constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionOne[] = {
+        { "> ", tinyos::ui::terminal::Style::Selected },
+        { "Open HelpUI", tinyos::ui::terminal::Style::Selected },
+        { "  ready", tinyos::ui::terminal::Style::Success }
+    };
+    constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionTwo[] = {
+        { "  ", tinyos::ui::terminal::Style::Dim },
+        { "Terminal theme", tinyos::ui::terminal::Style::Accent },
+        { "  planned", tinyos::ui::terminal::Style::Warning }
+    };
+    constexpr tinyos::ui::terminal::TextSegment ColorDemoOptionThree[] = {
+        { "  ", tinyos::ui::terminal::Style::Dim },
+        { "Diagnostics", tinyos::ui::terminal::Style::Normal },
+        { "  safe", tinyos::ui::terminal::Style::Success }
+    };
 
     tinyos::ui::terminal::State g_state = {};
     uint64_t g_status_updates = 0;
@@ -24,6 +54,17 @@ namespace
             g_state.columns != 0 &&
             g_state.rows > 1 &&
             g_state.content_rows != 0;
+    }
+
+    uint32_t segment_width(const char* text, uint32_t remaining_columns)
+    {
+        uint32_t width = 0;
+        while (text[width] != '\0' && text[width] != '\n' && width < remaining_columns)
+        {
+            ++width;
+        }
+
+        return width;
     }
 }
 
@@ -65,13 +106,18 @@ namespace tinyos::ui::terminal
 
     bool draw_status(const char* text)
     {
+        return draw_status(text, Style::Status);
+    }
+
+    bool draw_status(const char* text, Style style)
+    {
         if (text == nullptr || !text_ready())
         {
             ++g_rejected_operations;
             return false;
         }
 
-        if (!tinyos::ui::renderer::draw_text(0, g_state.status_row, text, StatusAttribute))
+        if (!tinyos::ui::renderer::draw_text(0, g_state.status_row, text, attribute_for_style(style)))
         {
             ++g_rejected_operations;
             return false;
@@ -117,6 +163,33 @@ namespace tinyos::ui::terminal
         return true;
     }
 
+    uint8_t attribute_for_style(Style style)
+    {
+        switch (style)
+        {
+        case Style::Normal:
+            return ContentAttribute;
+        case Style::Status:
+            return StatusAttribute;
+        case Style::Accent:
+            return AccentAttribute;
+        case Style::Success:
+            return SuccessAttribute;
+        case Style::Warning:
+            return WarningAttribute;
+        case Style::Error:
+            return ErrorAttribute;
+        case Style::Selected:
+            return SelectedAttribute;
+        case Style::Panel:
+            return PanelAttribute;
+        case Style::Dim:
+            return DimAttribute;
+        }
+
+        return ContentAttribute;
+    }
+
     bool write_line(uint32_t row, const char* text, uint8_t attribute)
     {
         if (text == nullptr || !text_ready() || row >= g_state.content_rows)
@@ -129,6 +202,42 @@ namespace tinyos::ui::terminal
         {
             ++g_rejected_operations;
             return false;
+        }
+
+        ++g_line_writes;
+        return true;
+    }
+
+    bool write_line(uint32_t row, const char* text, Style style)
+    {
+        return write_line(row, text, attribute_for_style(style));
+    }
+
+    bool write_segments(uint32_t row, uint32_t column, const TextSegment* segments, uint32_t count)
+    {
+        if (segments == nullptr || count == 0 || !text_ready() || row >= g_state.content_rows || column >= g_state.columns)
+        {
+            ++g_rejected_operations;
+            return false;
+        }
+
+        uint32_t current_column = column;
+        const uint32_t absolute_row = g_state.content_first_row + row;
+        for (uint32_t index = 0; index < count && current_column < g_state.columns; ++index)
+        {
+            if (segments[index].text == nullptr)
+            {
+                ++g_rejected_operations;
+                return false;
+            }
+
+            if (!tinyos::ui::renderer::draw_text(current_column, absolute_row, segments[index].text, attribute_for_style(segments[index].style)))
+            {
+                ++g_rejected_operations;
+                return false;
+            }
+
+            current_column += segment_width(segments[index].text, g_state.columns - current_column);
         }
 
         ++g_line_writes;
@@ -188,6 +297,47 @@ namespace tinyos::ui::terminal
         return write_line(3, "Panel path OK", SelfTestAttribute);
     }
 
+    bool render_color_demo()
+    {
+        if (!clear_status() || !clear_content())
+        {
+            return false;
+        }
+
+        if (!draw_status("TinyOS terminal UI | styled sections and options", Style::Status))
+        {
+            return false;
+        }
+
+        if (!draw_panel(0, 11, "Styled terminal sections"))
+        {
+            return false;
+        }
+
+        if (!write_segments(2, 2, ColorDemoOverview, sizeof(ColorDemoOverview) / sizeof(ColorDemoOverview[0])))
+        {
+            return false;
+        }
+        if (!write_line(4, "  Options can use semantic colors without ANSI parsing.", Style::Normal))
+        {
+            return false;
+        }
+        if (!write_segments(6, 2, ColorDemoOptionOne, sizeof(ColorDemoOptionOne) / sizeof(ColorDemoOptionOne[0])))
+        {
+            return false;
+        }
+        if (!write_segments(7, 2, ColorDemoOptionTwo, sizeof(ColorDemoOptionTwo) / sizeof(ColorDemoOptionTwo[0])))
+        {
+            return false;
+        }
+        if (!write_segments(8, 2, ColorDemoOptionThree, sizeof(ColorDemoOptionThree) / sizeof(ColorDemoOptionThree[0])))
+        {
+            return false;
+        }
+
+        return write_line(12, "Run terminalstyle again after terminalclear to redraw the demo.", Style::Dim);
+    }
+
     uint64_t status_update_count()
     {
         return g_status_updates;
@@ -231,5 +381,19 @@ namespace tinyos::ui::terminal
             g_state.columns >= 20 &&
             g_state.content_rows >= 6 &&
             tinyos::ui::renderer::primitive_validation_self_test();
+    }
+
+    bool style_validation_self_test()
+    {
+        return panel_validation_self_test() &&
+            attribute_for_style(Style::Normal) == ContentAttribute &&
+            attribute_for_style(Style::Status) == StatusAttribute &&
+            attribute_for_style(Style::Accent) == AccentAttribute &&
+            attribute_for_style(Style::Success) == SuccessAttribute &&
+            attribute_for_style(Style::Warning) == WarningAttribute &&
+            attribute_for_style(Style::Error) == ErrorAttribute &&
+            attribute_for_style(Style::Selected) == SelectedAttribute &&
+            attribute_for_style(Style::Panel) == PanelAttribute &&
+            attribute_for_style(Style::Dim) == DimAttribute;
     }
 }

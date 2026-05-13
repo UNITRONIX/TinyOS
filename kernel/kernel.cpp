@@ -445,6 +445,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Pixel renderer contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal UI scaffold ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal panel scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Terminal style contract ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "TUI widget scaffold ready.");
 #if !defined(TINYOS_TERMINAL_ONLY)
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Cursor scaffold ready.");

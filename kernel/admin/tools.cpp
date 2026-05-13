@@ -88,6 +88,7 @@ namespace
         { "renderinfo", "show renderer state", Category::Ui, State::Ready, false, false },
         { "cursorinfo", "show cursor scaffold state", Category::Ui, State::Ready, false, false },
         { "terminalinfo", "show terminal UI state", Category::Ui, State::Ready, false, false },
+        { "terminalstyle", "draw styled terminal sections", Category::Ui, State::Ready, true, false },
         { "widgetinfo", "show widget state", Category::Ui, State::Ready, false, false },
         { "wminfo", "show window manager state", Category::Ui, State::Ready, false, false },
         { "desktopinfo", "show desktop shell state", Category::Ui, State::Ready, false, false },
