@@ -19,6 +19,7 @@ namespace
     constexpr char ProvisioningText[] = "pipeline=project-workspace,provision-config,device-variants,project-api,resource-budget,app-bundle,app-signature,system-profile,encryption-default,image-manifest,image-build,image-sign,image-encrypt,remote-folder-access,deploy-check,deploy-ssh,target-verify,rollback-slot\nhost-tool=scripts/tinyos-image.sh\nready-contracts=app-bundle,app-signature,system-profile,encryption-default,image-manifest,deploy-check,deploy-receipt\nplanned-host-tools=provisioninit,provisionconfig,provisionvariant,provisionresources,imagebuild,imagesign,imageencrypt,keygen,remoteaccess,deploy\nplanned-kernel=provisionapi,provisionui,terminaltheme,videomode,target-verify,rollback-slot\ntransport=ssh-sftp-now,tinylink-later\npolicy=isolated-workspace,sign-before-deploy,encrypt-by-default,deploy-check-before-transport,remote-access-opt-in,rollback-before-activate\n";
     constexpr char InstallText[] = "state=ready-contract,ready-mock\nmedia=iso-current,disk-install-planned\nprofile=examples/install.profile\nhost-tools=install-plan,check-install-profile\ncommands=installinfo,installcheck,install\nreceipt=/receipts/install.receipt\ninputs=device.name,network.mode,user.name,credential.bootstrap,admin.mode\nmock-policy=ramfs-receipt-only,no-disk-writes\ncredential-policy=prompt-only,password-hashing-required,no-plaintext-secrets\nadmin-policy=shared-bootstrap-development-only,separate-secret-or-key-release\nprovisioning=available-after-first-boot\n";
     constexpr char ProfileText[] = "tinyos.profile.version=0\nstate=ramfs-default\nsource=/system/profile.txt\ndevice.name=tinyos-dev-vm\ndevice.variant=qemu-i686-terminal\nboot.target=i686-pc-qemu\nnetwork.mode=disabled\nuser.bootstrap=developer\ncredential.bootstrap=prompt\nadmin.mode=same-bootstrap-secret\nsecurity.password_hashing=required\nsecurity.plaintext_secrets=forbidden\nprovisioning.encryption=required\nprovisioning.remote_access=disabled\nstorage.persistence=ramfs-only\ninstall.state=mock\n";
+    constexpr char TinyosConfInitialText[] = "theme=copilot\nvideomode=auto\nserial.mirror=0\n";
     constexpr char UiText[] = "renderer=text-grid\nrenderer-primitives=fill-rect,clear-area\nterminal=status-row-plus-content\nterminal-styles=normal,status,accent,success,warning,error,selected,panel,dim\nterminal-panels=clear,panel\nfile-browser=filemgr,fileui\nfile-browser-actions=view,create-file,create-directory,edit,remove,copy,move,two-pane-copy,two-pane-move\ntext-editor=textedit\ntext-editor-actions=load,replace,append,clear,save,reload,info\nwidgets=label,button\nwidget-events=dispatch,activate\nevents=ui-event-queue\ncommands=renderinfo,rendertest,renderfilltest,terminalinfo,terminaltest,terminalclear,terminalpaneltest,terminalstyle,widgetinfo,widgettest,widgetdispatch,widgetactiontest,uieventinfo,uieventpump,uieventpeek,uieventtest\n";
     constexpr char ConsoleText[] = "console device placeholder\n";
     constexpr char BlockDeviceText[] = "name=ram-block0\nclass=block\nsector-size=512\nsectors=8\nwritable=true\n";
@@ -28,6 +29,7 @@ namespace
     constexpr char ExampleTappText[] = "tinyos.tapp.version=0\ntinyos.tapp.kind=manifest-envelope\ntinyos.tapp.source_sha256=example-not-signed-yet\ntinyos.tapp.signature_policy=required\ntinyos.tapp.signature_state=unsigned\ntinyos.tapp.payload_policy=hash-required\ntinyos.tapp.payload_state=external\napp.name=example-system-tool\napp.runtime=native-cpp-elf32\napp.profile=example-system-tool\napp.entry=/apps/example-system-tool.elf\napp.capabilities=console,file-read,clock\napp.trust=developer-signed\nstate=valid-manifest\nverify=signature-required\n";
 
     char g_notes_buffer[512] = "TinyOS editable RAMFS note.\n";
+    char g_tinyos_conf_buffer[256] = "theme=copilot\nvideomode=auto\nserial.mirror=0\n";
 
     tinyos::kernel::vfs::Node g_root = { "/", true, nullptr, nullptr, 0, 0, false, nullptr };
     tinyos::kernel::vfs::Node g_apps = { "apps", true, nullptr, nullptr, 0, 0, false, &g_root };
@@ -48,6 +50,7 @@ namespace
     tinyos::kernel::vfs::Node g_install_info = { "install.txt", false, InstallText, nullptr, sizeof(InstallText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_profile_info = { "profile.txt", false, ProfileText, nullptr, sizeof(ProfileText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_ui_info = { "ui.txt", false, UiText, nullptr, sizeof(UiText) - 1, 0, false, &g_system };
+    tinyos::kernel::vfs::Node g_tinyos_conf = { "tinyos.conf", false, nullptr, g_tinyos_conf_buffer, sizeof(TinyosConfInitialText) - 1, sizeof(g_tinyos_conf_buffer) - 1, true, &g_system };
     tinyos::kernel::vfs::Node g_console = { "console", false, ConsoleText, nullptr, sizeof(ConsoleText) - 1, 0, false, &g_devices };
     tinyos::kernel::vfs::Node g_example_tapp = { "example-system-tool.tapp", false, ExampleTappText, nullptr, sizeof(ExampleTappText) - 1, 0, false, &g_apps };
     tinyos::kernel::vfs::Node g_ram_block = { "ram-block0", false, BlockDeviceText, nullptr, sizeof(BlockDeviceText) - 1, 0, false, &g_devices };
@@ -84,6 +87,7 @@ namespace
         &g_install_info,
         &g_profile_info,
         &g_ui_info,
+        &g_tinyos_conf,
         &g_example_tapp,
         &g_console,
         &g_ram_block,

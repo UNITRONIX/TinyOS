@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <tinyos/drivers/console.hpp>
 #include <tinyos/drivers/vga.hpp>
 
 namespace
@@ -82,7 +83,7 @@ namespace tinyos::drivers::vga
         g_color = make_color(foreground, background);
     }
 
-    void put_char(char character)
+    void hardware_put_char(char character)
     {
         if (character == '\n')
         {
@@ -120,7 +121,7 @@ namespace tinyos::drivers::vga
         {
             for (size_t index = 0; index < 4; ++index)
             {
-                put_char(' ');
+                hardware_put_char(' ');
             }
             return;
         }
@@ -134,17 +135,37 @@ namespace tinyos::drivers::vga
         }
     }
 
-    void write(const char* text)
+    void hardware_write(const char* text)
     {
+        if (text == nullptr)
+        {
+            return;
+        }
+
         for (size_t index = 0; text[index] != '\0'; ++index)
         {
-            put_char(text[index]);
+            hardware_put_char(text[index]);
         }
+    }
+
+    void hardware_write_line(const char* text)
+    {
+        hardware_write(text);
+        hardware_put_char('\n');
+    }
+
+    void put_char(char character)
+    {
+        tinyos::drivers::console::put_char(character);
+    }
+
+    void write(const char* text)
+    {
+        tinyos::drivers::console::write(text);
     }
 
     void write_line(const char* text)
     {
-        write(text);
-        put_char('\n');
+        tinyos::drivers::console::write_line(text);
     }
 }

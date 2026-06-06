@@ -130,6 +130,10 @@ ifeq ($(GRAPHICAL_AUTOSTART),1)
 	CXXFLAGS += -DTINYOS_GRAPHICAL_AUTOSTART
 endif
 
+ifeq ($(GFX_TERM_AUTOSTART),1)
+	CXXFLAGS += -DTINYOS_GFX_TERM_AUTOSTART
+endif
+
 ifeq ($(TERMINAL_ONLY),1)
 	CXXFLAGS += -DTINYOS_TERMINAL_ONLY
 endif
@@ -147,6 +151,7 @@ CPP_SOURCES := \
    drivers/pic.cpp \
 	drivers/pit.cpp \
  drivers/serial.cpp \
+	drivers/console.cpp \
 	drivers/virtio_blk.cpp \
 	drivers/vga.cpp \
 	drivers/keyboard.cpp \
@@ -186,6 +191,10 @@ CPP_SOURCES := \
 	ui/events.cpp \
 	ui/terminal.cpp \
 	ui/widgets.cpp \
+	ui/font.cpp \
+	ui/font_atlas.cpp \
+	ui/gfx_scrollback.cpp \
+	shell/completion.cpp \
 	shell/shell.cpp \
 	kernel/kernel.cpp
 
@@ -193,7 +202,14 @@ DESKTOP_CPP_SOURCES := \
 	drivers/mouse.cpp \
 	ui/cursor.cpp \
 	ui/desktop.cpp \
+	ui/font_logo.cpp \
 	ui/graphical_desktop.cpp \
+	ui/gfx_terminal.cpp \
+	ui/gfx_input.cpp \
+	ui/gfx_theme.cpp \
+	ui/gfx_console.cpp \
+	ui/gfx_anim.cpp \
+	ui/gfx_picker.cpp \
 	ui/window_manager.cpp
 
 ifneq ($(TERMINAL_ONLY),1)
@@ -269,6 +285,25 @@ run-gui: run
 
 run-framebuffer-preview:
 	$(MAKE) GRAPHICAL_BOOT=1 GRAPHICAL_AUTOSTART=1 TARGET=tinyos-desktop.kernel ISO=build/tinyos-desktop.iso ISO_DIR=build/isodir-desktop OBJ_DIR=build/obj-gui-autostart run
+
+run-gfxterm: check-test-tools iso
+	$(QEMU) -cdrom $(ISO) -vga std -m 64M
+
+run-gfxterm-autostart:
+	$(MAKE) GFX_TERM_AUTOSTART=1 iso run-gfxterm
+
+test-gfxterm-boot: check-test-tools iso
+	@mkdir -p build
+	@set +e; $(TIMEOUT) $(BOOT_TEST_TIMEOUT) $(QEMU) -cdrom $(ISO) -vga std -m 64M -display none -serial file:build/boot-gfxterm.log -no-reboot -no-shutdown >/dev/null 2>&1; status=$$?; \
+	if [ $$status -eq 124 ]; then \
+		echo "GFX terminal boot smoke test passed (timeout reached)."; \
+	elif [ $$status -ne 0 ]; then \
+		echo "GFX terminal boot smoke test failed: QEMU exited before timeout with status $$status."; \
+		exit $$status; \
+	else \
+		echo "GFX terminal boot smoke test failed: QEMU exited early."; \
+		exit 1; \
+	fi
 
 run-headless: check-test-tools iso
 	$(QEMU) -cdrom $(ISO) -serial stdio -display none

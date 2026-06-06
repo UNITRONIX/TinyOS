@@ -51,6 +51,7 @@ namespace
     volatile uint64_t g_dropped_character_count = 0;
     volatile bool g_has_seen_scancode = false;
     volatile uint8_t g_last_scancode = 0;
+    bool g_shift_pressed = false;
 
     void debug_scancode(uint8_t scancode)
     {
@@ -162,6 +163,21 @@ namespace
             case 0x50:
                 character = tinyos::drivers::keyboard::KeyDown;
                 return true;
+            case 0x47:
+                character = tinyos::drivers::keyboard::KeyHome;
+                return true;
+            case 0x4F:
+                character = tinyos::drivers::keyboard::KeyEnd;
+                return true;
+            case 0x53:
+                character = tinyos::drivers::keyboard::KeyDelete;
+                return true;
+            case 0x49:
+                character = tinyos::drivers::keyboard::KeyPgUp;
+                return true;
+            case 0x51:
+                character = tinyos::drivers::keyboard::KeyPgDn;
+                return true;
             default:
                 ++g_ignored_scancode_count;
                 return false;
@@ -191,6 +207,19 @@ namespace
 
         if ((scancode & 0x80) != 0)
         {
+            const uint8_t release = static_cast<uint8_t>(scancode & 0x7F);
+            if (release == 0x2A || release == 0x36)
+            {
+                g_shift_pressed = false;
+            }
+
+            ++g_ignored_scancode_count;
+            return false;
+        }
+
+        if (scancode == 0x2A || scancode == 0x36)
+        {
+            g_shift_pressed = true;
             ++g_ignored_scancode_count;
             return false;
         }
@@ -206,6 +235,11 @@ namespace
         {
             ++g_ignored_scancode_count;
             return false;
+        }
+
+        if (character == '\t' && g_shift_pressed)
+        {
+            character = tinyos::drivers::keyboard::KeyShiftTab;
         }
 
         return true;

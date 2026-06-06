@@ -50,6 +50,16 @@
 #include <tinyos/ui/cursor.hpp>
 #include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/graphical_desktop.hpp>
+#include <tinyos/ui/font.hpp>
+#include <tinyos/ui/gfx_terminal.hpp>
+#include <tinyos/ui/font_atlas.hpp>
+#include <tinyos/ui/gfx_anim.hpp>
+#include <tinyos/ui/gfx_picker.hpp>
+#include <tinyos/ui/gfx_theme.hpp>
+#include <tinyos/kernel/device/framebuffer.hpp>
+#include <tinyos/drivers/console.hpp>
+#include <tinyos/shell/completion.hpp>
+#include <tinyos/ui/gfx_scrollback.hpp>
 #endif
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>
@@ -886,6 +896,17 @@ namespace
         record_self_test_result("terminal style contract", tinyos::ui::terminal::style_validation_self_test(), passed, failed);
         record_self_test_result("TUI widget contract", tinyos::ui::widgets::validation_self_test(), passed, failed);
         record_self_test_result("TUI event bridge", tinyos::ui::widgets::event_bridge_validation_self_test(), passed, failed);
+        record_self_test_result("bitmap font contract", tinyos::ui::font::validation_self_test(), passed, failed);
+        record_self_test_result("font atlas contract", tinyos::ui::font_atlas::validation_self_test(), passed, failed);
+        record_self_test_result("gfx scrollback contract", tinyos::ui::gfx_scrollback::validation_self_test(), passed, failed);
+        record_self_test_result("shell completion contract", tinyos::shell::completion::validation_self_test(), passed, failed);
+        record_self_test_result("console contract", tinyos::drivers::console::validation_self_test(), passed, failed);
+#if !defined(TINYOS_TERMINAL_ONLY)
+        record_self_test_result("gfx terminal contract", tinyos::ui::gfx_terminal::validation_self_test(), passed, failed);
+        record_self_test_result("gfx theme contract", tinyos::ui::gfx_theme::validation_self_test(), passed, failed);
+        record_self_test_result("gfx anim contract", tinyos::ui::gfx_anim::validation_self_test(), passed, failed);
+        record_self_test_result("gfx picker contract", tinyos::ui::gfx_picker::validation_self_test(), passed, failed);
+#endif
         tinyos::drivers::vga::write("Passed: ");
         write_uint64(passed);
         tinyos::drivers::vga::write(" Failed: ");
@@ -2855,6 +2876,45 @@ namespace
         }
     }
 
+    void print_gfxterm_info()
+    {
+        tinyos::drivers::vga::write("Linear FB     : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "yes" : "no");
+        tinyos::drivers::vga::write("Renders       : ");
+        write_uint64(tinyos::ui::gfx_terminal::render_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Handled keys  : ");
+        write_uint64(tinyos::ui::gfx_terminal::handled_key_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Commands      : ");
+        write_uint64(tinyos::ui::gfx_terminal::command_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Font contract : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::font::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Gfx contract  : ");
+        tinyos::drivers::vga::write_line(tinyos::ui::gfx_terminal::validation_self_test() ? "ok" : "failed");
+    }
+
+    void run_gfx_terminal_mode()
+    {
+        if (!tinyos::kernel::device::framebuffer::has_linear_framebuffer())
+        {
+            tinyos::drivers::vga::write_line("No linear framebuffer. Run QEMU with -vga std (make run-gfxterm).");
+            return;
+        }
+
+        if (!tinyos::ui::gfx_terminal::run_session(g_current_directory))
+        {
+            tinyos::drivers::vga::write_line("Gfx terminal mode failed.");
+            return;
+        }
+
+        tinyos::ui::renderer::initialize();
+        tinyos::ui::terminal::initialize();
+        tinyos::drivers::vga::clear();
+        tinyos::drivers::vga::write_line("Returned from gfx terminal.");
+    }
+
     void run_desktop_mode()
     {
         if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
@@ -3076,7 +3136,11 @@ namespace
         { "desktoplaunch", "Alpha: render selected launch request", "desktoplaunch", nullptr },
         { "desktopdispatch", "Alpha: dispatch desktop input events", "desktopdispatch", nullptr },
         { "desktopkeytest", "Alpha: test desktop keyboard flow", "desktopkeytest", nullptr },
-        { "desktopmousetest", "Alpha: test desktop mouse click flow", "desktopmousetest", nullptr }
+        { "desktopmousetest", "Alpha: test desktop mouse click flow", "desktopmousetest", nullptr },
+        { "gfxterm", "enter Copilot-style framebuffer terminal", "gfxterm", nullptr },
+        { "gfxterminfo", "show gfx terminal scaffold state", "gfxterminfo", "gfxterminfo" },
+        { "terminaltheme", "set or show gfx terminal theme", "terminaltheme [copilot|dracula|solarized]", "terminaltheme" },
+        { "videomode", "show or select console video mode", "videomode [vga|gfx|auto]", "videomode" }
     #endif
     };
 
@@ -3397,6 +3461,10 @@ namespace
         tinyos::drivers::vga::write_line("  desktopdispatch - dispatch desktop input events");
         tinyos::drivers::vga::write_line("  desktopkeytest - test desktop keyboard flow");
         tinyos::drivers::vga::write_line("  desktopmousetest - test desktop mouse click flow");
+        tinyos::drivers::vga::write_line("  gfxterm  - enter Copilot-style framebuffer terminal");
+        tinyos::drivers::vga::write_line("  gfxterminfo - show gfx terminal scaffold state");
+        tinyos::drivers::vga::write_line("  terminaltheme - set or show gfx terminal theme");
+        tinyos::drivers::vga::write_line("  videomode - show or select console video mode");
     #endif
         tinyos::drivers::vga::write_line("  widgetdispatch - dispatch queued UI events to widgets");
         tinyos::drivers::vga::write_line("  widgetactiontest - inject and dispatch widget action");
@@ -4012,6 +4080,87 @@ namespace tinyos::shell
         if (core::string::compare(command, "desktop") == 0)
         {
             run_desktop_mode();
+            return;
+        }
+
+        if (core::string::compare(command, "gfxterm") == 0)
+        {
+            run_gfx_terminal_mode();
+            return;
+        }
+
+        if (core::string::compare(command, "gfxterminfo") == 0)
+        {
+            print_gfxterm_info();
+            return;
+        }
+
+        if (core::string::compare(command, "terminaltheme") == 0 || core::string::starts_with(command, "terminaltheme "))
+        {
+            const char* argument = command;
+            if (core::string::starts_with(command, "terminaltheme "))
+            {
+                argument = command + 14;
+                argument = core::string::skip_spaces(argument);
+            }
+
+            if (argument[0] == '\0')
+            {
+                tinyos::drivers::vga::write("Active theme: ");
+                tinyos::drivers::vga::write_line(tinyos::ui::gfx_theme::preset_name(tinyos::ui::gfx_theme::active_preset()));
+                return;
+            }
+
+            tinyos::ui::gfx_theme::Preset preset = tinyos::ui::gfx_theme::Preset::Copilot;
+            if (core::string::compare(argument, "dracula") == 0)
+            {
+                preset = tinyos::ui::gfx_theme::Preset::Dracula;
+            }
+            else if (core::string::compare(argument, "solarized") == 0)
+            {
+                preset = tinyos::ui::gfx_theme::Preset::Solarized;
+            }
+            else if (core::string::compare(argument, "copilot") != 0)
+            {
+                tinyos::drivers::vga::write_line("Usage: terminaltheme [copilot|dracula|solarized]");
+                return;
+            }
+
+            drivers::vga::write_line(tinyos::ui::gfx_theme::set_preset(preset) ? "Theme updated." : "Theme update failed.");
+            return;
+        }
+
+        if (core::string::compare(command, "videomode") == 0 || core::string::starts_with(command, "videomode "))
+        {
+            const char* argument = command;
+            if (core::string::starts_with(command, "videomode "))
+            {
+                argument = command + 9;
+                argument = core::string::skip_spaces(argument);
+            }
+
+            if (argument[0] == '\0')
+            {
+                tinyos::drivers::vga::write("Linear FB : ");
+                tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "yes" : "no");
+                tinyos::drivers::vga::write("Console   : ");
+                tinyos::drivers::vga::write_line(tinyos::drivers::console::active_backend() == tinyos::drivers::console::Backend::GfxCapture ? "gfx-capture" : "vga");
+                return;
+            }
+
+            if (core::string::compare(argument, "gfx") == 0)
+            {
+                run_gfx_terminal_mode();
+                return;
+            }
+
+            if (core::string::compare(argument, "vga") == 0 || core::string::compare(argument, "auto") == 0)
+            {
+                tinyos::drivers::vga::write_line("Video mode preference stored in /system/tinyos.conf (ramfs).");
+                return;
+            }
+
+            tinyos::drivers::vga::write_line("Usage: videomode [vga|gfx|auto]");
             return;
         }
 

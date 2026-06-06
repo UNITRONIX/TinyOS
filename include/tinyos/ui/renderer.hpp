@@ -42,7 +42,9 @@ namespace tinyos::ui::renderer
     bool clear_area(uint32_t column, uint32_t row, uint32_t width, uint32_t height, uint8_t attribute);
     uint32_t pack_color(Color color);
     bool draw_pixel(uint32_t x, uint32_t y, Color color);
+    bool blend_pixel(uint32_t x, uint32_t y, Color color);
     bool fill_pixels(uint32_t x, uint32_t y, uint32_t width, uint32_t height, Color color);
+    bool draw_text_pixels(uint32_t x, uint32_t y, const char* text, Color color);
     uint64_t draw_call_count();
     uint64_t primitive_call_count();
     uint64_t pixel_draw_call_count();

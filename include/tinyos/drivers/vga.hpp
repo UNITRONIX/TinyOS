@@ -30,4 +30,7 @@ namespace tinyos::drivers::vga
     void put_char(char character);
     void write(const char* text);
     void write_line(const char* text);
+    void hardware_put_char(char character);
+    void hardware_write(const char* text);
+    void hardware_write_line(const char* text);
 }

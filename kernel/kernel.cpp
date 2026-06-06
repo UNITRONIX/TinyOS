@@ -10,6 +10,7 @@
 #endif
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
+#include <tinyos/drivers/console.hpp>
 #include <tinyos/drivers/serial.hpp>
 #include <tinyos/drivers/virtio_blk.hpp>
 #include <tinyos/drivers/vga.hpp>
@@ -44,6 +45,9 @@
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
+#if !defined(TINYOS_TERMINAL_ONLY)
+#include <tinyos/ui/gfx_terminal.hpp>
+#endif
 #include <tinyos/shell/shell.hpp>
 #if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/cursor.hpp>
@@ -189,6 +193,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::arch::initialize();
     TINYOS_ASSERT(tinyos::arch::validation_self_test(), "Architecture capability manifest validation failed.");
     tinyos::drivers::vga::initialize();
+    tinyos::drivers::console::initialize();
     tinyos::drivers::serial::initialize();
     debug_boot_checkpoint("serial ready");
     tinyos::kernel::klog::initialize();
@@ -534,6 +539,15 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
             (void)tinyos::ui::graphical_desktop::run_session();
             tinyos::ui::renderer::initialize();
             tinyos::ui::terminal::initialize();
+        }
+    #endif
+    #if defined(TINYOS_GFX_TERM_AUTOSTART) && !defined(TINYOS_TERMINAL_ONLY)
+        if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
+        {
+            (void)tinyos::ui::gfx_terminal::run_session("/");
+            tinyos::ui::renderer::initialize();
+            tinyos::ui::terminal::initialize();
+            tinyos::drivers::vga::clear();
         }
     #endif
     show_terminal_boot_summary();

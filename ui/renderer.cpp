@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include <tinyos/kernel/device/framebuffer.hpp>
+#include <tinyos/ui/font_atlas.hpp>
 #include <tinyos/ui/renderer.hpp>
 
 namespace
@@ -209,6 +210,41 @@ namespace tinyos::ui::renderer
         return true;
     }
 
+    bool blend_pixel(uint32_t x, uint32_t y, Color color)
+    {
+        if (!can_draw_pixel_at(x, y))
+        {
+            ++g_rejected_draw_calls;
+            return false;
+        }
+
+        if (color.alpha >= 0xFF)
+        {
+            return draw_pixel(x, y, color);
+        }
+
+        if (color.alpha == 0)
+        {
+            return true;
+        }
+
+        const uint32_t offset = y * g_state.pitch + x * (g_state.bits_per_pixel / 8);
+        auto* bytes = reinterpret_cast<volatile uint8_t*>(g_surface_address + offset);
+        const uint8_t existing_blue = bytes[0];
+        const uint8_t existing_green = bytes[1];
+        const uint8_t existing_red = bytes[2];
+        const uint32_t alpha = color.alpha;
+        const uint32_t inverse = 255 - alpha;
+        Color blended;
+        blended.red = static_cast<uint8_t>((color.red * alpha + existing_red * inverse) / 255);
+        blended.green = static_cast<uint8_t>((color.green * alpha + existing_green * inverse) / 255);
+        blended.blue = static_cast<uint8_t>((color.blue * alpha + existing_blue * inverse) / 255);
+        blended.alpha = 0xFF;
+        write_rgb_pixel(g_surface_address, g_state.pitch, g_state.bits_per_pixel, x, y, blended);
+        ++g_pixel_draw_calls;
+        return true;
+    }
+
     bool fill_pixels(uint32_t x, uint32_t y, uint32_t width, uint32_t height, Color color)
     {
         if (!can_draw_pixel_at(x, y) || width == 0 || height == 0)
@@ -229,6 +265,11 @@ namespace tinyos::ui::renderer
 
         ++g_pixel_draw_calls;
         return true;
+    }
+
+    bool draw_text_pixels(uint32_t x, uint32_t y, const char* text, Color color)
+    {
+        return tinyos::ui::font_atlas::draw_text(x, y, text, color, tinyos::ui::font_atlas::Style::Normal);
     }
 
     uint64_t draw_call_count()
