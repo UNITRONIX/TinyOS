@@ -2,7 +2,7 @@
 
 TinyOS is a minimal freestanding `i686` kernel written in `C++` and booted by `GRUB` via the Multiboot specification. The project is organized into small modules so it stays easy to extend and can later be ported to other architectures.
 
-TinyOS is authored by UNITRONIX (Krzysztof Nienartowicz). TinyOS source code and documentation are licensed under the Apache License 2.0 unless a file explicitly states otherwise. See `LICENSE`, `NOTICE` and `docs/licensing.md`.
+TinyOS is authored by UNITRONIX (Krzysztof Nienartowicz). TinyOS source code and documentation are licensed under the GNU General Public License version 3 (GPL-3.0-or-later). See `LICENSE`, `NOTICE` and `docs/licensing.md`.
 
 ## AI-Assisted Development
 
@@ -79,11 +79,12 @@ The default boot path starts the TinyOS terminal. The framebuffer desktop remain
 - `docs/installed-system-pattern.md` - target install flow and installed-system documentation pattern.
 - `docs/provisioning-workbench.md` - project provisioning workflow and tool plan.
 - `docs/system-requirements.md` - minimum and recommended runtime/build requirements.
-- `docs/licensing.md` - Apache-2.0 policy and third-party boundary notes.
+- `docs/plan-dojrzalosci-systemu.md` - plan wdrożenia dojrzałości (funkcjonalność, bezpieczeństwo, użyteczność).
+- `docs/licensing.md` - GPL-3.0 policy and third-party boundary notes.
 
 ## License
 
-TinyOS project source is Apache-2.0 by default. Project ownership and author metadata are recorded in `NOTICE`. The current ISO build uses GRUB as an external bootloader through `grub-mkrescue`/`grub2-mkrescue`; distributed boot images that include GRUB may have separate bootloader license obligations.
+TinyOS project source is licensed under GPL-3.0-or-later. Project ownership and author metadata are recorded in `NOTICE`. The current ISO build uses GRUB as an external bootloader through `grub-mkrescue`/`grub2-mkrescue`; GRUB is also GPL-licensed and compatible with TinyOS distribution.
 
 ## Quick test
 

@@ -2,5 +2,8 @@ TinyOS
 
 Project owner: UNITRONIX
 Author: Krzysztof Nienartowicz
+Copyright (C) UNITRONIX (Krzysztof Nienartowicz)
 
-TinyOS source code and project documentation are licensed under the Apache License 2.0 unless a file explicitly states otherwise.
+TinyOS source code and project documentation are licensed under the
+GNU General Public License version 3 (GPL-3.0-or-later).
+See LICENSE for the full license text.
