@@ -183,19 +183,26 @@ namespace
 
     bool is_block_volume_directory(const char* path)
     {
-        if (!tinyos::kernel::vfs::blockfs::is_ready())
+        if (!tinyos::kernel::vfs::blockfs::is_ready() || path == nullptr)
         {
             return false;
+        }
+
+        char device_path[MaxMountPathBytes];
+        device_path[0] = '\0';
+        if (copy_string(device_path, sizeof(device_path), "/volumes/"))
+        {
+            const char* device_name = tinyos::kernel::vfs::blockfs::mounted_device_name();
+            if (device_name != nullptr && device_name[0] != '\0' &&
+                append_suffix(device_path, sizeof(device_path), device_name) &&
+                strings_equal(device_path, path))
+            {
+                return true;
+            }
         }
 
         const auto* node = tinyos::kernel::vfs::blockfs::find(path);
-        if (node == nullptr || !node->directory)
-        {
-            return false;
-        }
-
-        const auto* volumes = tinyos::kernel::vfs::blockfs::root();
-        return volumes != nullptr && node->parent == volumes;
+        return node != nullptr && node->directory && path_has_prefix(path, "/volumes/");
     }
 
     bool targets_overlap(const char* left, const char* right)
@@ -248,6 +255,60 @@ namespace tinyos::kernel::vfs::mount
 
         g_ready = true;
         kernel::klog::write_line(kernel::klog::Level::Info, "VFS mount registry ready.");
+    }
+
+    bool mount_known_block_directory(const char* source, const char* target)
+    {
+        if (!g_ready || source == nullptr || target == nullptr)
+        {
+            return false;
+        }
+
+        if (!tinyos::kernel::vfs::validate_path(target) || !tinyos::kernel::vfs::block_mount_ready())
+        {
+            return false;
+        }
+
+        char normalized_source[MaxMountPathBytes];
+        normalized_source[0] = '\0';
+        if (!normalize_source_path(source, normalized_source, sizeof(normalized_source)))
+        {
+            return false;
+        }
+
+        if (path_has_prefix(normalized_source, target) || path_has_prefix(target, "/volumes"))
+        {
+            return false;
+        }
+
+        if (!target_available(target))
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < MaxMounts; ++index)
+        {
+            if (g_mounts[index].active)
+            {
+                continue;
+            }
+
+            if (!copy_string(g_mounts[index].source, sizeof(g_mounts[index].source), normalized_source))
+            {
+                return false;
+            }
+
+            if (!copy_string(g_mounts[index].target, sizeof(g_mounts[index].target), target))
+            {
+                g_mounts[index].source[0] = '\0';
+                return false;
+            }
+
+            g_mounts[index].active = true;
+            return true;
+        }
+
+        return false;
     }
 
     bool mount(const char* source, const char* target)
@@ -461,7 +522,12 @@ namespace tinyos::kernel::vfs::mount
             return false;
         }
 
-        if (!is_block_volume_directory(source) || !mount(source, "/mnt"))
+        if (!is_block_volume_directory(source))
+        {
+            return false;
+        }
+
+        if (!mount(source, "/mnt"))
         {
             return false;
         }
@@ -498,5 +564,86 @@ namespace tinyos::kernel::vfs::mount
         }
 
         return unmount("/mnt");
+    }
+
+    bool try_mount_layout_directory(const char* directory_name, const char* target)
+    {
+        if (directory_name == nullptr || target == nullptr || !tinyos::kernel::vfs::blockfs::has_layout_directory(directory_name))
+        {
+            return false;
+        }
+
+        char source[MaxMountPathBytes];
+        source[0] = '\0';
+        if (!copy_string(source, sizeof(source), "/volumes/disk0") || !append_suffix(source, sizeof(source), directory_name))
+        {
+            return false;
+        }
+
+        if (mount_known_block_directory(source, target))
+        {
+            return true;
+        }
+
+        kernel::klog::write_line(kernel::klog::Level::Warn, "Persistent layout bind failed.");
+        return false;
+    }
+
+    void auto_mount_persistent_layout()
+    {
+        if (!g_ready || !tinyos::kernel::vfs::block_mount_ready())
+        {
+            return;
+        }
+
+        bool mounted_any = false;
+        if (try_mount_layout_directory("system", "/system"))
+        {
+            mounted_any = true;
+        }
+
+        if (try_mount_layout_directory("users", "/users"))
+        {
+            mounted_any = true;
+        }
+
+        if (try_mount_layout_directory("apps", "/apps"))
+        {
+            mounted_any = true;
+        }
+
+        if (mounted_any)
+        {
+            kernel::klog::write_line(kernel::klog::Level::Info, "Persistent layout mounted.");
+        }
+    }
+
+    bool layout_validation_self_test()
+    {
+        if (!g_ready || !tinyos::kernel::vfs::block_mount_ready() || !tinyos::kernel::vfs::blockfs::has_layout_directory("system"))
+        {
+            return true;
+        }
+
+        const auto* profile = tinyos::kernel::vfs::find("/system/profile.txt");
+        const char* profile_data = nullptr;
+        size_t profile_size = 0;
+        if (profile == nullptr || profile->directory || !tinyos::kernel::vfs::read_file(profile, profile_data, profile_size) || profile_data == nullptr || profile_size == 0)
+        {
+            return false;
+        }
+
+        constexpr char ProfilePrefix[] = "tinyos.profile.version=";
+        for (size_t index = 0; ProfilePrefix[index] != '\0'; ++index)
+        {
+            if (index >= profile_size || profile_data[index] != ProfilePrefix[index])
+            {
+                return false;
+            }
+        }
+
+        const auto* notes = tinyos::kernel::vfs::find("/users/notes.txt");
+        const auto* example_tapp = tinyos::kernel::vfs::find("/apps/example-system-tool.tapp");
+        return notes != nullptr && !notes->directory && example_tapp != nullptr && !example_tapp->directory;
     }
 }

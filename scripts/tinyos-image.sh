@@ -22,6 +22,7 @@ Usage:
     scripts/tinyos-image.sh verify-app [package.tapp] [public-key.pem] [signature]
     scripts/tinyos-image.sh trust-app [public-key.pem] [trust-manifest]
   scripts/tinyos-image.sh build [output.iso]
+  scripts/tinyos-image.sh build-disk [output.img] [source.iso]
   scripts/tinyos-image.sh manifest <image> [manifest]
   scripts/tinyos-image.sh keygen [age-secret-key]
   scripts/tinyos-image.sh sign <image> <private-key.pem> [signature]
@@ -791,6 +792,9 @@ case "$command_name" in
         ;;
     build)
         build_image "$@"
+        ;;
+    build-disk)
+        bash scripts/tinyos-boot-disk.sh "$@"
         ;;
     manifest)
         write_manifest "$@"

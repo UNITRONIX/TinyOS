@@ -209,11 +209,14 @@ OBJECTS := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.o) $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.
 DEPFILES := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.d)
 
 DISK_IMAGE ?= build/tinyos-disk.img
+BOOT_DISK_IMAGE ?= build/tinyos.img
 DISK_SECTORS ?= 8192
 VIRTIO_BOOT_TEST_LOG ?= build/boot-virtio.log
+DISK_BOOT_TEST_LOG ?= build/boot-disk.log
 QEMU_VIRTIO_ARGS = -drive file=$(DISK_IMAGE),format=raw,if=none,id=disk0 -device virtio-blk-pci,drive=disk0
+QEMU_DISK_BOOT_ARGS = -drive file=$(BOOT_DISK_IMAGE),format=raw,if=ide,index=0,media=disk -boot order=c
 
-.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build disk-image test-boot test-virtio-block test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
+.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build disk-image virtio-disk-image boot-disk-image test-boot test-virtio-block test-disk-boot test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
 
 all: check-build-tools $(TARGET)
 
@@ -599,10 +602,15 @@ test-terminal-lowmem-probe:
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot
 
-disk-image:
+disk-image: boot-disk-image
+
+boot-disk-image: iso
+	@bash scripts/tinyos-boot-disk.sh $(BOOT_DISK_IMAGE) $(ISO)
+
+virtio-disk-image:
 	@bash scripts/tinyos-disk-image.sh $(DISK_IMAGE) $(DISK_SECTORS)
 
-test-virtio-block: check-test-tools iso disk-image
+test-virtio-block: check-test-tools iso virtio-disk-image
 	@mkdir -p build
 	@rm -f $(VIRTIO_BOOT_TEST_LOG)
 	@echo "Running VirtIO block boot test for $(BOOT_TEST_TIMEOUT)..."
@@ -627,6 +635,16 @@ test-virtio-block: check-test-tools iso disk-image
 		echo "VirtIO block boot test failed: writable store marker not found."; \
 		exit 1; \
 	fi; \
+	if ! grep -q "Block layout directories ready" $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: layout directory marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Persistent layout mounted." $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: persistent layout marker not found."; \
+		exit 1; \
+	fi; \
 	if ! grep -q "TinyOS booted successfully" $(VIRTIO_BOOT_TEST_LOG); then \
 		cat $(VIRTIO_BOOT_TEST_LOG); \
 		echo "VirtIO block boot test failed: boot success marker not found."; \
@@ -634,11 +652,49 @@ test-virtio-block: check-test-tools iso disk-image
 	fi; \
 	echo "VirtIO block boot test passed. Log: $(VIRTIO_BOOT_TEST_LOG)"
 
+test-disk-boot: check-test-tools boot-disk-image virtio-disk-image
+	@mkdir -p build
+	@rm -f $(DISK_BOOT_TEST_LOG)
+	@echo "Running raw disk boot test for $(BOOT_TEST_TIMEOUT)..."
+	@set +e; $(TIMEOUT) $(BOOT_TEST_TIMEOUT) $(QEMU) $(QEMU_DISK_BOOT_ARGS) $(QEMU_VIRTIO_ARGS) -display none -serial file:$(DISK_BOOT_TEST_LOG) -no-reboot -no-shutdown >/dev/null 2>&1; status=$$?; \
+	if [ $$status -ne 124 ]; then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: QEMU exited before timeout with status $$status."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Initrd boot modules mounted at /boot." $(DISK_BOOT_TEST_LOG); then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: initrd VFS marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "VirtIO block device ready" $(DISK_BOOT_TEST_LOG); then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: VirtIO block marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Block catalog loaded" $(DISK_BOOT_TEST_LOG); then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: block catalog marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Persistent layout mounted." $(DISK_BOOT_TEST_LOG); then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: persistent layout marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "TinyOS booted successfully" $(DISK_BOOT_TEST_LOG); then \
+		cat $(DISK_BOOT_TEST_LOG); \
+		echo "Disk boot test failed: boot success marker not found."; \
+		exit 1; \
+	fi; \
+	echo "Disk boot test passed. Log: $(DISK_BOOT_TEST_LOG)"
+
 test-gate: check-test-tools check-image-tools
 	@echo "=== TinyOS change-scope gate: stability + security ==="
 	$(MAKE) prepare-test-env
 	$(MAKE) test-stability
 	$(MAKE) test-terminal-boot
+	$(MAKE) test-disk-boot
 	$(MAKE) install-profile-check
 	$(MAKE) tapp-trust-test
 	@echo "Change-scope gate passed. Run manual shell checks: syscheck, securityinfo, integritycheck (see docs/testing.md)."
@@ -677,6 +733,6 @@ debug-run:
 	$(MAKE) DEBUG_BOOT=1 TARGET=tinyos-debug.kernel ISO=build/tinyos-debug.iso ISO_DIR=build/isodir-debug OBJ_DIR=build/obj-debug run
 
 clean:
-	rm -rf build/obj build/obj-debug build/obj-gui build/obj-gui-autostart build/obj-terminal build/isodir build/isodir-debug build/isodir-gui build/isodir-desktop build/isodir-terminal build/tinyos.iso build/tinyos-debug.iso build/tinyos-gui.iso build/tinyos-desktop.iso build/tinyos-terminal.iso build/boot-smoke.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel tinyos-desktop.kernel tinyos-terminal.kernel
+	rm -rf build/obj build/obj-debug build/obj-gui build/obj-gui-autostart build/obj-terminal build/isodir build/isodir-debug build/isodir-gui build/isodir-desktop build/isodir-terminal build/tinyos.iso build/tinyos.img build/tinyos-disk.img build/tinyos-debug.iso build/tinyos-gui.iso build/tinyos-desktop.iso build/tinyos-terminal.iso build/boot-smoke.log build/boot-disk.log build/boot-minimal.log build/boot-gui.log tinyos.kernel tinyos-debug.kernel tinyos-gui.kernel tinyos-desktop.kernel tinyos-terminal.kernel
 
 -include $(DEPFILES)

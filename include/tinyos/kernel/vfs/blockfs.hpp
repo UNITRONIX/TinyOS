@@ -16,6 +16,7 @@ namespace tinyos::kernel::vfs::blockfs
     bool read_file(const Node* node, const char*& data, size_t& size);
     bool write_file(const char* path, const char* data, size_t size);
     bool validation_self_test();
+    bool has_layout_directory(const char* directory_name);
     const char* mount_path();
     const char* mounted_device_name();
     const char* primary_volume_path();

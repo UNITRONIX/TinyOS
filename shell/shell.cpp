@@ -865,7 +865,9 @@ namespace
         record_self_test_result("RAMFS ready", tinyos::kernel::vfs::ramfs::is_ready(), passed, failed);
         record_self_test_result("block VFS contract", tinyos::kernel::vfs::blockfs::validation_self_test(), passed, failed);
         record_self_test_result("VFS mount registry", tinyos::kernel::vfs::mount::validation_self_test(), passed, failed);
+        record_self_test_result("persistent layout mount", tinyos::kernel::vfs::mount::layout_validation_self_test(), passed, failed);
         record_self_test_result("boot modules valid", tinyos::kernel::initrd::modules::validation_passed(), passed, failed);
+        record_self_test_result("initrd boot VFS", tinyos::kernel::initrd::modules::vfs_validation_self_test(), passed, failed);
         record_self_test_result("ELF loader contract", tinyos::kernel::elf::loader::validation_self_test(), passed, failed);
         record_self_test_result("syscall contract bundle", syscall_contract_valid(), passed, failed);
         record_self_test_result("runtime manifest", tinyos::kernel::app::runtime::validation_self_test(), passed, failed);
@@ -1789,6 +1791,13 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::primary_volume_path());
         tinyos::drivers::vga::write("Self-test        : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Boot mount path  : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::initrd::modules::vfs_mount_path());
+        tinyos::drivers::vga::write("Boot modules     : ");
+        write_uint64(tinyos::kernel::initrd::modules::vfs_file_count());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Boot self-test   : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::initrd::modules::vfs_validation_self_test() ? "ok" : "failed");
         tinyos::drivers::vga::write("Bind mounts  : ");
         write_uint64(tinyos::kernel::vfs::mount::active_count());
         tinyos::drivers::vga::put_char('\n');
@@ -4770,7 +4779,9 @@ namespace tinyos::shell
                 drivers::vga::write(" bytes checksum=");
                 write_uint64(module != nullptr ? module->checksum : 0);
                 drivers::vga::write(" metadata=");
-                drivers::vga::write_line(module != nullptr && module->metadata_valid ? "ok" : "failed");
+                drivers::vga::write(module != nullptr && module->metadata_valid ? "ok" : "failed");
+                drivers::vga::write(" vfs=/boot/");
+                drivers::vga::write_line(module != nullptr && module->name != nullptr ? module->name : "unnamed");
             }
             return;
         }

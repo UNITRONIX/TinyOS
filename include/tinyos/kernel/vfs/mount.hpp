@@ -12,4 +12,6 @@ namespace tinyos::kernel::vfs::mount
     size_t active_count();
     bool active_at(size_t index, const char*& source, const char*& target);
     bool validation_self_test();
+    void auto_mount_persistent_layout();
+    bool layout_validation_self_test();
 }

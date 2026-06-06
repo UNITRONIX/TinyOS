@@ -327,6 +327,22 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(ramfs_example_tapp != nullptr && !ramfs_example_tapp->directory, "RAMFS example TAPP missing.");
     TINYOS_ASSERT(block_volume_info != nullptr && !block_volume_info->directory, "Block VFS volume metadata missing.");
     TINYOS_ASSERT(tinyos::kernel::vfs::read_file(block_volume_info, block_volume_text, block_volume_size) && block_volume_text != nullptr && block_volume_size != 0, "Block VFS volume metadata unreadable.");
+    if (tinyos::kernel::initrd::modules::count() > 0)
+    {
+        const auto* initrd_placeholder = tinyos::kernel::vfs::find("/boot/initrd-placeholder");
+        const char* initrd_text = nullptr;
+        size_t initrd_size = 0;
+        TINYOS_ASSERT(initrd_placeholder != nullptr && !initrd_placeholder->directory, "Initrd boot module missing from /boot.");
+        TINYOS_ASSERT(tinyos::kernel::vfs::read_file(initrd_placeholder, initrd_text, initrd_size) && initrd_text != nullptr && initrd_size != 0, "Initrd boot module unreadable.");
+    }
+    if (tinyos::drivers::virtio_blk::is_ready())
+    {
+        const auto* persistent_profile = tinyos::kernel::vfs::find("/system/profile.txt");
+        const char* profile_text = nullptr;
+        size_t profile_size = 0;
+        TINYOS_ASSERT(persistent_profile != nullptr && !persistent_profile->directory, "Persistent /system/profile.txt missing.");
+        TINYOS_ASSERT(tinyos::kernel::vfs::read_file(persistent_profile, profile_text, profile_size) && profile_text != nullptr && profile_size != 0, "Persistent profile unreadable.");
+    }
     tinyos::kernel::syscall::initialize();
     debug_boot_checkpoint("syscall abi ready");
     TINYOS_ASSERT(tinyos::kernel::syscall::validation_self_test(), "Syscall validation self-test failed.");

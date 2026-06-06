@@ -11,18 +11,20 @@ namespace
     constexpr char VirtioDeviceName[] = "virtio-blk0";
     constexpr char RamDeviceInfoText[] = "name=ram-block0\nclass=block\nmounted-at=/volumes/ram-block0\nmode=read-only\n";
     constexpr size_t SectorBufferSize = 512;
-    constexpr size_t MaxCatalogEntries = 7;
+    constexpr size_t MaxCatalogEntries = 8;
     constexpr size_t CatalogMagicSize = 4;
     constexpr uint8_t CatalogVersion = 1;
     constexpr size_t CatalogSector0Offset = 256;
     constexpr size_t CatalogEntryBase = 64;
     constexpr size_t CatalogEntryStride = 64;
     constexpr size_t CatalogEntryFlagsWritable = 1u;
+    constexpr size_t MaxLayoutDirectories = 8;
     constexpr size_t StaticNodeCount = 4;
-    constexpr size_t MaxBlockNodes = StaticNodeCount + MaxCatalogEntries;
+    constexpr size_t MaxBlockNodes = StaticNodeCount + MaxCatalogEntries + MaxLayoutDirectories;
     constexpr uint32_t InvalidCatalogSizeOffset = 0xFFFFFFFFu;
 
     uint8_t g_sector_buffer[SectorBufferSize] = {};
+    uint8_t g_catalog_sector_buffer[SectorBufferSize] = {};
     char g_volume_text[SectorBufferSize + 1] = {};
     const char* g_active_device_name = RamDeviceName;
 
@@ -36,12 +38,19 @@ namespace
 
     char g_catalog_names[MaxCatalogEntries][48] = {};
     char g_catalog_data[MaxCatalogEntries][SectorBufferSize] = {};
-    tinyos::kernel::vfs::Node g_catalog_nodes[MaxCatalogEntries] = {};
-    tinyos::kernel::vfs::Node* g_nodes[MaxBlockNodes] = {};
+    tinyos::kernel::vfs::Node g_catalog_nodes[MaxCatalogEntries];
+    char g_catalog_leaf_names[MaxCatalogEntries][48];
+    char g_layout_directory_names[MaxLayoutDirectories][48];
+    tinyos::kernel::vfs::Node g_layout_directories[MaxLayoutDirectories];
+    size_t g_layout_directory_count = 0;
+    tinyos::kernel::vfs::Node* g_nodes[MaxBlockNodes];
     size_t g_node_count = 0;
     size_t g_catalog_count = 0;
 
     bool g_ready = false;
+
+    tinyos::kernel::vfs::Node* child_by_segment(tinyos::kernel::vfs::Node* parent, const char* segment, size_t length);
+    bool append_volume_suffix(char* destination, size_t capacity, const char* suffix);
 
     bool name_equals_segment(const char* name, const char* segment, size_t length)
     {
@@ -74,10 +83,234 @@ namespace
         register_node(&g_primary_block);
         register_node(&g_device_info);
         register_node(&g_volume_info);
+        for (size_t index = 0; index < g_layout_directory_count; ++index)
+        {
+            register_node(&g_layout_directories[index]);
+        }
+
         for (size_t index = 0; index < g_catalog_count; ++index)
         {
             register_node(&g_catalog_nodes[index]);
         }
+    }
+
+    bool catalog_path_char_valid(char value)
+    {
+        return (value >= 'a' && value <= 'z') ||
+            (value >= 'A' && value <= 'Z') ||
+            (value >= '0' && value <= '9') ||
+            value == '-' ||
+            value == '_' ||
+            value == '.' ||
+            value == '/';
+    }
+
+    bool catalog_name_valid(const char* name)
+    {
+        if (name == nullptr || name[0] == '\0' || name[0] == '/')
+        {
+            return false;
+        }
+
+        size_t index = 0;
+        size_t segment_length = 0;
+        while (name[index] != '\0')
+        {
+            if (!catalog_path_char_valid(name[index]))
+            {
+                return false;
+            }
+
+            if (name[index] == '/')
+            {
+                if (segment_length == 0)
+                {
+                    return false;
+                }
+
+                segment_length = 0;
+                ++index;
+                continue;
+            }
+
+            ++segment_length;
+            if (segment_length > 47)
+            {
+                return false;
+            }
+
+            ++index;
+        }
+
+        return segment_length != 0;
+    }
+
+    bool copy_segment_name(char* destination, size_t capacity, const char* segment, size_t length)
+    {
+        if (destination == nullptr || capacity == 0 || length >= capacity)
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < length; ++index)
+        {
+            destination[index] = segment[index];
+        }
+
+        destination[length] = '\0';
+        return true;
+    }
+
+    tinyos::kernel::vfs::Node* find_or_create_directory(tinyos::kernel::vfs::Node* parent, const char* segment, size_t length)
+    {
+        if (parent == nullptr || !parent->directory || length == 0)
+        {
+            return nullptr;
+        }
+
+        auto* existing = child_by_segment(parent, segment, length);
+        if (existing != nullptr)
+        {
+            return existing->directory ? existing : nullptr;
+        }
+
+        if (g_layout_directory_count >= MaxLayoutDirectories)
+        {
+            return nullptr;
+        }
+
+        if (!copy_segment_name(g_layout_directory_names[g_layout_directory_count], sizeof(g_layout_directory_names[g_layout_directory_count]), segment, length))
+        {
+            return nullptr;
+        }
+
+        auto& node = g_layout_directories[g_layout_directory_count];
+        node.name = g_layout_directory_names[g_layout_directory_count];
+        node.directory = true;
+        node.readonly_data = nullptr;
+        node.writable_data = nullptr;
+        node.size = 0;
+        node.capacity = 0;
+        node.writable = false;
+        node.parent = parent;
+        register_node(&node);
+        ++g_layout_directory_count;
+        return &node;
+    }
+
+    tinyos::kernel::vfs::Node* parent_for_catalog_path(const char* catalog_name, char* leaf_name, size_t leaf_capacity)
+    {
+        tinyos::kernel::vfs::Node* parent = &g_primary_block;
+        const char* cursor = catalog_name;
+        while (cursor[0] != '\0')
+        {
+            const char* segment = cursor;
+            size_t length = 0;
+            while (cursor[length] != '\0' && cursor[length] != '/')
+            {
+                ++length;
+            }
+
+            cursor += length;
+            while (cursor[0] == '/')
+            {
+                ++cursor;
+            }
+
+            if (cursor[0] == '\0')
+            {
+                if (!copy_segment_name(leaf_name, leaf_capacity, segment, length))
+                {
+                    return nullptr;
+                }
+
+                return parent;
+            }
+
+            parent = find_or_create_directory(parent, segment, length);
+            if (parent == nullptr)
+            {
+                return nullptr;
+            }
+        }
+
+        return nullptr;
+    }
+
+    bool build_volume_path(char* path, size_t capacity, const char* suffix)
+    {
+        if (path == nullptr || capacity == 0 || suffix == nullptr)
+        {
+            return false;
+        }
+
+        size_t length = 0;
+        const char* prefix = "/volumes/";
+        while (prefix[length] != '\0' && length + 1 < capacity)
+        {
+            path[length] = prefix[length];
+            ++length;
+        }
+
+        const char* device_name = g_active_device_name;
+        for (size_t index = 0; device_name[index] != '\0' && length + 1 < capacity; ++index)
+        {
+            path[length++] = device_name[index];
+        }
+
+        path[length] = '\0';
+        if (suffix[0] != '\0' && !append_volume_suffix(path, capacity, suffix))
+        {
+            path[0] = '\0';
+            return false;
+        }
+
+        return true;
+    }
+
+    bool append_volume_suffix(char* destination, size_t capacity, const char* suffix)
+    {
+        size_t length = 0;
+        while (destination[length] != '\0')
+        {
+            ++length;
+        }
+
+        if (suffix == nullptr || suffix[0] == '\0')
+        {
+            return length < capacity;
+        }
+
+        if (length + 1 >= capacity)
+        {
+            return false;
+        }
+
+        if (length > 0 && destination[length - 1] != '/' && suffix[0] != '/')
+        {
+            destination[length++] = '/';
+            destination[length] = '\0';
+        }
+
+        size_t suffix_index = 0;
+        if (suffix[0] == '/' && length > 0 && destination[length - 1] == '/')
+        {
+            suffix_index = 1;
+        }
+
+        while (suffix[suffix_index] != '\0')
+        {
+            if (length + 1 >= capacity)
+            {
+                destination[0] = '\0';
+                return false;
+            }
+
+            destination[length++] = suffix[suffix_index++];
+        }
+
+        destination[length] = '\0';
+        return true;
     }
 
     tinyos::kernel::vfs::Node* child_by_segment(tinyos::kernel::vfs::Node* parent, const char* segment, size_t length)
@@ -120,12 +353,17 @@ namespace
         return size != 0;
     }
 
+    uint32_t read_u32_le_from(const uint8_t* buffer, size_t offset)
+    {
+        return static_cast<uint32_t>(buffer[offset]) |
+            (static_cast<uint32_t>(buffer[offset + 1]) << 8) |
+            (static_cast<uint32_t>(buffer[offset + 2]) << 16) |
+            (static_cast<uint32_t>(buffer[offset + 3]) << 24);
+    }
+
     uint32_t read_u32_le(size_t offset)
     {
-        return static_cast<uint32_t>(g_sector_buffer[offset]) |
-            (static_cast<uint32_t>(g_sector_buffer[offset + 1]) << 8) |
-            (static_cast<uint32_t>(g_sector_buffer[offset + 2]) << 16) |
-            (static_cast<uint32_t>(g_sector_buffer[offset + 3]) << 24);
+        return read_u32_le_from(g_sector_buffer, offset);
     }
 
     bool block_writes_enabled()
@@ -167,23 +405,28 @@ namespace
             return false;
         }
 
+        for (size_t index = 0; index < SectorBufferSize; ++index)
+        {
+            g_catalog_sector_buffer[index] = g_sector_buffer[index];
+        }
+
         for (uint8_t entry_index = 0; entry_index < entry_count; ++entry_index)
         {
             const size_t offset = base_offset + CatalogEntryBase + static_cast<size_t>(entry_index) * CatalogEntryStride;
             for (size_t name_index = 0; name_index < 48; ++name_index)
             {
-                g_catalog_names[entry_index][name_index] = static_cast<char>(g_sector_buffer[offset + name_index]);
+                g_catalog_names[entry_index][name_index] = static_cast<char>(g_catalog_sector_buffer[offset + name_index]);
             }
 
             g_catalog_names[entry_index][47] = '\0';
-            if (g_catalog_names[entry_index][0] == '\0')
+            if (g_catalog_names[entry_index][0] == '\0' || !catalog_name_valid(g_catalog_names[entry_index]))
             {
                 return false;
             }
 
-            const uint32_t sector_index = read_u32_le(offset + 48);
-            const uint32_t file_size = read_u32_le(offset + 52);
-            const uint32_t flags = read_u32_le(offset + 56);
+            const uint32_t sector_index = read_u32_le_from(g_catalog_sector_buffer, offset + 48);
+            const uint32_t file_size = read_u32_le_from(g_catalog_sector_buffer, offset + 52);
+            const uint32_t flags = read_u32_le_from(g_catalog_sector_buffer, offset + 56);
             const uint32_t size_field_offset = static_cast<uint32_t>(offset + 52);
             if (file_size > SectorBufferSize)
             {
@@ -294,6 +537,7 @@ namespace
     bool load_catalog()
     {
         g_catalog_count = 0;
+        g_layout_directory_count = 0;
         if (tinyos::kernel::device::block::read_sector(0, g_sector_buffer, sizeof(g_sector_buffer)) != tinyos::kernel::device::block::Status::Ok)
         {
             return load_direct_readme_fallback();
@@ -305,11 +549,13 @@ namespace
         }
 
         g_catalog_count = 0;
+        g_layout_directory_count = 0;
         if (tinyos::kernel::device::block::read_sector(1, g_sector_buffer, sizeof(g_sector_buffer)) != tinyos::kernel::device::block::Status::Ok)
         {
             return load_direct_readme_fallback();
         }
 
+        rebuild_node_list();
         if (load_catalog_from_base(0))
         {
             return true;
@@ -342,14 +588,30 @@ namespace
         }
 
         const bool writable = block_writes_enabled() && (flags & CatalogEntryFlagsWritable) != 0;
-        g_catalog_nodes[catalog_index].name = g_catalog_names[catalog_index];
+        char leaf_name[48];
+        leaf_name[0] = '\0';
+        auto* parent = parent_for_catalog_path(g_catalog_names[catalog_index], leaf_name, sizeof(leaf_name));
+        if (parent == nullptr || leaf_name[0] == '\0')
+        {
+            return false;
+        }
+
+        size_t leaf_index = 0;
+        while (leaf_name[leaf_index] != '\0' && leaf_index + 1 < sizeof(g_catalog_leaf_names[catalog_index]))
+        {
+            g_catalog_leaf_names[catalog_index][leaf_index] = leaf_name[leaf_index];
+            ++leaf_index;
+        }
+
+        g_catalog_leaf_names[catalog_index][leaf_index] = '\0';
+        g_catalog_nodes[catalog_index].name = g_catalog_leaf_names[catalog_index];
         g_catalog_nodes[catalog_index].directory = false;
         g_catalog_nodes[catalog_index].readonly_data = g_catalog_data[catalog_index];
         g_catalog_nodes[catalog_index].writable_data = writable ? g_catalog_data[catalog_index] : nullptr;
         g_catalog_nodes[catalog_index].size = copy_size;
         g_catalog_nodes[catalog_index].capacity = writable ? SectorBufferSize : 0;
         g_catalog_nodes[catalog_index].writable = writable;
-        g_catalog_nodes[catalog_index].parent = &g_primary_block;
+        g_catalog_nodes[catalog_index].parent = parent;
         g_catalog_sectors[catalog_index] = sector_index;
         g_catalog_size_field_offsets[catalog_index] = writable ? size_field_offset : InvalidCatalogSizeOffset;
         return true;
@@ -431,6 +693,10 @@ namespace tinyos::kernel::vfs::blockfs
             if (catalog_ready)
             {
                 kernel::klog::write_line(kernel::klog::Level::Info, "Block catalog loaded.");
+                if (has_layout_directory("system") && has_layout_directory("users") && has_layout_directory("apps"))
+                {
+                    kernel::klog::write_line(kernel::klog::Level::Info, "Block layout directories ready.");
+                }
             }
 
             if (block_writes_enabled())
@@ -518,6 +784,27 @@ namespace tinyos::kernel::vfs::blockfs
 
     bool owns(const Node* node)
     {
+        if (node == nullptr)
+        {
+            return false;
+        }
+
+        for (size_t index = 0; index < g_layout_directory_count; ++index)
+        {
+            if (node == &g_layout_directories[index])
+            {
+                return true;
+            }
+        }
+
+        for (size_t index = 0; index < g_catalog_count; ++index)
+        {
+            if (node == &g_catalog_nodes[index])
+            {
+                return true;
+            }
+        }
+
         for (size_t index = 0; index < g_node_count; ++index)
         {
             if (node == g_nodes[index])
@@ -666,28 +953,13 @@ namespace tinyos::kernel::vfs::blockfs
             return true;
         }
 
-        char path[64] = {};
-        size_t path_length = 0;
-        const char* prefix = "/volumes/";
-        while (prefix[path_length] != '\0' && path_length + 1 < sizeof(path))
+        char path[80];
+        path[0] = '\0';
+        if (!build_volume_path(path, sizeof(path), "/users/notes.txt"))
         {
-            path[path_length] = prefix[path_length];
-            ++path_length;
+            return true;
         }
 
-        const char* name = mounted_device_name();
-        for (size_t index = 0; name[index] != '\0' && path_length + 16 < sizeof(path); ++index)
-        {
-            path[path_length++] = name[index];
-        }
-
-        const char* notes_suffix = "/notes.txt";
-        for (size_t index = 0; notes_suffix[index] != '\0' && path_length + 1 < sizeof(path); ++index)
-        {
-            path[path_length++] = notes_suffix[index];
-        }
-
-        path[path_length] = '\0';
         const auto* notes = find(path);
         if (notes == nullptr || !notes->writable)
         {
@@ -789,12 +1061,33 @@ namespace tinyos::kernel::vfs::blockfs
         const auto* readme = find(path);
         data = nullptr;
         data_size = 0;
+        const bool layout_ready = !tinyos::kernel::device::block::virtio_available() ||
+            (has_layout_directory("system") && has_layout_directory("users") && has_layout_directory("apps"));
         return readme != nullptr &&
             tinyos::kernel::vfs::blockfs::read_file(readme, data, data_size) &&
             data != nullptr &&
             data_size != 0 &&
             data[0] == 'T' &&
+            layout_ready &&
             writable_store_self_test();
+    }
+
+    bool has_layout_directory(const char* directory_name)
+    {
+        if (!g_ready || directory_name == nullptr || directory_name[0] == '\0')
+        {
+            return false;
+        }
+
+        char path[80];
+        path[0] = '\0';
+        if (!build_volume_path(path, sizeof(path), directory_name))
+        {
+            return false;
+        }
+
+        const auto* node = find(path);
+        return node != nullptr && node->directory;
     }
 
     const char* mount_path()

@@ -115,7 +115,7 @@ The installed disk should eventually contain:
 /receipts/
 ```
 
-The exact filesystem is not chosen yet. RAMFS remains the current development filesystem; persistent storage needs a block driver and a simple filesystem before a real disk install can exist.
+The exact filesystem is not chosen yet. RAMFS remains the current development filesystem for unscaffolded paths; the reference `i686` VirtIO disk image now stores `/system`, `/users` and `/apps` entries in the block catalog and auto-mounts them at boot. Status: **Current** for the reference QEMU disk layout; full installer writes remain **Planned**.
 
 ## First Boot
 

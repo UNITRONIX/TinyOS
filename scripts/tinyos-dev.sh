@@ -28,8 +28,10 @@ Commands:
   debug-run         Run debug ISO with serial checkpoints (make debug-run)
   test              Boot smoke test (make test-boot)
   test-gate         Full stability + security gate (required before closing a change scope)
-  test-virtio       VirtIO block boot test (requires disk-image)
-  disk-image        Create raw VirtIO test disk image
+  test-virtio       VirtIO block boot test (requires virtio-disk-image)
+  test-disk-boot    Raw disk boot test (requires disk-image)
+  disk-image        Create bootable raw disk image (build/tinyos.img)
+  virtio-disk-image Create VirtIO data disk image (build/tinyos-disk.img)
   test-terminal     Terminal-only boot smoke test
   test-stability    Longer boot smoke test (make test-stability)
   test-minimal      Minimum RAM envelope test (make test-minimal)
@@ -105,8 +107,14 @@ case "$cmd" in
     test-virtio|virtio)
         run_make test-virtio-block
         ;;
+    test-disk-boot|disk-boot)
+        run_make test-disk-boot
+        ;;
     disk-image)
         run_make disk-image
+        ;;
+    virtio-disk-image|virtio-disk)
+        run_make virtio-disk-image
         ;;
     test-terminal|test-terminal-boot)
         run_make test-terminal-boot
