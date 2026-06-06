@@ -1,5 +1,6 @@
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
+#include <tinyos/kernel/vfs/mount.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 
@@ -9,6 +10,22 @@ namespace
     constexpr size_t MaxSegmentBytes = 48;
 
     bool g_ready = false;
+
+    bool resolve_lookup_path(const char* path, char* resolved, size_t resolved_capacity)
+    {
+        if (resolved == nullptr || resolved_capacity == 0)
+        {
+            return false;
+        }
+
+        resolved[0] = '\0';
+        if (!tinyos::kernel::vfs::mount::resolve(path, resolved, resolved_capacity))
+        {
+            return false;
+        }
+
+        return tinyos::kernel::vfs::validate_path(resolved);
+    }
 
     bool is_allowed_path_char(char value)
     {
@@ -38,6 +55,7 @@ namespace tinyos::kernel::vfs
     {
         ramfs::initialize();
         blockfs::initialize();
+        mount::initialize();
         g_ready = true;
         kernel::klog::write_line(kernel::klog::Level::Info, "VFS scaffold initialized.");
     }
@@ -109,6 +127,8 @@ namespace tinyos::kernel::vfs
         return validate_path("/") &&
             validate_path("/users/notes.txt") &&
             validate_path("/volumes/ram-block0/volume.txt") &&
+            validate_path("/volumes/disk0/volume.txt") &&
+            mount::validation_self_test() &&
             !validate_path(nullptr) &&
             !validate_path("") &&
             !validate_path("users/notes.txt") &&
@@ -131,8 +151,15 @@ namespace tinyos::kernel::vfs
             return nullptr;
         }
 
-        const auto* block_node = blockfs::find(path);
-        return block_node != nullptr ? block_node : ramfs::find(path);
+        char resolved[MaxPathBytes];
+        resolved[0] = '\0';
+        if (!resolve_lookup_path(path, resolved, sizeof(resolved)))
+        {
+            return nullptr;
+        }
+
+        const auto* block_node = blockfs::find(resolved);
+        return block_node != nullptr ? block_node : ramfs::find(resolved);
     }
 
     size_t child_count(const Node* node)
@@ -190,7 +217,14 @@ namespace tinyos::kernel::vfs
             return false;
         }
 
-        return blockfs::find(path) != nullptr ? blockfs::write_file(path, data, size) : ramfs::write_file(path, data, size);
+        char resolved[MaxPathBytes];
+        resolved[0] = '\0';
+        if (!resolve_lookup_path(path, resolved, sizeof(resolved)))
+        {
+            return false;
+        }
+
+        return blockfs::find(resolved) != nullptr ? blockfs::write_file(resolved, data, size) : ramfs::write_file(resolved, data, size);
     }
 
     bool create_directory(const char* path)
@@ -252,7 +286,7 @@ namespace tinyos::kernel::vfs
 
         if (blockfs::owns(node))
         {
-            return node->directory ? 0555 : 0444;
+            return node->directory ? 0555 : (node->writable ? 0644 : 0444);
         }
 
         return ramfs::access_mode(node);

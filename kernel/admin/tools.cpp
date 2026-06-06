@@ -103,7 +103,7 @@ namespace
         { "reboot", "reboot machine", Category::Power, State::Ready, true, true },
         { "int3", "trigger breakpoint exception", Category::Development, State::Ready, true, true },
         { "panic", "trigger kernel panic", Category::Development, State::Ready, true, true },
-        { "mount", "mount storage volumes", Category::Storage, State::Planned, true, true },
+        { "mount", "mount storage volumes", Category::Storage, State::Ready, true, false },
         { "ps", "list user processes", Category::Scheduling, State::Planned, false, false },
         { "kill", "stop a process", Category::Scheduling, State::Planned, true, true },
         { "service", "manage system services", Category::Scheduling, State::Planned, true, true },

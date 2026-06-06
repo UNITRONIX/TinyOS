@@ -11,6 +11,7 @@
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
+#include <tinyos/drivers/virtio_blk.hpp>
 #include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/admin/tools.hpp>
 #include <tinyos/kernel/device/block.hpp>
@@ -41,6 +42,7 @@
 #include <tinyos/kernel/syscall/syscall.hpp>
 #include <tinyos/kernel/task/task.hpp>
 #include <tinyos/kernel/user/transition.hpp>
+#include <tinyos/kernel/vfs/blockfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
 #if !defined(TINYOS_TERMINAL_ONLY)
@@ -294,9 +296,14 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
         }
     }
 
+    tinyos::drivers::virtio_blk::initialize();
     tinyos::kernel::device::block::initialize();
     TINYOS_ASSERT(tinyos::kernel::device::block::validation_self_test(), "Block device scaffold validation failed.");
     register_device_or_panic("ram-block0", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagVirtual | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
+    if (tinyos::drivers::virtio_blk::is_ready())
+    {
+        register_device_or_panic("virtio-blk0", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 1, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
+    }
     debug_boot_checkpoint("block device scaffold ready");
     tinyos::kernel::vfs::initialize();
     register_device_or_panic("ramfs", tinyos::kernel::device::Class::Filesystem, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagVirtual | tinyos::kernel::device::FlagWritable);
@@ -309,7 +316,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     const auto* ramfs_tapp_info = tinyos::kernel::vfs::find("/system/tapp.txt");
     const auto* ramfs_trust_info = tinyos::kernel::vfs::find("/system/trust.txt");
     const auto* ramfs_example_tapp = tinyos::kernel::vfs::find("/apps/example-system-tool.tapp");
-    const auto* block_volume_info = tinyos::kernel::vfs::find("/volumes/ram-block0/volume.txt");
+    const auto* block_volume_info = tinyos::kernel::vfs::find(tinyos::kernel::vfs::blockfs::primary_volume_path());
     const char* block_volume_text = nullptr;
     size_t block_volume_size = 0;
     TINYOS_ASSERT(ramfs_notes != nullptr && !ramfs_notes->directory && ramfs_notes->writable, "RAMFS user file scaffold missing.");

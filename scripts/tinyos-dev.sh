@@ -28,6 +28,8 @@ Commands:
   debug-run         Run debug ISO with serial checkpoints (make debug-run)
   test              Boot smoke test (make test-boot)
   test-gate         Full stability + security gate (required before closing a change scope)
+  test-virtio       VirtIO block boot test (requires disk-image)
+  disk-image        Create raw VirtIO test disk image
   test-terminal     Terminal-only boot smoke test
   test-stability    Longer boot smoke test (make test-stability)
   test-minimal      Minimum RAM envelope test (make test-minimal)
@@ -99,6 +101,12 @@ case "$cmd" in
         ;;
     test-gate|gate)
         run_make test-gate
+        ;;
+    test-virtio|virtio)
+        run_make test-virtio-block
+        ;;
+    disk-image)
+        run_make disk-image
         ;;
     test-terminal|test-terminal-boot)
         run_make test-terminal-boot

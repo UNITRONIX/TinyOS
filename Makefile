@@ -139,6 +139,7 @@ CPP_SOURCES := \
 	arch/i686/context.cpp \
     arch/i686/interrupts.cpp \
 	arch/i686/io.cpp \
+	arch/i686/pci.cpp \
 	api/system_api.cpp \
    core/memory.cpp \
 	core/string.cpp \
@@ -146,6 +147,7 @@ CPP_SOURCES := \
    drivers/pic.cpp \
 	drivers/pit.cpp \
  drivers/serial.cpp \
+	drivers/virtio_blk.cpp \
 	drivers/vga.cpp \
 	drivers/keyboard.cpp \
 	 kernel/admin/tools.cpp \
@@ -177,6 +179,7 @@ CPP_SOURCES := \
 	kernel/task/task.cpp \
  kernel/user/transition.cpp \
  kernel/vfs/blockfs.cpp \
+ kernel/vfs/mount.cpp \
  kernel/vfs/ramfs.cpp \
    kernel/vfs/vfs.cpp \
 	ui/renderer.cpp \
@@ -205,7 +208,12 @@ ASM_SOURCES := \
 OBJECTS := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.o) $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.o)
 DEPFILES := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.d)
 
-.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
+DISK_IMAGE ?= build/tinyos-disk.img
+DISK_SECTORS ?= 8192
+VIRTIO_BOOT_TEST_LOG ?= build/boot-virtio.log
+QEMU_VIRTIO_ARGS = -drive file=$(DISK_IMAGE),format=raw,if=none,id=disk0 -device virtio-blk-pci,drive=disk0
+
+.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build disk-image test-boot test-virtio-block test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
 
 all: check-build-tools $(TARGET)
 
@@ -590,6 +598,41 @@ test-terminal-lowmem-probe:
 
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot
+
+disk-image:
+	@bash scripts/tinyos-disk-image.sh $(DISK_IMAGE) $(DISK_SECTORS)
+
+test-virtio-block: check-test-tools iso disk-image
+	@mkdir -p build
+	@rm -f $(VIRTIO_BOOT_TEST_LOG)
+	@echo "Running VirtIO block boot test for $(BOOT_TEST_TIMEOUT)..."
+	@set +e; $(TIMEOUT) $(BOOT_TEST_TIMEOUT) $(QEMU) -cdrom $(ISO) $(QEMU_VIRTIO_ARGS) -display none -serial file:$(VIRTIO_BOOT_TEST_LOG) -no-reboot -no-shutdown >/dev/null 2>&1; status=$$?; \
+	if [ $$status -ne 124 ]; then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: QEMU exited before timeout with status $$status."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "VirtIO block device ready" $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: device marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Block catalog loaded" $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: block catalog marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Block writable store ready" $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: writable store marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "TinyOS booted successfully" $(VIRTIO_BOOT_TEST_LOG); then \
+		cat $(VIRTIO_BOOT_TEST_LOG); \
+		echo "VirtIO block boot test failed: boot success marker not found."; \
+		exit 1; \
+	fi; \
+	echo "VirtIO block boot test passed. Log: $(VIRTIO_BOOT_TEST_LOG)"
 
 test-gate: check-test-tools check-image-tools
 	@echo "=== TinyOS change-scope gate: stability + security ==="

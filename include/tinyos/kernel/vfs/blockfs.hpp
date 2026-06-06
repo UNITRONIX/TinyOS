@@ -18,4 +18,5 @@ namespace tinyos::kernel::vfs::blockfs
     bool validation_self_test();
     const char* mount_path();
     const char* mounted_device_name();
+    const char* primary_volume_path();
 }

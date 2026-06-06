@@ -42,6 +42,7 @@
 #include <tinyos/kernel/task/task.hpp>
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
+#include <tinyos/kernel/vfs/mount.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #include <tinyos/shell/shell.hpp>
@@ -863,6 +864,7 @@ namespace
         record_self_test_result("VFS path validation", tinyos::kernel::vfs::validation_self_test(), passed, failed);
         record_self_test_result("RAMFS ready", tinyos::kernel::vfs::ramfs::is_ready(), passed, failed);
         record_self_test_result("block VFS contract", tinyos::kernel::vfs::blockfs::validation_self_test(), passed, failed);
+        record_self_test_result("VFS mount registry", tinyos::kernel::vfs::mount::validation_self_test(), passed, failed);
         record_self_test_result("boot modules valid", tinyos::kernel::initrd::modules::validation_passed(), passed, failed);
         record_self_test_result("ELF loader contract", tinyos::kernel::elf::loader::validation_self_test(), passed, failed);
         record_self_test_result("syscall contract bundle", syscall_contract_valid(), passed, failed);
@@ -1749,8 +1751,17 @@ namespace
         const auto* device = tinyos::kernel::device::block::root_device();
         tinyos::drivers::vga::write("Block ready : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::device::block::is_ready() ? "yes" : "no");
-        tinyos::drivers::vga::write("Name        : ");
+        tinyos::drivers::vga::write("VirtIO block: ");
+        write_yes_no(tinyos::kernel::device::block::virtio_available());
+        tinyos::drivers::vga::put_char('\n');
+        tinyos::drivers::vga::write("Active name : ");
         tinyos::drivers::vga::write_line(device != nullptr && device->name != nullptr ? device->name : "none");
+        const auto* ram = tinyos::kernel::device::block::ram_device();
+        if (ram != nullptr)
+        {
+            tinyos::drivers::vga::write("RAM fallback   : ");
+            tinyos::drivers::vga::write_line(ram->name != nullptr ? ram->name : "none");
+        }
         tinyos::drivers::vga::write("Sector size : ");
         write_uint64(tinyos::kernel::device::block::sector_size());
         tinyos::drivers::vga::put_char('\n');
@@ -1774,9 +1785,126 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::mount_path());
         tinyos::drivers::vga::write("Device           : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::mounted_device_name());
-        tinyos::drivers::vga::write("Read-only path   : /volumes/ram-block0/volume.txt\n");
+        tinyos::drivers::vga::write("Volume path      : ");
+        tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::primary_volume_path());
         tinyos::drivers::vga::write("Self-test        : ");
         tinyos::drivers::vga::write_line(tinyos::kernel::vfs::blockfs::validation_self_test() ? "ok" : "failed");
+        tinyos::drivers::vga::write("Bind mounts  : ");
+        write_uint64(tinyos::kernel::vfs::mount::active_count());
+        tinyos::drivers::vga::put_char('\n');
+        for (size_t index = 0; index < tinyos::kernel::vfs::mount::active_count(); ++index)
+        {
+            const char* source = nullptr;
+            const char* target = nullptr;
+            if (!tinyos::kernel::vfs::mount::active_at(index, source, target))
+            {
+                continue;
+            }
+
+            tinyos::drivers::vga::write("  ");
+            tinyos::drivers::vga::write(target != nullptr ? target : "invalid");
+            tinyos::drivers::vga::write(" -> ");
+            tinyos::drivers::vga::write_line(source != nullptr ? source : "invalid");
+        }
+    }
+
+    void print_mount_info()
+    {
+        tinyos::drivers::vga::write("Active mounts : ");
+        write_uint64(tinyos::kernel::vfs::mount::active_count());
+        tinyos::drivers::vga::put_char('\n');
+        if (tinyos::kernel::vfs::mount::active_count() == 0)
+        {
+            tinyos::drivers::vga::write_line("No bind mounts.");
+            tinyos::drivers::vga::write_line("Usage: mount <source> <target>");
+            tinyos::drivers::vga::write_line("Example: mount /volumes/disk0 /mnt");
+            return;
+        }
+
+        for (size_t index = 0; index < tinyos::kernel::vfs::mount::active_count(); ++index)
+        {
+            const char* source = nullptr;
+            const char* target = nullptr;
+            if (!tinyos::kernel::vfs::mount::active_at(index, source, target))
+            {
+                continue;
+            }
+
+            tinyos::drivers::vga::write("  ");
+            tinyos::drivers::vga::write(target != nullptr ? target : "invalid");
+            tinyos::drivers::vga::write(" -> ");
+            tinyos::drivers::vga::write_line(source != nullptr ? source : "invalid");
+        }
+    }
+
+    bool handle_mount_command(const char* command)
+    {
+        if (tinyos::core::string::compare(command, "mount") == 0)
+        {
+            print_mount_info();
+            return true;
+        }
+
+        if (tinyos::core::string::starts_with(command, "mount "))
+        {
+            char source[MaxPathLength];
+            const char* target_text = nullptr;
+            if (!copy_argument(command + 5, source, sizeof(source), target_text))
+            {
+                tinyos::drivers::vga::write_line("Usage: mount <source> <target>");
+                return true;
+            }
+
+            char target[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(target_text, target, sizeof(target), rest))
+            {
+                tinyos::drivers::vga::write_line("Usage: mount <source> <target>");
+                return true;
+            }
+
+            char resolved_source[MaxPathLength];
+            char resolved_target[MaxPathLength];
+            if (!resolve_shell_path(source, resolved_source, sizeof(resolved_source)) ||
+                !resolve_shell_path(target, resolved_target, sizeof(resolved_target)))
+            {
+                tinyos::drivers::vga::write_line("Invalid path.");
+                return true;
+            }
+
+            tinyos::drivers::vga::write_line(
+                tinyos::kernel::vfs::mount::mount(resolved_source, resolved_target)
+                    ? "Mount succeeded."
+                    : "Mount failed.");
+            return true;
+        }
+
+        if (tinyos::core::string::starts_with(command, "umount ") || tinyos::core::string::starts_with(command, "unmount "))
+        {
+            const char* prefix = tinyos::core::string::starts_with(command, "umount ") ? "umount " : "unmount ";
+            char target[MaxPathLength];
+            const char* rest = nullptr;
+            if (!copy_argument(command + tinyos::core::string::length(prefix), target, sizeof(target), rest))
+            {
+                tinyos::drivers::vga::write_line("Usage: umount <target>");
+                return true;
+            }
+
+            char resolved_target[MaxPathLength];
+            if (!resolve_shell_path(target, resolved_target, sizeof(resolved_target)))
+            {
+                tinyos::drivers::vga::write_line("Invalid path.");
+                return true;
+            }
+
+            tinyos::drivers::vga::write_line(
+                tinyos::kernel::vfs::mount::unmount(resolved_target)
+                    ? "Unmount succeeded."
+                    : "Unmount failed.");
+            return true;
+        }
+
+        return false;
     }
 
     void print_framebuffer_info()
@@ -2869,6 +2997,8 @@ namespace
         { "device", "show one registered device", "device <name>", nullptr },
         { "blockinfo", "show RAM block device scaffold", "blockinfo", "blockinfo" },
         { "storageinfo", "show block VFS mount scaffold", "storageinfo", "storageinfo" },
+        { "mount", "bind-mount block volume path", "mount <source> <target>", "mount /volumes/disk0 /mnt" },
+        { "umount", "remove bind mount", "umount <target>", "umount /mnt" },
         { "fbinfo", "show framebuffer surface scaffold", "fbinfo", "fbinfo" },
         { "platforminfo", "show platform compatibility manifest", "platforminfo", "platforminfo" },
         { "pcinfo", "show PC platform initialization contract", "pcinfo", "pcinfo" },
@@ -3230,6 +3360,8 @@ namespace
         tinyos::drivers::vga::write_line("  device   - show one registered device");
         tinyos::drivers::vga::write_line("  blockinfo - show RAM block device scaffold");
         tinyos::drivers::vga::write_line("  storageinfo - show block VFS mount scaffold");
+        tinyos::drivers::vga::write_line("  mount     - bind-mount block volume to target path");
+        tinyos::drivers::vga::write_line("  umount    - remove bind mount");
         tinyos::drivers::vga::write_line("  fbinfo   - show framebuffer surface scaffold");
         tinyos::drivers::vga::write_line("  renderinfo - show renderer scaffold state");
     #if !defined(TINYOS_TERMINAL_ONLY)
@@ -3749,6 +3881,11 @@ namespace tinyos::shell
         if (core::string::compare(command, "blockinfo") == 0)
         {
             print_block_info();
+            return;
+        }
+
+        if (handle_mount_command(command))
+        {
             return;
         }
 
