@@ -26,7 +26,9 @@ namespace tinyos::arch::context
     bool prepare_kernel_context(Context& context, uintptr_t stack_top, void (*entry)(void*), void* argument);
     bool is_valid(const Context& context);
     bool stack_aligned(uintptr_t stack_pointer);
+    void switch_context(Context* from, Context* to);
     const char* abi_name();
     size_t context_size();
     bool context_switch_available();
+    bool validation_self_test();
 }

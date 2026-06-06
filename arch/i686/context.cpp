@@ -1,5 +1,7 @@
 #include <tinyos/arch/context.hpp>
 
+extern "C" void arch_context_switch(tinyos::arch::context::Context* from, tinyos::arch::context::Context* to);
+
 namespace
 {
     uint32_t read_eflags()
@@ -83,7 +85,11 @@ namespace tinyos::arch::context
             return false;
         }
 
-        context.esp = static_cast<uint32_t>(aligned_stack_top);
+        auto* stack_pointer = reinterpret_cast<uint32_t*>(aligned_stack_top);
+        *--stack_pointer = reinterpret_cast<uint32_t>(argument);
+        *--stack_pointer = 0;
+
+        context.esp = reinterpret_cast<uint32_t>(stack_pointer);
         context.eip = reinterpret_cast<uint32_t>(entry);
         context.argument = reinterpret_cast<uint32_t>(argument);
         context.eflags = 0x00000202;
@@ -116,6 +122,21 @@ namespace tinyos::arch::context
 
     bool context_switch_available()
     {
-        return false;
+        return true;
+    }
+
+    void switch_context(Context* from, Context* to)
+    {
+        if (to == nullptr || !is_valid(*to))
+        {
+            return;
+        }
+
+        arch_context_switch(from, to);
+    }
+
+    bool validation_self_test()
+    {
+        return context_switch_available();
     }
 }

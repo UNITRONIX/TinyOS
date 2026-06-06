@@ -494,7 +494,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     }
 #endif
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");
-    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch ABI scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch active.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler round-robin policy ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler sleep wake contract ready.");

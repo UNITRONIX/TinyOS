@@ -18,10 +18,14 @@ BOOT_TEST_LOG ?= build/boot-smoke.log
 MINIMAL_TEST_LOG ?= build/boot-minimal.log
 
 I686_CXX := $(shell command -v i686-elf-g++ 2>/dev/null)
+CLANG_CXX := $(shell command -v clang++ 2>/dev/null)
+LLD := $(shell command -v ld.lld 2>/dev/null || command -v lld 2>/dev/null)
 
 ifeq ($(origin CXX), default)
 ifneq ($(I686_CXX),)
 	CXX := i686-elf-g++
+else ifneq ($(CLANG_CXX),)
+	CXX := clang++
 else
 	CXX := clang++
 endif
@@ -31,11 +35,12 @@ ifneq ($(findstring i686-elf-g++,$(notdir $(CXX))),)
 	ARCH_CXXFLAGS ?=
 	ARCH_LDFLAGS ?=
 	LIBS ?= -lgcc
+	LINKER_CHECK :=
 else
 	ARCH_CXXFLAGS ?= --target=i686-elf
 	ARCH_LDFLAGS ?= -fuse-ld=lld --target=i686-elf
 	LIBS ?=
-	EXTRA_BUILD_TOOLS := ld.lld
+	LINKER_CHECK := lld
 endif
 
 ifeq ($(origin AS), default)
@@ -52,10 +57,61 @@ QEMU ?= qemu-system-i386
 XORRISO ?= xorriso
 TIMEOUT ?= timeout
 
-REQUIRED_BUILD_TOOLS := $(CXX) $(AS) $(EXTRA_BUILD_TOOLS)
+REQUIRED_BUILD_TOOLS := $(CXX) $(AS) $(LINKER_CHECK)
 REQUIRED_IMAGE_TOOLS := $(REQUIRED_BUILD_TOOLS) $(GRUBMKRESCUE) $(XORRISO)
 REQUIRED_QEMU_TOOLS := $(QEMU) $(TIMEOUT)
 REQUIRED_TEST_TOOLS := $(REQUIRED_IMAGE_TOOLS) $(REQUIRED_QEMU_TOOLS)
+
+define require_tools
+	@missing=0; \
+	for tool in $(1); do \
+		case "$$tool" in \
+			clang++) \
+				if command -v clang++ >/dev/null 2>&1; then \
+					echo "found: clang++ ($$(command -v clang++))"; \
+				elif command -v i686-elf-g++ >/dev/null 2>&1; then \
+					echo "found: i686-elf-g++ ($$(command -v i686-elf-g++))"; \
+				else \
+					echo "missing: clang++ (or i686-elf-g++)"; \
+					missing=1; \
+				fi ;; \
+			lld) \
+				if command -v ld.lld >/dev/null 2>&1; then \
+					echo "found: ld.lld ($$(command -v ld.lld))"; \
+				elif command -v lld >/dev/null 2>&1; then \
+					echo "found: lld ($$(command -v lld))"; \
+				else \
+					echo "missing: ld.lld (or lld)"; \
+					missing=1; \
+				fi ;; \
+			grub2-mkrescue) \
+				if command -v grub2-mkrescue >/dev/null 2>&1; then \
+					echo "found: grub2-mkrescue ($$(command -v grub2-mkrescue))"; \
+				elif command -v grub-mkrescue >/dev/null 2>&1; then \
+					echo "found: grub-mkrescue ($$(command -v grub-mkrescue))"; \
+				else \
+					echo "missing: grub2-mkrescue (or grub-mkrescue)"; \
+					missing=1; \
+				fi ;; \
+			"") ;; \
+			*) \
+				if command -v $$tool >/dev/null 2>&1; then \
+					echo "found: $$tool ($$(command -v $$tool))"; \
+				else \
+					echo "missing: $$tool"; \
+					missing=1; \
+				fi ;; \
+		esac; \
+	done; \
+	if [ $$missing -ne 0 ]; then \
+		echo ""; \
+		echo "Install missing tools for Fedora:"; \
+		echo "  sudo dnf install -y clang lld nasm make grub2-tools-extra xorriso qemu-system-x86"; \
+		echo "Or run:"; \
+		echo "  scripts/tinyos-dev.sh install-deps --install"; \
+		exit 1; \
+	fi
+endef
 
 CXXFLAGS := -std=gnu++17 -ffreestanding -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-stack-protector -mno-mmx -mno-sse -mno-sse2 -Wall -Wextra -O2 -Iinclude $(ARCH_CXXFLAGS)
 ASFLAGS := -f elf32
@@ -143,28 +199,13 @@ endif
 
 ASM_SOURCES := \
   boot/multiboot.asm \
-    arch/i686/interrupt_stubs.asm
+    arch/i686/interrupt_stubs.asm \
+    arch/i686/context_switch.asm
 
 OBJECTS := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.o) $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.o)
 DEPFILES := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.d)
 
-define require_tools
-	@missing=0; \
-	for tool in $(1); do \
-		if command -v $$tool >/dev/null 2>&1; then \
-			echo "found: $$tool ($$(command -v $$tool))"; \
-		else \
-			echo "missing: $$tool"; \
-			missing=1; \
-		fi; \
-	done; \
-	if [ $$missing -ne 0 ]; then \
-		echo "Install the missing tools before continuing."; \
-		exit 1; \
-	fi
-endef
-
-.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env clean
+.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
 
 all: check-build-tools $(TARGET)
 
@@ -183,6 +224,11 @@ check-test-tools:
 prepare-test-env: check-test-tools
 	@mkdir -p build
 	@echo "TinyOS test environment is ready."
+
+dev-help:
+	@echo "TinyOS development helper: scripts/tinyos-dev.sh"
+	@echo "  check | build | iso | run | run-serial | test | test-terminal | clean"
+	@bash scripts/tinyos-dev.sh help
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
@@ -344,7 +390,7 @@ test-boot: check-test-tools iso
 		exit 1; \
 	fi; \
 	if grep -q "TinyOS booted successfully" $(BOOT_TEST_LOG); then \
-		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch ABI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
+		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch active" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
 			echo "Boot smoke test passed. Log: $(BOOT_TEST_LOG)"; \
 		else \
 			cat $(BOOT_TEST_LOG); \
@@ -434,7 +480,7 @@ test-existing-iso: check-qemu-tools
 		exit 1; \
 	fi; \
 	if grep -q "TinyOS booted successfully" $(BOOT_TEST_LOG); then \
-		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch ABI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
+		if grep -q "PIT IRQ0 stable at 100 Hz" $(BOOT_TEST_LOG) && grep -q "Keyboard IRQ1 enabled with polling fallback" $(BOOT_TEST_LOG) && grep -q "Kernel task stack ownership scaffold ready" $(BOOT_TEST_LOG) && grep -q "i686 context switch active" $(BOOT_TEST_LOG) && grep -q "Scheduler scaffold receiving PIT ticks" $(BOOT_TEST_LOG) && grep -q "Boot module metadata validated" $(BOOT_TEST_LOG) && grep -q "ELF loader validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "RAMFS file tools scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall argument validation scaffold ready" $(BOOT_TEST_LOG) && grep -q "Syscall boundary policy contract ready" $(BOOT_TEST_LOG) && grep -q "Syscall definition table ready" $(BOOT_TEST_LOG) && grep -q "Syscall filter policy ready" $(BOOT_TEST_LOG) && grep -q "Syscall resource limit policy ready" $(BOOT_TEST_LOG) && grep -q "Language runtime manifest ready" $(BOOT_TEST_LOG) && grep -q "Application capability profile scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP trust store scaffold ready" $(BOOT_TEST_LOG) && grep -q "TAPP package verification scaffold ready" $(BOOT_TEST_LOG) && grep -q "Application launch policy scaffold ready" $(BOOT_TEST_LOG) && grep -q "System management tools manifest ready" $(BOOT_TEST_LOG) && grep -q "Secure image provisioning manifest ready" $(BOOT_TEST_LOG) && grep -q "Device registry scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block device scaffold ready" $(BOOT_TEST_LOG) && grep -q "Block VFS mount scaffold ready" $(BOOT_TEST_LOG) && grep -q "Framebuffer surface scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer scaffold ready" $(BOOT_TEST_LOG) && grep -q "Renderer primitive scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal UI scaffold ready" $(BOOT_TEST_LOG) && grep -q "Terminal panel scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget scaffold ready" $(BOOT_TEST_LOG) && grep -q "TUI widget event bridge ready" $(BOOT_TEST_LOG) && grep -q "UI event queue scaffold ready" $(BOOT_TEST_LOG) && grep -q "System requirements manifest ready" $(BOOT_TEST_LOG) && grep -q "Platform compatibility manifest ready" $(BOOT_TEST_LOG) && grep -q "PC platform initialization contract ready" $(BOOT_TEST_LOG) && grep -q "PC required device classes ready" $(BOOT_TEST_LOG) && grep -q "Device RAMFS metadata scaffold ready" $(BOOT_TEST_LOG) && grep -q "Architecture capability manifest ready" $(BOOT_TEST_LOG) && grep -q "Address space scaffold ready" $(BOOT_TEST_LOG) && grep -q "Address space protection flag scaffold ready" $(BOOT_TEST_LOG) && grep -q "Kernel section protection contract ready" $(BOOT_TEST_LOG) && grep -q "Boot module address-space regions ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy gap diagnostics ready" $(BOOT_TEST_LOG) && grep -q "Address-space paging policy applied to bootstrap tables" $(BOOT_TEST_LOG) && grep -q "Runtime paging enabled with protected bootstrap map" $(BOOT_TEST_LOG) && grep -q "Paging structures prepared for bootstrap identity map" $(BOOT_TEST_LOG) && grep -q "Paging protection flag scaffold ready" $(BOOT_TEST_LOG); then \
 			echo "Existing ISO boot smoke test passed. Log: $(BOOT_TEST_LOG)"; \
 		else \
 			cat $(BOOT_TEST_LOG); \
@@ -544,6 +590,34 @@ test-terminal-lowmem-probe:
 
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot
+
+test-terminal-boot: TERMINAL_ONLY=1 TARGET=tinyos-terminal.kernel ISO=build/tinyos-terminal.iso ISO_DIR=build/isodir-terminal OBJ_DIR=build/obj-terminal BOOT_TEST_LOG=build/boot-terminal-smoke.log
+test-terminal-boot: check-test-tools iso
+	@mkdir -p build
+	@rm -f build/boot-terminal-smoke.log
+	@echo "Running TinyOS terminal-only boot smoke test for $(BOOT_TEST_TIMEOUT)..."
+	@set +e; $(TIMEOUT) $(BOOT_TEST_TIMEOUT) $(QEMU) -cdrom build/tinyos-terminal.iso -display none -serial file:build/boot-terminal-smoke.log -no-reboot -no-shutdown >/dev/null 2>&1; status=$$?; \
+	if [ $$status -ne 124 ]; then \
+		cat build/boot-terminal-smoke.log; \
+		echo "Terminal boot smoke test failed: QEMU exited before timeout with status $$status."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "TinyOS booted successfully" build/boot-terminal-smoke.log; then \
+		cat build/boot-terminal-smoke.log; \
+		echo "Terminal boot smoke test failed: success marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "i686 context switch active" build/boot-terminal-smoke.log; then \
+		cat build/boot-terminal-smoke.log; \
+		echo "Terminal boot smoke test failed: context switch marker not found."; \
+		exit 1; \
+	fi; \
+	if ! grep -q "Terminal-only low-memory profile ready" build/boot-terminal-smoke.log; then \
+		cat build/boot-terminal-smoke.log; \
+		echo "Terminal boot smoke test failed: terminal-only marker not found."; \
+		exit 1; \
+	fi; \
+	echo "Terminal boot smoke test passed. Log: build/boot-terminal-smoke.log"
 
 debug-boot:
 	$(MAKE) DEBUG_BOOT=1 TARGET=tinyos-debug.kernel ISO=build/tinyos-debug.iso ISO_DIR=build/isodir-debug OBJ_DIR=build/obj-debug iso

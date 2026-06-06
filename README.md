@@ -89,6 +89,14 @@ TinyOS project source is licensed under GPL-3.0-or-later. Project ownership and 
 ## Quick test
 
 ```powershell
+scripts/tinyos-dev.sh install-deps --install
+scripts/tinyos-dev.sh check
+scripts/tinyos-dev.sh test
+```
+
+Or directly with Make:
+
+```powershell
 make prepare-test-env
 make test-boot
 make test-minimal

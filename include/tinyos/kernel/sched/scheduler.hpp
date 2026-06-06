@@ -10,6 +10,7 @@ namespace tinyos::kernel::sched
     bool is_ready();
     void on_timer_tick();
     void yield();
+    void poll_reschedule();
     void sleep_ticks(uint64_t ticks);
     const tinyos::kernel::task::Task* current_task();
     uint64_t tick_count();

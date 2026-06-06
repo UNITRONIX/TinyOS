@@ -12,15 +12,38 @@ TinyOS uses QEMU as the primary safety loop. The ISO path is the reference test 
 - `qemu-system-i386`
 - `timeout`
 
-On Fedora-family systems, the host packages are usually close to:
+On Fedora 44, install the missing build tools with:
 
 ```sh
-sudo dnf install clang lld nasm grub2-tools-extra xorriso qemu-system-x86
+scripts/tinyos-dev.sh install-deps
+sudo dnf install -y clang lld nasm make grub2-tools-extra xorriso qemu-system-x86
 ```
 
-If an `i686-elf-g++` cross compiler is available, TinyOS will prefer it. Otherwise the Makefile uses the Clang `i686-elf` target.
+Or in one step:
+
+```sh
+scripts/tinyos-dev.sh install-deps --install
+```
+
+If an `i686-elf-g++` cross compiler is available, TinyOS will prefer it. Otherwise the Makefile uses `clang++` with the `i686-elf` target and `lld` as linker.
 
 ## Commands
+
+Local development helper (recommended):
+
+```sh
+scripts/tinyos-dev.sh help
+scripts/tinyos-dev.sh check
+scripts/tinyos-dev.sh iso
+scripts/tinyos-dev.sh test
+scripts/tinyos-dev.sh run-serial
+```
+
+Install host dependencies on Fedora:
+
+```sh
+scripts/tinyos-dev.sh install-deps --install
+```
 
 Check whether the local environment can build and test TinyOS:
 
@@ -40,7 +63,14 @@ Run a headless boot smoke test in QEMU:
 make test-boot
 ```
 
-The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, syscall scheduling primitives, initial process contract, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, terminal style contract, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, runtime paging policy self-test, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, context ABI, scheduler tick, scheduler round-robin policy and scheduler sleep/wake markers appear.
+The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, syscall scheduling primitives, initial process contract, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, terminal style contract, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, runtime paging policy self-test, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, active context switch, scheduler tick, scheduler round-robin policy and scheduler sleep/wake markers appear.
+
+Run a lighter terminal-only boot smoke test:
+
+```sh
+scripts/tinyos-dev.sh test-terminal
+# or: make test-terminal-boot
+```
 
 Run a longer runtime stability check:
 

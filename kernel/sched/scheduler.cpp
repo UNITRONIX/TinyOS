@@ -16,6 +16,7 @@ namespace
     uint64_t g_wake_event_count = 0;
     uint64_t g_context_switch_count = 0;
     uint64_t g_dispatch_decision_count = 0;
+    volatile bool g_reschedule_pending = false;
     bool g_ready = false;
 
     bool task_is_runnable(const tinyos::kernel::task::Task* task)
@@ -71,21 +72,54 @@ namespace
         return tinyos::kernel::task::idle_task();
     }
 
-    void record_dispatch_decision()
+    void perform_context_switch(tinyos::kernel::task::Task* from, tinyos::kernel::task::Task* to)
     {
-        auto* selected = select_next_task();
+        if (to == nullptr || from == to || !tinyos::arch::context::context_switch_available())
+        {
+            return;
+        }
+
+        if (from != nullptr && from->state == tinyos::kernel::task::State::Running)
+        {
+            from->state = tinyos::kernel::task::State::Ready;
+        }
+
+        if (to->state == tinyos::kernel::task::State::Ready || to->state == tinyos::kernel::task::State::Idle)
+        {
+            to->state = tinyos::kernel::task::State::Running;
+        }
+
+        tinyos::kernel::task::Task* const resume_task = from;
+        g_current_task = to;
+        g_last_selected_task = to;
+        ++g_context_switch_count;
+        tinyos::arch::context::switch_context(from != nullptr ? &from->context : nullptr, &to->context);
+
+        g_current_task = resume_task;
+        if (resume_task != nullptr)
+        {
+            resume_task->state = tinyos::kernel::task::State::Running;
+        }
+
+        if (to->state == tinyos::kernel::task::State::Running)
+        {
+            to->state = tinyos::kernel::task::State::Ready;
+        }
+    }
+
+    void dispatch_selected_task(tinyos::kernel::task::Task* selected)
+    {
         if (selected == nullptr)
         {
             return;
         }
 
-        g_last_selected_task = selected;
         ++g_dispatch_decision_count;
+        g_last_selected_task = selected;
 
-        if (selected != g_current_task && tinyos::arch::context::context_switch_available())
+        if (selected != g_current_task)
         {
-            ++g_context_switch_count;
-            g_current_task = selected;
+            perform_context_switch(g_current_task, selected);
         }
     }
 
@@ -121,6 +155,7 @@ namespace tinyos::kernel::sched
         g_wake_event_count = 0;
         g_context_switch_count = 0;
         g_dispatch_decision_count = 0;
+        g_reschedule_pending = false;
         g_ready = g_current_task != nullptr;
         tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold initialized.");
     }
@@ -148,17 +183,30 @@ namespace tinyos::kernel::sched
 
         if ((g_tick_count % TimeSliceTicks) == 0)
         {
-            record_dispatch_decision();
+            g_reschedule_pending = true;
         }
     }
 
     void yield()
     {
         ++g_yield_count;
-        if (g_ready)
+        if (!g_ready)
         {
-            record_dispatch_decision();
+            return;
         }
+
+        dispatch_selected_task(select_next_task());
+    }
+
+    void poll_reschedule()
+    {
+        if (!g_ready || !g_reschedule_pending || !tinyos::arch::context::context_switch_available())
+        {
+            return;
+        }
+
+        g_reschedule_pending = false;
+        dispatch_selected_task(select_next_task());
     }
 
     void sleep_ticks(uint64_t ticks)
@@ -177,11 +225,12 @@ namespace tinyos::kernel::sched
             previous_state = g_current_task->state;
             g_current_task->state = tinyos::kernel::task::State::Blocked;
             g_current_task->wake_tick = wake_tick;
-            record_dispatch_decision();
+            dispatch_selected_task(select_next_task());
         }
 
         while (tinyos::drivers::pit::ticks() < wake_tick)
         {
+            poll_reschedule();
             asm volatile ("hlt");
         }
 
@@ -328,7 +377,7 @@ namespace tinyos::kernel::sched
             dispatch_decision_count() <= tick_count() + yield_count() + sleep_count() &&
             blocked_task_count() == 0 &&
             context_switch_count() == 0 &&
-            !preemption_enabled();
+            preemption_enabled();
     }
 
     bool sleep_wake_validation_self_test()

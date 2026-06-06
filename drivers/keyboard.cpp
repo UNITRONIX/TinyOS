@@ -6,6 +6,7 @@
 #include <tinyos/drivers/serial.hpp>
 #include <tinyos/drivers/keyboard.hpp>
 #include <tinyos/drivers/vga.hpp>
+#include <tinyos/kernel/sched/scheduler.hpp>
 
 namespace
 {
@@ -326,6 +327,7 @@ namespace tinyos::drivers::keyboard
             }
 
             asm volatile ("hlt");
+            tinyos::kernel::sched::poll_reschedule();
         }
     }
 
