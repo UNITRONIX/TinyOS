@@ -7,6 +7,7 @@
 namespace
 {
     constexpr uint64_t TimeSliceTicks = 5;
+    constexpr uint64_t TaskWatchdogTicks = 500;
 
     tinyos::kernel::task::Task* g_current_task = nullptr;
     tinyos::kernel::task::Task* g_last_selected_task = nullptr;
@@ -16,6 +17,9 @@ namespace
     uint64_t g_wake_event_count = 0;
     uint64_t g_context_switch_count = 0;
     uint64_t g_dispatch_decision_count = 0;
+    uint64_t g_ticks_since_switch = 0;
+    uint64_t g_watchdog_warning_count = 0;
+    bool g_watchdog_episode_active = false;
     volatile bool g_reschedule_pending = false;
     bool g_ready = false;
 
@@ -35,6 +39,11 @@ namespace
         if (index == 1)
         {
             return tinyos::kernel::task::idle_task();
+        }
+
+        if (index == 2)
+        {
+            return tinyos::kernel::task::sched_probe_task();
         }
 
         return nullptr;
@@ -92,6 +101,9 @@ namespace
         tinyos::kernel::task::Task* const resume_task = from;
         g_current_task = to;
         g_last_selected_task = to;
+        g_ticks_since_switch = 0;
+        g_watchdog_episode_active = false;
+        to->ticks_on_cpu = 0;
         ++g_context_switch_count;
         tinyos::arch::context::switch_context(from != nullptr ? &from->context : nullptr, &to->context);
 
@@ -155,6 +167,9 @@ namespace tinyos::kernel::sched
         g_wake_event_count = 0;
         g_context_switch_count = 0;
         g_dispatch_decision_count = 0;
+        g_ticks_since_switch = 0;
+        g_watchdog_warning_count = 0;
+        g_watchdog_episode_active = false;
         g_reschedule_pending = false;
         g_ready = g_current_task != nullptr;
         tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold initialized.");
@@ -177,9 +192,24 @@ namespace tinyos::kernel::sched
         if (g_current_task != nullptr)
         {
             ++g_current_task->runtime_ticks;
+            ++g_current_task->ticks_on_cpu;
         }
 
+        ++g_ticks_since_switch;
+
         wake_blocked_tasks(g_tick_count);
+
+        if (g_ticks_since_switch > TaskWatchdogTicks &&
+            g_current_task != nullptr &&
+            g_current_task != tinyos::kernel::task::idle_task() &&
+            !g_watchdog_episode_active)
+        {
+            g_watchdog_episode_active = true;
+            ++g_watchdog_warning_count;
+            tinyos::kernel::klog::write_line(
+                tinyos::kernel::klog::Level::Warn,
+                "Task watchdog: task exceeded time slice without yield.");
+        }
 
         if ((g_tick_count % TimeSliceTicks) == 0)
         {
@@ -409,5 +439,40 @@ namespace tinyos::kernel::sched
         g_wake_event_count = saved_wake_count;
 
         return not_early && woke;
+    }
+
+    bool context_switch_validation_self_test()
+    {
+        if (!g_ready || !preemption_enabled() || !tinyos::kernel::task::sched_probe_task())
+        {
+            return false;
+        }
+
+        const uint64_t switches_before = g_context_switch_count;
+        yield();
+
+        auto* probe = tinyos::kernel::task::sched_probe_task();
+        if (probe != nullptr)
+        {
+            probe->state = tinyos::kernel::task::State::Blocked;
+        }
+
+        return tinyos::kernel::task::sched_probe_ran() &&
+            g_context_switch_count >= switches_before + 2;
+    }
+
+    uint64_t watchdog_warning_count()
+    {
+        return g_watchdog_warning_count;
+    }
+
+    uint64_t watchdog_threshold_ticks()
+    {
+        return TaskWatchdogTicks;
+    }
+
+    uint64_t ticks_since_last_switch()
+    {
+        return g_ticks_since_switch;
     }
 }

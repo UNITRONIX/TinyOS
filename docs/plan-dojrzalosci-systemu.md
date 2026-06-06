@@ -103,15 +103,15 @@ System uznajemy za **dojrzały użyteczność**, gdy:
 |---|---------|----------------|----------------------|
 | 1.1 | Aktywne przełączanie kontekstu i686 | `arch/i686/context.cpp`, `arch/i686/context_switch.asm` | **Zrobione** — `context_switch_available()` → `true`, `arch_context_switch` |
 | 1.2 | Podłączenie round-robin do context switch | `kernel/sched/scheduler.cpp` | **Zrobione** — `yield()` / `dispatch_selected_task()` |
-| 1.3 | Preemptive scheduling na tick PIT | `kernel/sched/scheduler.cpp`, `drivers/keyboard.cpp` | **Częściowe** — `poll_reschedule()` po IRQ + w pętli `hlt` |
-| 1.4 | Guard pages na stosach kernel tasks | `kernel/memory/paging.cpp`, `kernel/task/task.cpp` | Overflow stosu → page fault zamiast cichej korupcji |
-| 1.5 | Task watchdog / timeout | `kernel/task/task.cpp` | Zawieszony task raportowany przez diagnostykę |
+| 1.3 | Preemptive scheduling na tick PIT | `kernel/sched/scheduler.cpp`, `kernel/task/task.cpp`, `drivers/keyboard.cpp` | **Zrobione** — `poll_reschedule()` w idle, keyboard i co 5 ticków PIT |
+| 1.4 | Guard pages na stosach kernel tasks | `kernel/memory/paging.cpp`, `kernel/task/task.cpp` | **Zrobione** — `clear_page_present()`, `install_stack_guards()`, boot self-test |
+| 1.5 | Task watchdog / timeout | `kernel/sched/scheduler.cpp`, `shell/shell.cpp` | **Zrobione** — licznik ticków bez yield, `schedinfo` + klog warn |
 
 ### Testy
 
 ```bash
 scripts/tinyos-dev.sh iso && scripts/tinyos-dev.sh test
-# W shell: schedinfo — Preemption: enabled, Context switches > 0
+# W shell: schedinfo — Preemption: enabled, Guard pages: installed, Context switches > 0
 ```
 
 ### Zależności

@@ -365,7 +365,11 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     debug_boot_checkpoint("scheduler scaffold ready");
     TINYOS_ASSERT(tinyos::kernel::sched::validation_self_test(), "Scheduler round-robin policy validation failed.");
     TINYOS_ASSERT(tinyos::kernel::sched::sleep_wake_validation_self_test(), "Scheduler sleep/wake validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::sched::context_switch_validation_self_test(), "Scheduler context switch validation failed.");
     TINYOS_ASSERT(tinyos::kernel::syscall::scheduling_validation_self_test(), "Syscall scheduling primitive validation failed.");
+    TINYOS_ASSERT(tinyos::kernel::task::install_stack_guards(), "Kernel task stack guard page installation failed.");
+    TINYOS_ASSERT(tinyos::kernel::task::guard_pages_ready(), "Kernel task stack guard page count check failed.");
+    TINYOS_ASSERT(tinyos::kernel::task::guard_pages_validation_self_test(), "Kernel task stack guard page validation failed.");
     tinyos::drivers::pit::initialize(100);
     register_device_or_panic("pit", tinyos::kernel::device::Class::Timer, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagBootCritical | tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagInterruptDriven);
     debug_boot_checkpoint("pit configured");
@@ -494,7 +498,10 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     }
 #endif
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack ownership scaffold ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Kernel task stack guard pages ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch active.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Active context switch validation passed.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Task watchdog diagnostics ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler round-robin policy ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler sleep wake contract ready.");

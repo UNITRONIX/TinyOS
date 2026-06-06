@@ -4433,6 +4433,17 @@ namespace tinyos::shell
             drivers::vga::write_line(kernel::sched::sleep_wake_ready() ? "ready" : "blocked");
             drivers::vga::write("Preemption      : ");
             drivers::vga::write_line(kernel::sched::preemption_enabled() ? "enabled" : "not yet");
+            drivers::vga::write("Guard pages     : ");
+            drivers::vga::write_line(kernel::task::guard_pages_ready() ? "installed" : "missing");
+            drivers::vga::write("Watchdog warns  : ");
+            write_uint64(kernel::sched::watchdog_warning_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Watchdog limit  : ");
+            write_uint64(kernel::sched::watchdog_threshold_ticks());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("Ticks since sw  : ");
+            write_uint64(kernel::sched::ticks_since_last_switch());
+            drivers::vga::put_char('\n');
             return;
         }
 
@@ -4490,6 +4501,8 @@ namespace tinyos::shell
                 drivers::vga::write(kernel::task::state_name(task->state));
                 drivers::vga::write(" ticks=");
                 write_uint64(task->runtime_ticks);
+                drivers::vga::write(" oncpu=");
+                write_uint64(task->ticks_on_cpu);
                 drivers::vga::write(" wake=");
                 write_uint64(task->wake_tick);
                 drivers::vga::write(" stack=");

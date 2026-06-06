@@ -29,4 +29,8 @@ namespace tinyos::kernel::sched
     size_t idle_task_count();
     bool validation_self_test();
     bool sleep_wake_validation_self_test();
+    bool context_switch_validation_self_test();
+    uint64_t watchdog_warning_count();
+    uint64_t watchdog_threshold_ticks();
+    uint64_t ticks_since_last_switch();
 }

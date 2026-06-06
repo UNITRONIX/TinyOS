@@ -249,6 +249,42 @@ namespace tinyos::kernel::memory::paging
         return true;
     }
 
+    bool clear_page_present(uintptr_t virtual_address)
+    {
+        if (!g_ready || g_page_directory == nullptr)
+        {
+            return false;
+        }
+
+        const size_t directory_index = static_cast<size_t>(virtual_address >> 22);
+        const size_t table_index = static_cast<size_t>((virtual_address >> 12) & 0x3FF);
+        if (directory_index >= EntriesPerTable)
+        {
+            return false;
+        }
+
+        const uint32_t directory_entry = g_page_directory[directory_index];
+        if ((directory_entry & PagePresent) == 0)
+        {
+            return false;
+        }
+
+        auto* table = reinterpret_cast<uint32_t*>(directory_entry & EntryAddressMask);
+        const uint32_t table_entry = table[table_index];
+        if ((table_entry & PagePresent) == 0)
+        {
+            return true;
+        }
+
+        table[table_index] = table_entry & EntryAddressMask;
+        if (g_runtime_enabled)
+        {
+            arch::load_page_directory(page_directory_address());
+        }
+
+        return true;
+    }
+
     size_t update_mapping_flags_for_range(uintptr_t virtual_base, size_t size, uint32_t flags)
     {
         if (size == 0)
