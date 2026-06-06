@@ -27,6 +27,7 @@ Commands:
   run-serial        Run headless with serial on stdout (make run-headless)
   debug-run         Run debug ISO with serial checkpoints (make debug-run)
   test              Boot smoke test (make test-boot)
+  test-gate         Full stability + security gate (required before closing a change scope)
   test-terminal     Terminal-only boot smoke test
   test-stability    Longer boot smoke test (make test-stability)
   test-minimal      Minimum RAM envelope test (make test-minimal)
@@ -95,6 +96,9 @@ case "$cmd" in
         ;;
     test|test-boot)
         run_make test-boot
+        ;;
+    test-gate|gate)
+        run_make test-gate
         ;;
     test-terminal|test-terminal-boot)
         run_make test-terminal-boot

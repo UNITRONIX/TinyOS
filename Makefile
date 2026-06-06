@@ -205,7 +205,7 @@ ASM_SOURCES := \
 OBJECTS := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.o) $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.o)
 DEPFILES := $(CPP_SOURCES:%.cpp=$(OBJ_DIR)/%.d)
 
-.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
+.PHONY: all iso terminal-only-iso run run-gui run-framebuffer-preview run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build test-boot test-terminal-boot test-existing-iso test-gui-boot test-minimal test-minimal-probe test-lowmem-probe test-terminal-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
 
 all: check-build-tools $(TARGET)
 
@@ -227,7 +227,7 @@ prepare-test-env: check-test-tools
 
 dev-help:
 	@echo "TinyOS development helper: scripts/tinyos-dev.sh"
-	@echo "  check | build | iso | run | run-serial | test | test-terminal | clean"
+	@echo "  check | build | iso | run | run-serial | test | test-gate | test-terminal | clean"
 	@bash scripts/tinyos-dev.sh help
 
 $(TARGET): $(OBJECTS)
@@ -591,8 +591,16 @@ test-terminal-lowmem-probe:
 test-stability: BOOT_TEST_TIMEOUT = $(STABILITY_TEST_TIMEOUT)
 test-stability: test-boot
 
-test-terminal-boot: TERMINAL_ONLY=1 TARGET=tinyos-terminal.kernel ISO=build/tinyos-terminal.iso ISO_DIR=build/isodir-terminal OBJ_DIR=build/obj-terminal BOOT_TEST_LOG=build/boot-terminal-smoke.log
-test-terminal-boot: check-test-tools iso
+test-gate: check-test-tools check-image-tools
+	@echo "=== TinyOS change-scope gate: stability + security ==="
+	$(MAKE) prepare-test-env
+	$(MAKE) test-stability
+	$(MAKE) test-terminal-boot
+	$(MAKE) install-profile-check
+	$(MAKE) tapp-trust-test
+	@echo "Change-scope gate passed. Run manual shell checks: syscheck, securityinfo, integritycheck (see docs/testing.md)."
+
+test-terminal-boot: check-test-tools terminal-only-iso
 	@mkdir -p build
 	@rm -f build/boot-terminal-smoke.log
 	@echo "Running TinyOS terminal-only boot smoke test for $(BOOT_TEST_TIMEOUT)..."

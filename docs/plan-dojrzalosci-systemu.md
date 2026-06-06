@@ -73,6 +73,22 @@ System uznajemy za **dojrzały użyteczność**, gdy:
 - first-boot summary pokazuje stan systemu;
 - dokumentacja i `helpsearch` pokrywają wszystkie dostępne polecenia.
 
+### 2.1 Brama zakończenia każdego zakresu zmian
+
+**Każdy nowy zakres zmian** (fala planu, partia bugfixów, refaktor kernel/shell/bezpieczeństwo) **musi zakończyć się solidnymi testami stabilności i bezpieczeństwa** — zanim uznamy go za ukończony.
+
+Obowiązkowy pakiet:
+
+```bash
+scripts/tinyos-dev.sh test-gate
+```
+
+Następnie w shellu TinyOS (niedestrukcyjnie): `syscheck`, `securityinfo`, `integritycheck`, `riskinfo`, `profilecheck`.
+
+Szczegóły, testy dodatkowe per obszar i definicja „done”: **`docs/testing.md`** → sekcja *Change scope gate*.
+
+Przykład dla ukończonej Fali 1: `test-gate` + markery boot (`context switch`, `guard pages`, `watchdog`) + `schedinfo` / `taskinfo` w shellu.
+
 ---
 
 ## 3. Macierz priorytetów

@@ -2,7 +2,67 @@
 
 TinyOS uses QEMU as the primary safety loop. The ISO path is the reference test path until raw disk image generation is implemented.
 
-## Required tools
+## Change scope gate (mandatory)
+
+**Every completed change scope** (feature wave, bugfix batch, refactor touching kernel/shell/security) **must end with solid stability and security verification** before the work is considered done.
+
+This applies to human developers and automated agents alike: do not mark a scope complete after `make test-boot` alone.
+
+### Automated gate (required)
+
+Run the full gate locally:
+
+```sh
+scripts/tinyos-dev.sh test-gate
+# or: make test-gate
+```
+
+The gate runs, in order:
+
+| Step | Target | Purpose |
+|------|--------|---------|
+| 1 | `prepare-test-env` | Toolchain present |
+| 2 | `test-stability` | Boot smoke + longer QEMU window (`STABILITY_TEST_TIMEOUT`, default 20s) |
+| 3 | `test-terminal-boot` | Terminal-only profile still boots |
+| 4 | `install-profile-check` | Install profile contract (non-destructive) |
+| 5 | `tapp-trust-test` | Package trust / verification scaffold |
+
+Add wave-specific targets when the change touches those areas:
+
+| Change area | Extra automated tests |
+|-------------|----------------------|
+| Memory / paging / low RAM | `make test-minimal`, optionally `make test-minimal-probe` |
+| Graphical desktop | `make test-gui-boot` |
+| Image / provisioning | `make image-deploy-check-test`, `make tapp-sign-test` |
+| Scheduler / preemption | grep boot log for context-switch and watchdog markers (see Fala 1 in `docs/plan-dojrzalosci-systemu.md`) |
+
+### Manual security checks (required in shell)
+
+After the automated gate passes, boot TinyOS (`make run` or `scripts/tinyos-dev.sh run-serial`) and run non-destructive diagnostics:
+
+```text
+sysinfo
+status
+syscheck
+riskinfo
+profileinfo
+profilecheck
+securityinfo
+integritycheck
+```
+
+All checks above must report healthy / ok for the changed subsystem. Record failures in the commit message or PR test plan.
+
+### Definition of done
+
+A change scope is **done** only when:
+
+1. `make test-gate` exits 0
+2. Manual `syscheck`, `securityinfo` and `integritycheck` show no regressions
+3. Wave-specific acceptance criteria from `docs/plan-dojrzalosci-systemu.md` are met
+4. New boot markers or shell commands introduced by the change are covered by `make test-boot` or documented in this file
+
+---
 
 - `make`
 - `nasm`
