@@ -49,20 +49,20 @@
 #include <tinyos/drivers/virtio_net.hpp>
 #include <tinyos/kernel/security/accounts.hpp>
 #include <tinyos/shell/shell.hpp>
+#include <tinyos/ui/font.hpp>
+#include <tinyos/ui/font_atlas.hpp>
+#include <tinyos/drivers/console.hpp>
+#include <tinyos/shell/completion.hpp>
+#include <tinyos/ui/gfx_scrollback.hpp>
 #if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/cursor.hpp>
 #include <tinyos/ui/desktop.hpp>
 #include <tinyos/ui/graphical_desktop.hpp>
-#include <tinyos/ui/font.hpp>
 #include <tinyos/ui/gfx_terminal.hpp>
-#include <tinyos/ui/font_atlas.hpp>
 #include <tinyos/ui/gfx_anim.hpp>
 #include <tinyos/ui/gfx_picker.hpp>
 #include <tinyos/ui/gfx_theme.hpp>
 #include <tinyos/kernel/device/framebuffer.hpp>
-#include <tinyos/drivers/console.hpp>
-#include <tinyos/shell/completion.hpp>
-#include <tinyos/ui/gfx_scrollback.hpp>
 #endif
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>

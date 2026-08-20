@@ -1,6 +1,7 @@
 #include <tinyos/arch/gdt.hpp>
 #include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/klog.hpp>
+#include <tinyos/kernel/memory/paging.hpp>
 #include <tinyos/kernel/user/transition.hpp>
 
 namespace
@@ -156,6 +157,21 @@ namespace tinyos::kernel::user::transition
         }
 
         patch_and_copy_init();
+
+        const uintptr_t user_region_bytes = InitUserStackTop - InitUserBase;
+        const uint32_t user_flags =
+            tinyos::kernel::memory::paging::PageFlagRead |
+            tinyos::kernel::memory::paging::PageFlagWrite |
+            tinyos::kernel::memory::paging::PageFlagUser |
+            tinyos::kernel::memory::paging::PageFlagExecute;
+        if (tinyos::kernel::memory::paging::update_mapping_flags_for_range(
+                InitUserBase, user_region_bytes, user_flags) == 0)
+        {
+            tinyos::kernel::klog::write_line(
+                tinyos::kernel::klog::Level::Warn,
+                "Ring-3 init pages could not be marked user-accessible.");
+            return false;
+        }
 
         alignas(16) static uint8_t kernel_trap_stack[8192];
         tinyos::arch::gdt::set_kernel_stack(

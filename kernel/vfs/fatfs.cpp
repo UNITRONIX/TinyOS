@@ -10,10 +10,11 @@ namespace
     constexpr uint8_t SectorsPerCluster = 1;
     constexpr uint16_t ReservedSectors = 1;
     constexpr uint8_t FatCount = 2;
-    constexpr uint16_t RootEntryCount = 16;
+    constexpr uint16_t RootEntryCount = 64;
     constexpr uint8_t Fat16Media = 0xF8;
     constexpr size_t MaxVfsFiles = 8;
     constexpr size_t MaxFileBytes = 480;
+    constexpr size_t MaxRootEntries = 128;
 
     struct [[gnu::packed]] BiosParameterBlock
     {
@@ -66,6 +67,10 @@ namespace
     size_t g_file_count = 0;
     uint16_t g_fat_sectors = 1;
     uint16_t g_root_sectors = 1;
+    uint16_t g_reserved_sectors = ReservedSectors;
+    uint16_t g_root_entry_count = RootEntryCount;
+    uint8_t g_fat_count = FatCount;
+    uint8_t g_sectors_per_cluster = SectorsPerCluster;
     uint32_t g_data_start = 0;
     bool g_ready = false;
 
@@ -213,9 +218,13 @@ namespace
     bool format_volume()
     {
         const uint32_t sectors = total_sectors();
+        g_reserved_sectors = ReservedSectors;
+        g_root_entry_count = RootEntryCount;
+        g_fat_count = FatCount;
+        g_sectors_per_cluster = SectorsPerCluster;
         g_fat_sectors = compute_fat_sectors(sectors);
-        g_root_sectors = static_cast<uint16_t>((RootEntryCount * 32u + BytesPerSector - 1) / BytesPerSector);
-        g_data_start = ReservedSectors + (FatCount * g_fat_sectors) + g_root_sectors;
+        g_root_sectors = static_cast<uint16_t>((g_root_entry_count * 32u + BytesPerSector - 1) / BytesPerSector);
+        g_data_start = g_reserved_sectors + (g_fat_count * g_fat_sectors) + g_root_sectors;
 
         clear_sector();
         fill_bpb(*reinterpret_cast<BiosParameterBlock*>(g_sector), sectors, g_fat_sectors);
@@ -226,7 +235,7 @@ namespace
             return false;
         }
 
-        for (uint8_t fat_index = 0; fat_index < FatCount; ++fat_index)
+        for (uint8_t fat_index = 0; fat_index < g_fat_count; ++fat_index)
         {
             for (uint16_t sector = 0; sector < g_fat_sectors; ++sector)
             {
@@ -239,7 +248,7 @@ namespace
                     g_sector[3] = 0xFF;
                 }
 
-                if (!write_sector(ReservedSectors + fat_index * g_fat_sectors + sector))
+                if (!write_sector(g_reserved_sectors + fat_index * g_fat_sectors + sector))
                 {
                     return false;
                 }
@@ -249,7 +258,7 @@ namespace
         for (uint16_t sector = 0; sector < g_root_sectors; ++sector)
         {
             clear_sector();
-            if (!write_sector(ReservedSectors + FatCount * g_fat_sectors + sector))
+            if (!write_sector(g_reserved_sectors + g_fat_count * g_fat_sectors + sector))
             {
                 return false;
             }
@@ -266,20 +275,47 @@ namespace
         }
 
         const auto* bpb = reinterpret_cast<const BiosParameterBlock*>(g_sector);
-        if (bpb->bytes_per_sector != BytesPerSector || bpb->fat_count == 0 || bpb->fat_size16 == 0)
+        if (bpb->bytes_per_sector != BytesPerSector ||
+            bpb->fat_count == 0 ||
+            bpb->fat_size16 == 0 ||
+            bpb->sectors_per_cluster == 0 ||
+            bpb->root_entry_count == 0 ||
+            bpb->root_entry_count > MaxRootEntries)
         {
             return false;
         }
 
+        g_reserved_sectors = bpb->reserved_sector_count == 0 ? ReservedSectors : bpb->reserved_sector_count;
+        g_root_entry_count = bpb->root_entry_count;
+        g_fat_count = bpb->fat_count;
+        g_sectors_per_cluster = bpb->sectors_per_cluster;
         g_fat_sectors = bpb->fat_size16;
-        g_root_sectors = static_cast<uint16_t>((bpb->root_entry_count * 32u + BytesPerSector - 1) / BytesPerSector);
-        g_data_start = bpb->reserved_sector_count + (bpb->fat_count * bpb->fat_size16) + g_root_sectors;
+        g_root_sectors = static_cast<uint16_t>((g_root_entry_count * 32u + BytesPerSector - 1) / BytesPerSector);
+        g_data_start = g_reserved_sectors + (g_fat_count * g_fat_sectors) + g_root_sectors;
         return true;
     }
 
     uint32_t cluster_to_sector(uint16_t cluster)
     {
-        return g_data_start + static_cast<uint32_t>(cluster - 2) * SectorsPerCluster;
+        return g_data_start + static_cast<uint32_t>(cluster - 2) * g_sectors_per_cluster;
+    }
+
+    uint32_t root_directory_sector()
+    {
+        return g_reserved_sectors + g_fat_count * g_fat_sectors;
+    }
+
+    bool names_equal_83(const char left[11], const char right[11])
+    {
+        for (size_t index = 0; index < 11; ++index)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool allocate_cluster(uint16_t& cluster)
@@ -287,7 +323,7 @@ namespace
         for (uint16_t candidate = 2; candidate < 512; ++candidate)
         {
             const uint32_t fat_offset = static_cast<uint32_t>(candidate) * 2u;
-            const uint32_t fat_sector = ReservedSectors + (fat_offset / BytesPerSector);
+            const uint32_t fat_sector = g_reserved_sectors + (fat_offset / BytesPerSector);
             const uint32_t fat_index = fat_offset % BytesPerSector;
             if (!read_sector(fat_sector))
             {
@@ -302,7 +338,12 @@ namespace
 
             g_sector[fat_index] = 0xFF;
             g_sector[fat_index + 1] = 0xFF;
-            if (!write_sector(fat_sector) || !write_sector(fat_sector + g_fat_sectors))
+            if (!write_sector(fat_sector))
+            {
+                return false;
+            }
+
+            if (g_fat_count > 1 && !write_sector(fat_sector + g_fat_sectors))
             {
                 return false;
             }
@@ -332,15 +373,21 @@ namespace
     bool sync_files()
     {
         g_file_count = 0;
-        const uint32_t root_sector = ReservedSectors + FatCount * g_fat_sectors;
+        const uint32_t root_sector = root_directory_sector();
         if (!read_sector(root_sector))
         {
             return false;
         }
 
         auto* entries = reinterpret_cast<DirEntry*>(g_sector);
-        for (size_t index = 0; index < RootEntryCount && g_file_count < MaxVfsFiles; ++index)
+        for (size_t index = 0; index < g_root_entry_count && g_file_count < MaxVfsFiles; ++index)
         {
+            // Root may span multiple sectors; keep the simple one-sector path for now.
+            if (index >= (BytesPerSector / sizeof(DirEntry)))
+            {
+                break;
+            }
+
             if (entries[index].name[0] == 0x00 || static_cast<uint8_t>(entries[index].name[0]) == 0xE5)
             {
                 continue;
@@ -653,11 +700,61 @@ namespace tinyos::kernel::vfs::fatfs
             return false;
         }
 
-        uint16_t cluster = 0;
-        if (!allocate_cluster(cluster))
+        char want[11];
+        to_83_name(name, want);
+
+        const uint32_t root_sector = root_directory_sector();
+        if (!read_sector(root_sector))
         {
             return false;
         }
+
+        auto* entries = reinterpret_cast<DirEntry*>(g_sector);
+        const size_t entries_per_sector = BytesPerSector / sizeof(DirEntry);
+        const size_t scan_count = g_root_entry_count < entries_per_sector ? g_root_entry_count : entries_per_sector;
+
+        size_t slot = scan_count;
+        uint16_t cluster = 0;
+        bool reuse_cluster = false;
+        for (size_t index = 0; index < scan_count; ++index)
+        {
+            if (entries[index].name[0] != 0x00 &&
+                static_cast<uint8_t>(entries[index].name[0]) != 0xE5 &&
+                names_equal_83(entries[index].name, want))
+            {
+                slot = index;
+                if (entries[index].first_cluster_low >= 2)
+                {
+                    cluster = entries[index].first_cluster_low;
+                    reuse_cluster = true;
+                }
+                break;
+            }
+
+            if (slot == scan_count &&
+                (entries[index].name[0] == 0x00 || static_cast<uint8_t>(entries[index].name[0]) == 0xE5))
+            {
+                slot = index;
+            }
+        }
+
+        if (slot >= scan_count)
+        {
+            return false;
+        }
+
+        if (!reuse_cluster && !allocate_cluster(cluster))
+        {
+            return false;
+        }
+
+        // Re-read root: allocate_cluster overwrites g_sector.
+        if (!read_sector(root_sector))
+        {
+            return false;
+        }
+
+        entries = reinterpret_cast<DirEntry*>(g_sector);
 
         clear_sector();
         for (size_t index = 0; index < size; ++index)
@@ -670,28 +767,12 @@ namespace tinyos::kernel::vfs::fatfs
             return false;
         }
 
-        const uint32_t root_sector = ReservedSectors + FatCount * g_fat_sectors;
         if (!read_sector(root_sector))
         {
             return false;
         }
 
-        auto* entries = reinterpret_cast<DirEntry*>(g_sector);
-        size_t slot = RootEntryCount;
-        for (size_t index = 0; index < RootEntryCount; ++index)
-        {
-            if (entries[index].name[0] == 0x00 || static_cast<uint8_t>(entries[index].name[0]) == 0xE5)
-            {
-                slot = index;
-                break;
-            }
-        }
-
-        if (slot >= RootEntryCount)
-        {
-            return false;
-        }
-
+        entries = reinterpret_cast<DirEntry*>(g_sector);
         for (size_t index = 0; index < sizeof(DirEntry); ++index)
         {
             reinterpret_cast<uint8_t*>(&entries[slot])[index] = 0;
@@ -719,26 +800,18 @@ namespace tinyos::kernel::vfs::fatfs
 
         char want[11];
         to_83_name(name, want);
-        const uint32_t root_sector = ReservedSectors + FatCount * g_fat_sectors;
+        const uint32_t root_sector = root_directory_sector();
         if (!read_sector(root_sector))
         {
             return false;
         }
 
         auto* entries = reinterpret_cast<DirEntry*>(g_sector);
-        for (size_t index = 0; index < RootEntryCount; ++index)
+        const size_t entries_per_sector = BytesPerSector / sizeof(DirEntry);
+        const size_t scan_count = g_root_entry_count < entries_per_sector ? g_root_entry_count : entries_per_sector;
+        for (size_t index = 0; index < scan_count; ++index)
         {
-            bool match = true;
-            for (size_t n = 0; n < 11; ++n)
-            {
-                if (entries[index].name[n] != want[n])
-                {
-                    match = false;
-                    break;
-                }
-            }
-
-            if (!match)
+            if (!names_equal_83(entries[index].name, want))
             {
                 continue;
             }
@@ -779,6 +852,11 @@ namespace tinyos::kernel::vfs::fatfs
             return false;
         }
 
+        if (find("/mnt/fat/fsinfo.txt") == nullptr)
+        {
+            return false;
+        }
+
         const char payload[] = "tinyos-fat16-ok";
         if (!write_file("PROBE.TXT", payload, sizeof(payload) - 1))
         {
@@ -800,6 +878,6 @@ namespace tinyos::kernel::vfs::fatfs
             }
         }
 
-        return find("/mnt/fat/fsinfo.txt") != nullptr;
+        return true;
     }
 }

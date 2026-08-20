@@ -232,7 +232,7 @@ namespace tinyos::kernel::memory::paging
             return false;
         }
 
-        const uint32_t directory_entry = g_page_directory[directory_index];
+        uint32_t directory_entry = g_page_directory[directory_index];
         if ((directory_entry & PagePresent) == 0)
         {
             return false;
@@ -245,7 +245,15 @@ namespace tinyos::kernel::memory::paging
             return false;
         }
 
-        table[table_index] = (table_entry & EntryAddressMask) | flags_to_entry_bits(flags);
+        const uint32_t entry_bits = flags_to_entry_bits(flags);
+        table[table_index] = (table_entry & EntryAddressMask) | entry_bits;
+
+        // User-mode walks require U=1 on both the PDE and the PTE.
+        if ((flags & PageFlagUser) != 0)
+        {
+            g_page_directory[directory_index] = directory_entry | PageUser;
+        }
+
         return true;
     }
 
@@ -301,6 +309,11 @@ namespace tinyos::kernel::memory::paging
             {
                 ++updated_pages;
             }
+        }
+
+        if (updated_pages != 0 && g_runtime_enabled)
+        {
+            arch::load_page_directory(page_directory_address());
         }
 
         return updated_pages;
