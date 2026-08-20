@@ -12,7 +12,10 @@
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/console.hpp>
 #include <tinyos/drivers/serial.hpp>
+#include <tinyos/drivers/ata.hpp>
+#include <tinyos/drivers/usb_hid.hpp>
 #include <tinyos/drivers/virtio_blk.hpp>
+#include <tinyos/drivers/virtio_net.hpp>
 #include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/admin/tools.hpp>
 #include <tinyos/kernel/device/block.hpp>
@@ -24,6 +27,7 @@
 #include <tinyos/kernel/app/package_verifier.hpp>
 #include <tinyos/kernel/app/runtime.hpp>
 #include <tinyos/kernel/elf/loader.hpp>
+#include <tinyos/kernel/security/accounts.hpp>
 #include <tinyos/kernel/security/integrity.hpp>
 #include <tinyos/kernel/security/trust.hpp>
 #include <tinyos/kernel/initrd/modules.hpp>
@@ -44,6 +48,7 @@
 #include <tinyos/kernel/task/task.hpp>
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
+#include <tinyos/kernel/vfs/fatfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
 #if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/gfx_terminal.hpp>
@@ -198,6 +203,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     debug_boot_checkpoint("serial ready");
     tinyos::kernel::klog::initialize();
     debug_boot_checkpoint("kernel logger ready");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 GDT and TSS loaded.");
     TINYOS_ASSERT(tinyos::kernel::platform::requirements::validation_self_test(), "System requirements manifest validation failed.");
     TINYOS_ASSERT(tinyos::kernel::platform::pc::validation_self_test(), "PC platform initialization contract validation failed.");
     tinyos::kernel::device::initialize();
@@ -302,12 +308,19 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     }
 
     tinyos::drivers::virtio_blk::initialize();
+    tinyos::drivers::ata::initialize();
+    tinyos::drivers::virtio_net::initialize();
+    tinyos::drivers::usb_hid::initialize();
     tinyos::kernel::device::block::initialize();
     TINYOS_ASSERT(tinyos::kernel::device::block::validation_self_test(), "Block device scaffold validation failed.");
     register_device_or_panic("ram-block0", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 0, tinyos::kernel::device::FlagVirtual | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
     if (tinyos::drivers::virtio_blk::is_ready())
     {
         register_device_or_panic("virtio-blk0", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 1, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
+    }
+    if (tinyos::drivers::ata::is_ready())
+    {
+        register_device_or_panic("ata0-master", tinyos::kernel::device::Class::Block, tinyos::kernel::device::State::Ready, 2, tinyos::kernel::device::FlagHardware | tinyos::kernel::device::FlagReadable | tinyos::kernel::device::FlagWritable);
     }
     debug_boot_checkpoint("block device scaffold ready");
     tinyos::kernel::vfs::initialize();
@@ -348,6 +361,12 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
         TINYOS_ASSERT(persistent_profile != nullptr && !persistent_profile->directory, "Persistent /system/profile.txt missing.");
         TINYOS_ASSERT(tinyos::kernel::vfs::read_file(persistent_profile, profile_text, profile_size) && profile_text != nullptr && profile_size != 0, "Persistent profile unreadable.");
     }
+    if (tinyos::kernel::vfs::fatfs::is_ready())
+    {
+        TINYOS_ASSERT(tinyos::kernel::vfs::fatfs::validation_self_test(), "FAT16 validation failed.");
+        TINYOS_ASSERT(tinyos::kernel::vfs::find("/mnt/fat/fsinfo.txt") != nullptr, "FAT16 mount metadata missing.");
+        tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "FAT16 on ATA ready.");
+    }
     tinyos::kernel::syscall::initialize();
     debug_boot_checkpoint("syscall abi ready");
     TINYOS_ASSERT(tinyos::kernel::syscall::validation_self_test(), "Syscall validation self-test failed.");
@@ -367,6 +386,9 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::security::trust::initialize();
     debug_boot_checkpoint("tapp trust store ready");
     TINYOS_ASSERT(tinyos::kernel::security::trust::validation_self_test(), "TAPP trust store validation failed.");
+    tinyos::kernel::security::accounts::initialize();
+    TINYOS_ASSERT(tinyos::kernel::security::accounts::validation_self_test(), "Account store validation failed.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Account authentication store ready.");
     tinyos::kernel::app::package_verifier::initialize();
     debug_boot_checkpoint("tapp package verifier ready");
     TINYOS_ASSERT(tinyos::kernel::app::package_verifier::validation_self_test(), "TAPP package verifier validation failed.");
@@ -382,6 +404,12 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::user::transition::initialize();
     debug_boot_checkpoint("user transition scaffold ready");
     TINYOS_ASSERT(tinyos::kernel::user::transition::validation_self_test(), "User transition init contract validation failed.");
+    if (tinyos::kernel::user::transition::init_launch_supported())
+    {
+        TINYOS_ASSERT(tinyos::kernel::user::transition::launch_init(), "Ring-3 init launch failed.");
+        TINYOS_ASSERT(tinyos::kernel::user::transition::init_exited(), "Ring-3 init did not exit.");
+        tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Ring-3 init launch validated.");
+    }
     tinyos::kernel::security::integrity::initialize();
     debug_boot_checkpoint("security integrity scaffold ready");
     TINYOS_ASSERT(tinyos::kernel::security::integrity::boot_modules_valid(), "Boot module integrity self-test failed.");
@@ -530,9 +558,12 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "i686 context switch active.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Active context switch validation passed.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Task watchdog diagnostics ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "IRQ preemption active on PIT time slices.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold receiving PIT ticks.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler round-robin policy ready.");
     tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler sleep wake contract ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Hybrid boot disk and Multiboot2 UEFI path ready.");
+    tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "USB HID UHCI probe and VirtIO-net contract ready.");
     #if defined(TINYOS_GRAPHICAL_AUTOSTART) && !defined(TINYOS_TERMINAL_ONLY)
         if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
         {

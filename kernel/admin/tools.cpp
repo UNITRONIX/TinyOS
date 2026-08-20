@@ -103,16 +103,16 @@ namespace
         { "reboot", "reboot machine", Category::Power, State::Ready, true, true },
         { "int3", "trigger breakpoint exception", Category::Development, State::Ready, true, true },
         { "panic", "trigger kernel panic", Category::Development, State::Ready, true, true },
-        { "mount", "mount storage volumes", Category::Storage, State::Ready, true, false },
-        { "ps", "list user processes", Category::Scheduling, State::Planned, false, false },
+        { "mount", "mount storage volumes", Category::Storage, State::Planned, true, false },
+        { "ps", "list kernel tasks", Category::Scheduling, State::Ready, false, false },
         { "kill", "stop a process", Category::Scheduling, State::Planned, true, true },
         { "service", "manage system services", Category::Scheduling, State::Planned, true, true },
-        { "useradd", "create user identity", Category::Security, State::Planned, true, true },
+        { "useradd", "create user identity", Category::Security, State::Ready, true, true },
         { "hostname", "set installed device name", Category::Devices, State::Planned, true, false },
         { "netconfig", "configure network profile", Category::Devices, State::Planned, true, true },
         { "passwd", "rotate account credential", Category::Security, State::Planned, true, true },
-        { "whoami", "show active identity", Category::Security, State::Planned, false, false },
-        { "id", "show identity and permissions", Category::Security, State::Planned, false, false },
+        { "whoami", "show active identity", Category::Security, State::Ready, false, false },
+        { "id", "show identity and permissions", Category::Security, State::Ready, false, false },
         { "package", "manage system packages", Category::Development, State::Planned, true, true },
         { "tappinstall", "install a TAPP package", Category::Development, State::Planned, true, true },
         { "tappremove", "remove a TAPP package", Category::Development, State::Planned, true, true },
@@ -132,7 +132,7 @@ namespace
         { "deploy", "send image through a remote transport", Category::Development, State::Planned, true, true },
         { "provision", "activate an image on a target", Category::Development, State::Planned, true, true },
         { "rollback", "restore previous image slot", Category::Power, State::Planned, true, true },
-        { "netinfo", "show network state", Category::Devices, State::Planned, false, false }
+        { "netinfo", "show network state", Category::Devices, State::Ready, false, false }
     };
 
     bool g_ready = false;

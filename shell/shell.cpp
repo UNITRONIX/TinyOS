@@ -42,9 +42,12 @@
 #include <tinyos/kernel/task/task.hpp>
 #include <tinyos/kernel/user/transition.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
+#include <tinyos/kernel/vfs/fatfs.hpp>
 #include <tinyos/kernel/vfs/mount.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
+#include <tinyos/drivers/virtio_net.hpp>
+#include <tinyos/kernel/security/accounts.hpp>
 #include <tinyos/shell/shell.hpp>
 #if !defined(TINYOS_TERMINAL_ONLY)
 #include <tinyos/ui/cursor.hpp>
@@ -733,19 +736,40 @@ namespace
 
     void run_install_mock()
     {
-        tinyos::drivers::vga::write_line("TinyOS terminal installer mock:");
-        tinyos::drivers::vga::write_line("  disk writes are disabled in this stage");
+        tinyos::drivers::vga::write_line("TinyOS terminal installer:");
         tinyos::drivers::vga::write("  receipt: ");
         tinyos::drivers::vga::write_line(InstallReceiptPath);
 
         if (!write_install_receipt())
         {
-            tinyos::drivers::vga::write_line("Install mock failed.");
+            tinyos::drivers::vga::write_line("Install failed (RAMFS receipt).");
             return;
         }
 
-        tinyos::drivers::vga::write_line("Install mock receipt written.");
+        tinyos::drivers::vga::write_line("Install receipt written to RAMFS.");
         show_file(InstallReceiptPath);
+
+        if (tinyos::kernel::vfs::fatfs::is_ready())
+        {
+            const char receipt[] =
+                "tinyos-install\n"
+                "target=ata0-master\n"
+                "fs=FAT16\n"
+                "mount=/mnt/fat\n"
+                "status=installed\n";
+            if (tinyos::kernel::vfs::fatfs::write_file("INSTALL.TXT", receipt, sizeof(receipt) - 1))
+            {
+                tinyos::drivers::vga::write_line("Persistent install marker written to /mnt/fat/INSTALL.TXT.");
+            }
+            else
+            {
+                tinyos::drivers::vga::write_line("Warning: FAT persistent install marker failed.");
+            }
+        }
+        else
+        {
+            tinyos::drivers::vga::write_line("No FAT/ATA target; persistence deferred (ISO/QEMU mock only).");
+        }
     }
 
     void print_terminal_status()
@@ -4728,6 +4752,11 @@ namespace tinyos::shell
             drivers::vga::write_line(kernel::sched::sleep_wake_ready() ? "ready" : "blocked");
             drivers::vga::write("Preemption      : ");
             drivers::vga::write_line(kernel::sched::preemption_enabled() ? "enabled" : "not yet");
+            drivers::vga::write("IRQ preempts    : ");
+            write_uint64(kernel::sched::preempt_from_irq_count());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("IRQ preempt path: ");
+            drivers::vga::write_line(kernel::sched::irq_preemption_active() ? "active" : "inactive");
             drivers::vga::write("Guard pages     : ");
             drivers::vga::write_line(kernel::task::guard_pages_ready() ? "installed" : "missing");
             drivers::vga::write("Watchdog warns  : ");
@@ -4739,6 +4768,93 @@ namespace tinyos::shell
             drivers::vga::write("Ticks since sw  : ");
             write_uint64(kernel::sched::ticks_since_last_switch());
             drivers::vga::put_char('\n');
+            return;
+        }
+
+        if (core::string::compare(command, "ps") == 0)
+        {
+            drivers::vga::write_line("PID  STATE     NAME");
+            for (size_t index = 0; index < kernel::task::task_count(); ++index)
+            {
+                const auto* task = kernel::task::task_at(index);
+                if (task == nullptr)
+                {
+                    continue;
+                }
+
+                write_uint64(task->id);
+                drivers::vga::write("    ");
+                switch (task->state)
+                {
+                case kernel::task::State::Running:
+                    drivers::vga::write("Running  ");
+                    break;
+                case kernel::task::State::Ready:
+                    drivers::vga::write("Ready    ");
+                    break;
+                case kernel::task::State::Blocked:
+                    drivers::vga::write("Blocked  ");
+                    break;
+                case kernel::task::State::Idle:
+                    drivers::vga::write("Idle     ");
+                    break;
+                case kernel::task::State::Created:
+                    drivers::vga::write("Created  ");
+                    break;
+                default:
+                    drivers::vga::write("Unknown  ");
+                    break;
+                }
+                drivers::vga::write_line(task->name != nullptr ? task->name : "?");
+            }
+            return;
+        }
+
+        if (core::string::compare(command, "netinfo") == 0)
+        {
+            drivers::vga::write("VirtIO-net ready : ");
+            drivers::vga::write_line(drivers::virtio_net::is_ready() ? "yes" : "no");
+            drivers::vga::write("Link up          : ");
+            drivers::vga::write_line(drivers::virtio_net::link_up() ? "yes" : "no");
+            drivers::vga::write("TX packets       : ");
+            write_uint64(drivers::virtio_net::tx_packets());
+            drivers::vga::put_char('\n');
+            drivers::vga::write("RX packets       : ");
+            write_uint64(drivers::virtio_net::rx_packets());
+            drivers::vga::put_char('\n');
+            return;
+        }
+
+        if (core::string::compare(command, "whoami") == 0)
+        {
+            drivers::vga::write_line("root");
+            return;
+        }
+
+        if (core::string::compare(command, "id") == 0)
+        {
+            drivers::vga::write_line("uid=0(root) gid=0(root) groups=0(root)");
+            return;
+        }
+
+        if (core::string::compare(command, "useradd") == 0)
+        {
+            drivers::vga::write_line("Usage: useradd is interactive-stub; bootstrap accounts: root/user");
+            drivers::vga::write("Accounts: ");
+            write_uint64(kernel::security::accounts::count());
+            drivers::vga::put_char('\n');
+            for (size_t index = 0; index < kernel::security::accounts::count(); ++index)
+            {
+                const auto* account = kernel::security::accounts::at(index);
+                if (account == nullptr)
+                {
+                    continue;
+                }
+
+                drivers::vga::write("  ");
+                drivers::vga::write(account->name);
+                drivers::vga::write_line(account->admin ? " (admin)" : "");
+            }
             return;
         }
 

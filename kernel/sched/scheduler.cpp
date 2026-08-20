@@ -16,11 +16,14 @@ namespace
     uint64_t g_sleep_count = 0;
     uint64_t g_wake_event_count = 0;
     uint64_t g_context_switch_count = 0;
+    uint64_t g_preempt_from_irq_count = 0;
     uint64_t g_dispatch_decision_count = 0;
     uint64_t g_ticks_since_switch = 0;
     uint64_t g_watchdog_warning_count = 0;
     bool g_watchdog_episode_active = false;
     volatile bool g_reschedule_pending = false;
+    volatile uint32_t g_irq_depth = 0;
+    bool g_irq_preemption_enabled = false;
     bool g_ready = false;
 
     bool task_is_runnable(const tinyos::kernel::task::Task* task)
@@ -166,13 +169,20 @@ namespace tinyos::kernel::sched
         g_sleep_count = 0;
         g_wake_event_count = 0;
         g_context_switch_count = 0;
+        g_preempt_from_irq_count = 0;
         g_dispatch_decision_count = 0;
         g_ticks_since_switch = 0;
         g_watchdog_warning_count = 0;
         g_watchdog_episode_active = false;
         g_reschedule_pending = false;
+        g_irq_depth = 0;
+        g_irq_preemption_enabled = tinyos::arch::context::context_switch_available();
         g_ready = g_current_task != nullptr;
         tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "Scheduler scaffold initialized.");
+        if (g_irq_preemption_enabled)
+        {
+            tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "IRQ preemption armed for PIT time slices.");
+        }
     }
 
     bool is_ready()
@@ -235,8 +245,54 @@ namespace tinyos::kernel::sched
             return;
         }
 
+        if (g_irq_depth != 0)
+        {
+            return;
+        }
+
         g_reschedule_pending = false;
         dispatch_selected_task(select_next_task());
+    }
+
+    void irq_enter()
+    {
+        ++g_irq_depth;
+    }
+
+    void irq_leave()
+    {
+        if (g_irq_depth > 0)
+        {
+            --g_irq_depth;
+        }
+    }
+
+    void irq_preempt_tail()
+    {
+        if (!g_ready || !g_irq_preemption_enabled || !g_reschedule_pending)
+        {
+            return;
+        }
+
+        if (g_irq_depth != 0 || !tinyos::arch::context::context_switch_available())
+        {
+            return;
+        }
+
+        auto* const selected = select_next_task();
+        if (selected == nullptr || selected == g_current_task)
+        {
+            g_reschedule_pending = false;
+            return;
+        }
+
+        g_reschedule_pending = false;
+        ++g_preempt_from_irq_count;
+
+        // Interrupts were disabled by the interrupt gate; enable before switching so
+        // the next task resumes with IF=1. EOI has already been sent.
+        asm volatile ("sti");
+        dispatch_selected_task(selected);
     }
 
     void sleep_ticks(uint64_t ticks)
@@ -304,6 +360,11 @@ namespace tinyos::kernel::sched
         return g_context_switch_count;
     }
 
+    uint64_t preempt_from_irq_count()
+    {
+        return g_preempt_from_irq_count;
+    }
+
     uint64_t dispatch_decision_count()
     {
         return g_dispatch_decision_count;
@@ -321,7 +382,12 @@ namespace tinyos::kernel::sched
 
     bool preemption_enabled()
     {
-        return tinyos::arch::context::context_switch_available();
+        return g_irq_preemption_enabled && tinyos::arch::context::context_switch_available();
+    }
+
+    bool irq_preemption_active()
+    {
+        return preemption_enabled();
     }
 
     bool round_robin_ready()

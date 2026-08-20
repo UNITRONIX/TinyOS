@@ -1,3 +1,4 @@
+#include <tinyos/drivers/ata.hpp>
 #include <tinyos/drivers/virtio_blk.hpp>
 #include <tinyos/kernel/device/block.hpp>
 
@@ -15,6 +16,7 @@ namespace
     tinyos::kernel::device::block::Device g_ram_device = {};
     bool g_ram_ready = false;
     bool g_use_virtio = false;
+    bool g_use_ata = false;
 
     size_t sector_offset(uint32_t sector_index)
     {
@@ -99,18 +101,35 @@ namespace tinyos::kernel::device::block
     void initialize()
     {
         g_use_virtio = false;
+        g_use_ata = false;
         initialize_ram_backend();
         g_use_virtio = tinyos::drivers::virtio_blk::is_ready();
+        g_use_ata = !g_use_virtio && tinyos::drivers::ata::is_ready();
     }
 
     bool is_ready()
     {
-        return g_use_virtio ? tinyos::drivers::virtio_blk::is_ready() : g_ram_ready;
+        if (g_use_virtio)
+        {
+            return tinyos::drivers::virtio_blk::is_ready();
+        }
+
+        if (g_use_ata)
+        {
+            return tinyos::drivers::ata::is_ready();
+        }
+
+        return g_ram_ready;
     }
 
     bool virtio_available()
     {
         return g_use_virtio && tinyos::drivers::virtio_blk::is_ready();
+    }
+
+    bool ata_available()
+    {
+        return g_use_ata && tinyos::drivers::ata::is_ready();
     }
 
     const char* active_device_name()
@@ -121,6 +140,12 @@ namespace tinyos::kernel::device::block
             return device != nullptr && device->name != nullptr ? device->name : "virtio-blk0";
         }
 
+        if (ata_available())
+        {
+            const auto* device = tinyos::drivers::ata::device();
+            return device != nullptr && device->name != nullptr ? device->name : "ata0-master";
+        }
+
         return g_ram_device.name;
     }
 
@@ -129,6 +154,11 @@ namespace tinyos::kernel::device::block
         if (virtio_available())
         {
             return tinyos::drivers::virtio_blk::device();
+        }
+
+        if (ata_available())
+        {
+            return tinyos::drivers::ata::device();
         }
 
         return g_ram_ready ? &g_ram_device : nullptr;
@@ -162,6 +192,11 @@ namespace tinyos::kernel::device::block
         if (virtio_available())
         {
             return tinyos::drivers::virtio_blk::read_sector(sector_index, buffer, buffer_size);
+        }
+
+        if (ata_available())
+        {
+            return tinyos::drivers::ata::read_sector(sector_index, buffer, buffer_size);
         }
 
         if (!g_ram_ready)
@@ -199,6 +234,11 @@ namespace tinyos::kernel::device::block
         if (virtio_available())
         {
             return tinyos::drivers::virtio_blk::write_sector(sector_index, data, data_size);
+        }
+
+        if (ata_available())
+        {
+            return tinyos::drivers::ata::write_sector(sector_index, data, data_size);
         }
 
         if (!g_ram_ready)
@@ -266,6 +306,11 @@ namespace tinyos::kernel::device::block
         if (virtio_available())
         {
             return tinyos::drivers::virtio_blk::validation_self_test();
+        }
+
+        if (ata_available())
+        {
+            return tinyos::drivers::ata::validation_self_test();
         }
 
         return ram_validation_self_test();

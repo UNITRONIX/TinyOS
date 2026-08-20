@@ -19,4 +19,8 @@ namespace tinyos::kernel::user::transition
     bool init_launch_supported();
     bool initial_process_contract_ready();
     bool validation_self_test();
+    bool launch_init();
+    void note_init_exit(uint32_t code);
+    bool init_exited();
+    uint32_t init_exit_code();
 }

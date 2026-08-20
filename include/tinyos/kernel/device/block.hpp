@@ -27,6 +27,7 @@ namespace tinyos::kernel::device::block
     void initialize();
     bool is_ready();
     bool virtio_available();
+    bool ata_available();
     const char* active_device_name();
     const Device* root_device();
     const Device* ram_device();

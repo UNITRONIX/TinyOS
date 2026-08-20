@@ -1,3 +1,4 @@
+#include <tinyos/arch/gdt.hpp>
 #include <tinyos/arch/hal.hpp>
 #include <tinyos/arch/io.hpp>
 
@@ -29,7 +30,7 @@ namespace tinyos::arch
 {
     void initialize()
     {
-        // Architecture-specific initialization placeholder.
+        tinyos::arch::gdt::initialize();
     }
 
     const Info& info()
@@ -45,7 +46,8 @@ namespace tinyos::arch
             && I686Info.page_size == 4096
             && I686Info.protected_mode
             && I686Info.paging_supported
-            && I686Info.little_endian;
+            && I686Info.little_endian
+            && tinyos::arch::gdt::validation_self_test();
     }
 
     void load_page_directory(uintptr_t page_directory_address)

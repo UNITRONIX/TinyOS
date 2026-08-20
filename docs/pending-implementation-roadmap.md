@@ -35,7 +35,7 @@ Priority bands:
 
 ## Executive summary
 
-TinyOS v0.1.0 has a working `i686` ISO boot path, VGA terminal shell, RAMFS, interrupt-driven timer/keyboard, paging scaffolds and extensive diagnostics. Most items below are either scaffolds waiting for runtime behavior or planned contracts not yet coded.
+TinyOS now includes IRQ preemption, GDT/TSS ring-3 embedded init with `int 0x80` syscalls, ATA PIO + FAT16, hybrid boot-disk scripting, Multiboot2 header, USB HID UHCI probe, VirtIO-net detection and a hashed account store. Remaining high-impact work is full USB HID transfers, AHCI/NVMe, per-process address spaces, a real userland rootfs and a VirtIO-net datapath/TCP stack.
 
 The highest-impact pending work is:
 

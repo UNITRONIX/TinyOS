@@ -11,6 +11,9 @@ namespace tinyos::kernel::sched
     void on_timer_tick();
     void yield();
     void poll_reschedule();
+    void irq_enter();
+    void irq_leave();
+    void irq_preempt_tail();
     void sleep_ticks(uint64_t ticks);
     const tinyos::kernel::task::Task* current_task();
     uint64_t tick_count();
@@ -18,10 +21,12 @@ namespace tinyos::kernel::sched
     uint64_t sleep_count();
     uint64_t wake_event_count();
     uint64_t context_switch_count();
+    uint64_t preempt_from_irq_count();
     uint64_t dispatch_decision_count();
     uint64_t time_slice_ticks();
     size_t last_selected_task_id();
     bool preemption_enabled();
+    bool irq_preemption_active();
     bool round_robin_ready();
     bool sleep_wake_ready();
     size_t runnable_task_count();

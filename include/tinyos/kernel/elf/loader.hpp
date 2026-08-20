@@ -42,4 +42,5 @@ namespace tinyos::kernel::elf::loader
     bool validation_self_test();
     const char* status_name(ImageStatus status);
     const Image* image_at(size_t index);
+    bool load_image(size_t index, uintptr_t& entry_out);
 }

@@ -18,14 +18,15 @@ TinyOS currently provides:
 - [x] Phase 1 - CPU exception foundation
 - [x] Phase 2 - PIT IRQ0 and keyboard IRQ1 enabled with diagnostics and polling fallback
 - [x] Phase 3 - memory map, allocator, heap and address-space scaffolds implemented
-- [~] Phase 4 - task and scheduler runtime scaffolds active, round-robin policy self-test implemented, context switch not implemented yet
-- [x] Phase 5 - RAMFS, VFS and initrd scaffolds implemented
-- [~] Phase 6 - syscall ABI scaffold started
-- [~] Device model - static device registry scaffold implemented
-- [ ] Phase 7 - graphics foundation
-- [ ] Phase 8 - UI stack
+- [x] Phase 4 - task and scheduler runtime with context switch and IRQ preemption
+- [x] Phase 5 - RAMFS, VFS, initrd, ATA PIO and FAT16 mounts
+- [x] Phase 6 - syscall ABI with int 0x80 path and ring-3 embedded init
+- [x] Device model - static device registry; VirtIO block/net probe; USB HID UHCI probe
+- [~] Phase 7 - graphics foundation
+- [~] Phase 8 - UI stack
 - [ ] Phase 9 - multi-architecture growth
 - [x] Graphics slice - optional GRUB framebuffer boot and pixel desktop preview
+- [x] Boot media - hybrid disk image script + Multiboot2 header for UEFI GRUB
 
 ## Security segment - high priority
 

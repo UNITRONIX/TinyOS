@@ -10,6 +10,7 @@
 #include <tinyos/drivers/serial.hpp>
 #include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/interrupts.hpp>
+#include <tinyos/kernel/sched/scheduler.hpp>
 
 namespace
 {
@@ -180,6 +181,7 @@ extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code)
 
 extern "C" void irq_dispatch(uint32_t irq)
 {
+    tinyos::kernel::sched::irq_enter();
     tinyos::kernel::interrupts::record_irq(irq);
 
     switch (irq)
@@ -200,4 +202,10 @@ extern "C" void irq_dispatch(uint32_t irq)
     }
 
     tinyos::drivers::pic::send_eoi(static_cast<uint8_t>(irq));
+    tinyos::kernel::sched::irq_leave();
+
+    if (irq == 0)
+    {
+        tinyos::kernel::sched::irq_preempt_tail();
+    }
 }

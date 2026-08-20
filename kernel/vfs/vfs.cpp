@@ -1,6 +1,7 @@
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/initrd/modules.hpp>
 #include <tinyos/kernel/vfs/blockfs.hpp>
+#include <tinyos/kernel/vfs/fatfs.hpp>
 #include <tinyos/kernel/vfs/mount.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
@@ -25,6 +26,11 @@ namespace
             ++count;
         }
 
+        if (tinyos::kernel::vfs::fatfs::is_ready())
+        {
+            ++count;
+        }
+
         return count;
     }
 
@@ -40,9 +46,19 @@ namespace
             --index;
         }
 
-        if (tinyos::kernel::initrd::modules::vfs_ready() && index == 0)
+        if (tinyos::kernel::initrd::modules::vfs_ready())
         {
-            return tinyos::kernel::initrd::modules::vfs_root();
+            if (index == 0)
+            {
+                return tinyos::kernel::initrd::modules::vfs_root();
+            }
+
+            --index;
+        }
+
+        if (tinyos::kernel::vfs::fatfs::is_ready() && index == 0)
+        {
+            return tinyos::kernel::vfs::fatfs::root();
         }
 
         return nullptr;
@@ -92,6 +108,7 @@ namespace tinyos::kernel::vfs
     {
         ramfs::initialize();
         blockfs::initialize();
+        fatfs::initialize();
         mount::initialize();
         initrd::modules::mount_vfs();
         g_ready = true;
@@ -206,6 +223,12 @@ namespace tinyos::kernel::vfs
             return block_node;
         }
 
+        const auto* fat_node = fatfs::find(resolved);
+        if (fat_node != nullptr)
+        {
+            return fat_node;
+        }
+
         const auto* boot_node = initrd::modules::vfs_find(resolved);
         if (boot_node != nullptr)
         {
@@ -238,6 +261,11 @@ namespace tinyos::kernel::vfs
             return initrd::modules::vfs_child_count(node);
         }
 
+        if (fatfs::owns(node))
+        {
+            return fatfs::child_count(node);
+        }
+
         return blockfs::owns(node) ? blockfs::child_count(node) : ramfs::child_count(node);
     }
 
@@ -262,6 +290,11 @@ namespace tinyos::kernel::vfs
         if (initrd::modules::vfs_owns(node))
         {
             return initrd::modules::vfs_child_at(node, index);
+        }
+
+        if (fatfs::owns(node))
+        {
+            return fatfs::child_at(node, index);
         }
 
         return blockfs::owns(node) ? blockfs::child_at(node, index) : ramfs::child_at(node, index);

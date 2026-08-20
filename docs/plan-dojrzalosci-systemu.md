@@ -14,35 +14,33 @@ Powiązane dokumenty:
 
 ### Co działa dziś
 
-TinyOS v0.1.0 to bootowalny kernel `i686` z następującymi elementami produkcyjnymi lub bliskimi produkcji:
+TinyOS v0.1.0+ to bootowalny kernel `i686` z następującymi elementami produkcyjnymi lub bliskimi produkcji:
 
 | Obszar | Stan | Kluczowe pliki |
 |--------|------|----------------|
-| Boot ISO (GRUB/Multiboot) | Działa | `boot/multiboot.asm`, `build/grub/grub.cfg` |
-| VGA terminal + shell | Działa | `shell/shell.cpp` (~5100 linii), `drivers/vga.cpp` |
+| Boot ISO (GRUB/Multiboot + Multiboot2) | Działa | `boot/multiboot.asm`, `build/grub/grub.cfg` |
+| Hybrid boot disk / USB path | Działa (xorriso) | `scripts/tinyos-boot-disk.sh` |
+| VGA terminal + shell | Działa | `shell/shell.cpp`, `drivers/vga.cpp` |
 | PS/2 klawiatura + PIT | Działa (IRQ) | `drivers/keyboard.cpp`, `drivers/pit.cpp` |
+| USB HID UHCI probe | Działa (detekcja) | `drivers/usb_hid.cpp` |
 | RAMFS + VFS | Działa (RAM) | `kernel/vfs/ramfs.cpp`, `kernel/vfs/vfs.cpp` |
-| Paging (bootstrap) | Częściowy | `kernel/memory/paging.cpp`, `kernel/memory/address_space.cpp` |
-| Scheduler | Scaffold | `kernel/sched/scheduler.cpp` — polityka RR bez przełączania kontekstu |
-| Syscalls | Scaffold | `kernel/syscall/syscall.cpp` — ABI bez ścieżki user trap |
-| Context switch | Scaffold | `arch/i686/context.cpp` — `context_switch_available()` → `false` |
-| User transition | Scaffold | `kernel/user/transition.cpp` — `init_launch_supported()` → `false` |
-| ELF loader | Scaffold | `kernel/elf/loader.cpp` — walidacja nagłówków |
-| Block device | Scaffold | `kernel/device/block.cpp` — 8×512 B RAM |
-| Block VFS | Read-only | `kernel/vfs/blockfs.cpp` — mount pod `/volumes/` |
-| Bezpieczeństwo | Scaffold | `kernel/security/trust.cpp`, `kernel/security/integrity.cpp` |
-| Instalator | Mock RAMFS | `shell/shell.cpp` — `install` zapisuje receipt |
-| Diagnostyka | Bogata | `sysinfo`, `status`, `syscheck`, `riskinfo`, `securityinfo` |
+| ATA PIO + FAT16 | Działa (gdy blank ATA) | `drivers/ata.cpp`, `kernel/vfs/fatfs.cpp` |
+| VirtIO block | Działa (QEMU) | `drivers/virtio_blk.cpp` |
+| VirtIO-net contract | Detekcja | `drivers/virtio_net.cpp` |
+| Paging (bootstrap) | Działa | `kernel/memory/paging.cpp` |
+| GDT/TSS + ring-3 init | Działa | `arch/i686/gdt.cpp`, `kernel/user/transition.cpp` |
+| Scheduler + IRQ preemption | Działa | `kernel/sched/scheduler.cpp` |
+| Syscalls write/read/open/close/exit/yield/sleep | Działa | `kernel/syscall/syscall.cpp` |
+| Accounts (root/user hashes) | Działa | `kernel/security/accounts.cpp` |
+| Instalator | RAMFS + FAT marker | `shell/shell.cpp` `install` |
 
-### Główne luki blokujące dojrzałość
+### Główne luki blokujące pełną dojrzałość bare-metal
 
-1. **Brak prawdziwego wielozadaniowości** — scheduler nie przełącza kontekstu.
-2. **Brak trwałej pamięci masowej** — dane giną po restarcie.
-3. **Brak userspace** — shell działa w ring 0; syscalls nie mają ścieżki z user mode.
-4. **Brak izolacji procesów** — brak per-process address spaces i W^X.
-5. **Brak tożsamości użytkownika** — hasła, uprawnienia i credential store nie istnieją.
-6. **Ograniczona użyteczność terminala** — brak historii, tab completion, scrollback.
-7. **Brak instalacji na dysk** — tylko boot z ISO.
+1. **AHCI/NVMe i pełny USB HID boot-protocol** — UHCI jest tylko wykrywany; brak xHCI i masowej pamięci USB.
+2. **Pełny stack sieciowy** — VirtIO-net bez TX/RX datapath i TCP/IP.
+3. **Per-process address spaces / NX** — ring-3 działa na shared identity map.
+4. **UEFI native path** — Multiboot2 header jest, ale brak dedykowanego EFI stub / Limine CI.
+5. **Userspace poza embedded init** — shell nadal w ring 0; brak pełnego userland toolchain w obrazie.
 
 ---
 

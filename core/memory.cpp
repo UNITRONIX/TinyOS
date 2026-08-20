@@ -1,16 +1,59 @@
+#include <stddef.h>
+#include <stdint.h>
+
 #include <tinyos/core/memory.hpp>
+
+extern "C" void* memset(void* destination, int value, size_t count)
+{
+    auto* bytes = static_cast<unsigned char*>(destination);
+    const auto fill = static_cast<unsigned char>(value);
+    for (size_t index = 0; index < count; ++index)
+    {
+        bytes[index] = fill;
+    }
+
+    return destination;
+}
+
+extern "C" void* memcpy(void* destination, const void* source, size_t count)
+{
+    auto* destination_bytes = static_cast<unsigned char*>(destination);
+    const auto* source_bytes = static_cast<const unsigned char*>(source);
+    for (size_t index = 0; index < count; ++index)
+    {
+        destination_bytes[index] = source_bytes[index];
+    }
+
+    return destination;
+}
+
+extern "C" void* memmove(void* destination, const void* source, size_t count)
+{
+    auto* destination_bytes = static_cast<unsigned char*>(destination);
+    const auto* source_bytes = static_cast<const unsigned char*>(source);
+    if (destination_bytes < source_bytes)
+    {
+        for (size_t index = 0; index < count; ++index)
+        {
+            destination_bytes[index] = source_bytes[index];
+        }
+    }
+    else
+    {
+        for (size_t index = count; index > 0; --index)
+        {
+            destination_bytes[index - 1] = source_bytes[index - 1];
+        }
+    }
+
+    return destination;
+}
 
 namespace tinyos::core::memory
 {
     void* set(void* destination, unsigned char value, size_t count)
     {
-        auto* bytes = static_cast<unsigned char*>(destination);
-        for (size_t index = 0; index < count; ++index)
-        {
-            bytes[index] = value;
-        }
-
-        return destination;
+        return memset(destination, static_cast<int>(value), count);
     }
 
     bool buffer_check(size_t buffer_size, size_t required_size)
@@ -25,13 +68,7 @@ namespace tinyos::core::memory
             count = destination_size;
         }
 
-        auto* destination_bytes = static_cast<unsigned char*>(destination);
-        const auto* source_bytes = static_cast<const unsigned char*>(source);
-        for (size_t index = 0; index < count; ++index)
-        {
-            destination_bytes[index] = source_bytes[index];
-        }
-
+        memcpy(destination, source, count);
         return count;
     }
 

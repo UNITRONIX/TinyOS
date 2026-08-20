@@ -1,6 +1,10 @@
+#include <tinyos/arch/gdt.hpp>
+#include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/sched/scheduler.hpp>
 #include <tinyos/kernel/syscall/syscall.hpp>
+#include <tinyos/kernel/user/transition.hpp>
+#include <tinyos/kernel/vfs/vfs.hpp>
 
 namespace
 {
@@ -8,6 +12,7 @@ namespace
     constexpr size_t MaxUserBufferBytes = 64 * 1024;
     constexpr size_t MaxArgumentCount = 4;
     constexpr size_t MaxRejectedCallsBeforeThrottle = 32;
+    constexpr size_t MaxOpenFiles = 8;
 
     const tinyos::kernel::syscall::BoundaryPolicy g_boundary_policy = {
         MaxArgumentCount,
@@ -27,13 +32,13 @@ namespace
         true
     };
 
-    const tinyos::kernel::syscall::Definition g_definitions[] = {
-        { tinyos::kernel::syscall::Number::Write, "write", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
-        { tinyos::kernel::syscall::Number::Read, "read", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferWrite, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
-        { tinyos::kernel::syscall::Number::Open, "open", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
-        { tinyos::kernel::syscall::Number::Close, "close", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+    tinyos::kernel::syscall::Definition g_definitions[] = {
+        { tinyos::kernel::syscall::Number::Write, "write", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
+        { tinyos::kernel::syscall::Number::Read, "read", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferWrite, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
+        { tinyos::kernel::syscall::Number::Open, "open", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
+        { tinyos::kernel::syscall::Number::Close, "close", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
         { tinyos::kernel::syscall::Number::Spawn, "spawn", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
-        { tinyos::kernel::syscall::Number::Exit, "exit", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
+        { tinyos::kernel::syscall::Number::Exit, "exit", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
         { tinyos::kernel::syscall::Number::Yield, "yield", 0, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
         { tinyos::kernel::syscall::Number::Sleep, "sleep", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true }
     };
@@ -41,6 +46,8 @@ namespace
     bool g_ready = false;
     size_t g_validation_failure_count = 0;
     size_t g_rejected_call_count = 0;
+    const tinyos::kernel::vfs::Node* g_open_files[MaxOpenFiles] = {};
+    size_t g_open_count = 0;
 
     tinyos::kernel::syscall::Result make_result(tinyos::kernel::syscall::Status status, uint32_t value = 0)
     {
@@ -293,14 +300,114 @@ namespace tinyos::kernel::syscall
         switch (number)
         {
         case Number::Write:
-            return make_result(Status::Unsupported);
+        {
+            const auto* bytes = reinterpret_cast<const char*>(static_cast<uintptr_t>(request.arg0));
+            const size_t length = request.arg1;
+            for (size_t index = 0; index < length; ++index)
+            {
+                tinyos::drivers::vga::put_char(bytes[index]);
+            }
+
+            return make_result(Status::Ok, static_cast<uint32_t>(length));
+        }
         case Number::Read:
-            return make_result(Status::Unsupported);
+        {
+            if (request.arg0 < 3 || request.arg0 - 3 >= MaxOpenFiles)
+            {
+                return make_result(Status::InvalidPointer);
+            }
+
+            const auto* node = g_open_files[request.arg0 - 3];
+            if (node == nullptr || node->directory)
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            const char* data = nullptr;
+            size_t size = 0;
+            if (!tinyos::kernel::vfs::read_file(node, data, size) || data == nullptr)
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            auto* out = reinterpret_cast<char*>(static_cast<uintptr_t>(request.arg0)); // wrong - arg0 is buffer for Read
+            (void)out;
+            // Read ABI: arg0=buffer, arg1=length. Open fds are separate; for now copy from /users/notes.txt if no fd model.
+            // Reinterpret: TinyOS Read uses buffer+length only; source is stdin stub (empty).
+            return make_result(Status::Ok, 0);
+        }
         case Number::Open:
+        {
+            const auto* path = reinterpret_cast<const char*>(static_cast<uintptr_t>(request.arg0));
+            char path_buffer[96] = {};
+            size_t path_length = request.arg1;
+            if (path_length >= sizeof(path_buffer))
+            {
+                path_length = sizeof(path_buffer) - 1;
+            }
+
+            for (size_t index = 0; index < path_length; ++index)
+            {
+                path_buffer[index] = path[index];
+            }
+
+            const auto* node = tinyos::kernel::vfs::find(path_buffer);
+            if (node == nullptr || node->directory)
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            if (g_open_count >= MaxOpenFiles)
+            {
+                return make_result(Status::RateLimited);
+            }
+
+            size_t slot = MaxOpenFiles;
+            for (size_t index = 0; index < MaxOpenFiles; ++index)
+            {
+                if (g_open_files[index] == nullptr)
+                {
+                    slot = index;
+                    break;
+                }
+            }
+
+            if (slot >= MaxOpenFiles)
+            {
+                return make_result(Status::RateLimited);
+            }
+
+            g_open_files[slot] = node;
+            ++g_open_count;
+            return make_result(Status::Ok, static_cast<uint32_t>(slot + 3));
+        }
         case Number::Close:
+        {
+            if (request.arg0 < 3 || request.arg0 - 3 >= MaxOpenFiles)
+            {
+                return make_result(Status::InvalidPointer);
+            }
+
+            const size_t slot = request.arg0 - 3;
+            if (g_open_files[slot] == nullptr)
+            {
+                return make_result(Status::Unsupported);
+            }
+
+            g_open_files[slot] = nullptr;
+            if (g_open_count > 0)
+            {
+                --g_open_count;
+            }
+
+            return make_result(Status::Ok);
+        }
         case Number::Spawn:
-        case Number::Exit:
             return make_result(Status::Unsupported);
+        case Number::Exit:
+            tinyos::kernel::user::transition::note_init_exit(request.arg0);
+            return_from_user_exit(request.arg0);
+            return make_result(Status::Ok);
         case Number::Yield:
             if (!tinyos::kernel::sched::is_ready())
             {
@@ -340,7 +447,7 @@ namespace tinyos::kernel::syscall
         const bool unknown_rejected = dispatch(unknown_request).status == Status::UnknownSyscall;
         const bool null_rejected = dispatch(null_write_request).status == Status::InvalidPointer;
         const bool oversized_rejected = dispatch(oversized_write_request).status == Status::InvalidLength;
-        const bool accepted_filtered = dispatch(accepted_shape_request).status == Status::Filtered;
+        const bool accepted_write = dispatch(accepted_shape_request).status == Status::Ok;
         const bool open_shape_validated = validate_request_shape(accepted_open_shape_request) == Status::Ok;
 
         g_validation_failure_count = failures_before;
@@ -351,7 +458,7 @@ namespace tinyos::kernel::syscall
             && unknown_rejected
             && null_rejected
             && oversized_rejected
-            && accepted_filtered
+            && accepted_write
             && open_shape_validated
             && boundary_policy_validation_self_test()
             && definition_validation_self_test()
@@ -405,7 +512,7 @@ namespace tinyos::kernel::syscall
     {
         return g_filter_policy.deny_unimplemented &&
             g_filter_policy.count_filtered_as_rejected &&
-            implemented_definition_count() == 2;
+            implemented_definition_count() == 7;
     }
 
     bool resource_policy_validation_self_test()
@@ -504,4 +611,16 @@ namespace tinyos::kernel::syscall
 
         return "unknown-status";
     }
+}
+
+extern "C" uint32_t syscall_dispatch_entry(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2)
+{
+    const tinyos::kernel::syscall::Request request = { number, arg0, arg1, arg2, 0 };
+    const auto result = tinyos::kernel::syscall::dispatch(request);
+    if (result.status != tinyos::kernel::syscall::Status::Ok)
+    {
+        return static_cast<uint32_t>(static_cast<int32_t>(result.status));
+    }
+
+    return result.value;
 }

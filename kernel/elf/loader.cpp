@@ -259,6 +259,49 @@ namespace tinyos::kernel::elf::loader
         return g_validation_passed;
     }
 
+    bool load_image(size_t index, uintptr_t& entry_out)
+    {
+        entry_out = 0;
+        if (!g_ready || index >= g_scanned_module_count || !g_images[index].valid)
+        {
+            return false;
+        }
+
+        const auto* module = initrd::modules::at(index);
+        if (module == nullptr)
+        {
+            return false;
+        }
+
+        const auto* header = reinterpret_cast<const Elf32Header*>(static_cast<uintptr_t>(module->start));
+        const auto* program_headers = reinterpret_cast<const Elf32ProgramHeader*>(
+            static_cast<uintptr_t>(module->start) + header->e_phoff);
+
+        for (uint16_t ph = 0; ph < header->e_phnum; ++ph)
+        {
+            if (program_headers[ph].p_type != 1)
+            {
+                continue;
+            }
+
+            auto* destination = reinterpret_cast<unsigned char*>(program_headers[ph].p_vaddr);
+            const auto* source = reinterpret_cast<const unsigned char*>(
+                static_cast<uintptr_t>(module->start) + program_headers[ph].p_offset);
+            for (uint32_t byte_index = 0; byte_index < program_headers[ph].p_filesz; ++byte_index)
+            {
+                destination[byte_index] = source[byte_index];
+            }
+
+            for (uint32_t byte_index = program_headers[ph].p_filesz; byte_index < program_headers[ph].p_memsz; ++byte_index)
+            {
+                destination[byte_index] = 0;
+            }
+        }
+
+        entry_out = header->e_entry;
+        return true;
+    }
+
     bool validation_self_test()
     {
         unsigned char raw_buffer[8];
