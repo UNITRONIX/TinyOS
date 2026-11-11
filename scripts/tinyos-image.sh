@@ -7,7 +7,7 @@ cd "$repo_root"
 usage()
 {
     cat <<'USAGE'
-TinyOS image helper
+TinyOS image helpe
 
 Usage:
   scripts/tinyos-image.sh plan
@@ -111,7 +111,9 @@ profile_field_value()
 {
     local key=$1
     local file=$2
-    awk -F= -v key="$key" '$1 == key { print $2; exit }' "$file"
+    # Strip a trailing CR so profiles edited on Windows (CRLF) validate the
+    # same way as profiles with LF endings.
+    awk -F= -v key="$key" '$1 == key { sub(/\r$/, "", $2); print $2; exit }' "$file"
 }
 
 print_plan()
@@ -122,13 +124,13 @@ TinyOS secure image plan:
   1. check-profile  - validate system.profile basics
     2. check-app      - validate app manifest or .tapp package basics
     3. pack-app       - create a .tapp package envelope
-    4. keygen-app     - create an app signing key pair without overwriting an existing pair
+    4. keygen-app     - create an app signing key pair without overwriting an existing pai
     5. trust-app      - record app public key fingerprint
     6. sign-app       - sign a .tapp package and write a receipt
     7. verify-app     - check .tapp policy fields and optional signature
     8. build          - compile TinyOS and copy a bootable ISO
     9. manifest       - record hash and deployment metadata
- 10. keygen         - create an age deployment key pair
+ 10. keygen         - create an age deployment key pai
  11. sign           - sign image or manifest with a developer key
  12. encrypt        - encrypt image for a target recipient
  13. deploy-check   - require signed and encrypted artifacts before transport
@@ -142,12 +144,12 @@ print_provision_plan()
 {
     cat <<'PLAN'
 TinyOS provisioning workbench plan:
-  1. provisioninit      - create an isolated project workspace folder
+  1. provisioninit      - create an isolated project workspace folde
   2. provisionconfig    - set encryption, signing, API, terminal and remote defaults
   3. provisionvariant   - define target variants with RAM, ROM, display and feature budgets
   4. provisionresources - estimate RAM, ROM/image and package footprint for a variant
   5. provisionui        - future color terminal workbench for project provisioning
-  6. remoteaccess       - opt-in SSH/SFTP access to the project workspace or deploy folder
+  6. remoteaccess       - opt-in SSH/SFTP access to the project workspace or deploy folde
   7. build/sign/encrypt - produce deployable artifacts using the project defaults
   8. deploy-check       - reject unsigned or plaintext remote deployment artifacts
 

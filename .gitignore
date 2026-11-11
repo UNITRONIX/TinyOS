@@ -18,8 +18,13 @@ Thumbs.db
 
 # Build outputs
 /tinyos.kernel
+/tinyos-*.kernel
+/tinyos-debug.kernel
 /build/*
 !/build/linker.ld
+!/build/linker-x86_64.ld
+!/build/grub/
+!/build/initrd/
 !/build/grub/
 !/build/grub/grub.cfg
 !/build/initrd/

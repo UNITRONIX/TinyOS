@@ -101,7 +101,7 @@ Przykład dla ukończonej Fali 1: `test-gate` + markery boot (`context switch`, 
 | F6 | System z instalacją | ★★★ | ★★ | ★★★ | P1 |
 | F7 | Sieć i provisioning | ★★ | ★★ | ★ | P2 |
 | F8 | Portowalność | ★★ | ★ | — | P2 |
-| F9 | Aplikacje i GUI | ★★ | ★★ | ★★ | P2–P3 |
+| F9 | Aplikacje | ★★ | ★★ | ★★ | P2 |
 
 ---
 
@@ -351,9 +351,13 @@ make disk-install-test
 
 ---
 
-## 12. Fala 9 — Aplikacje i opcjonalne GUI (P2–P3)
+## 12. Fala 9 — Aplikacje (P2)
 
-**Cel:** ekosystem aplikacji natywnych i opcjonalny desktop.
+**Cel:** ekosystem aplikacji natywnych. Desktop i GUI zostały usunięte z drzewa.
+
+Stos desktopowy (window manager, desktop shell, graphical desktop, terminal framebufferowy, kursor, mysz PS/2 oraz pomocniki `gfx_*`) został skasowany, a nie pozostawiony jako scaffold. Nie realizował żadnej działającej powierzchni produktowej, a jednocześnie zajmował pamięć przy bootowaniu i zmuszał testy startowe do sprawdzania markerów systemów, które nic nie robiły.
+
+Powierzchnia graficzna wróci dopiero po tym, jak jądro będzie miało procesy, model sterowników i sterownik framebuffera z określonym budżetem pamięci — i będzie wtedy klientem userlandu, a nie kodem jądra.
 
 ### Zadania
 
@@ -362,10 +366,9 @@ make disk-install-test
 | 9.1 | Native ELF32 app launch | `example-system-tool` wykonany |
 | 9.2 | `tappinstall`, `tappremove`, `package` | Instalacja pakietów `.tapp` |
 | 9.3 | `ps`, `kill`, `service` | Zarządzanie procesami i usługami |
-| 9.4 | Framebuffer text rendering | Tekst na FB w rozdzielczości > 80×25 |
-| 9.5 | Graphical terminal | Terminal w oknie WM |
-| 9.6 | Production GUI widget set | Reusable widgets na rendererze |
-| 9.7 | Sandbox runtimes (WASM, bytecode) | Po stabilizacji native launch |
+| 9.4 | Framebuffer driver z budżetem pamięci | Sterownik z określonym kosztem RAM przed jakimkolwiek UI |
+| 9.5 | Graphical terminal jako aplikacja userland | Dopiero po 9.4 i procesach |
+| 9.6 | Sandbox runtimes (WASM, bytecode) | Po stabilizacji native launch |
 
 ### Zależności
 
@@ -452,7 +455,7 @@ Po zakończeniu wszystkich fal P0–P1 system powinien osiągnąć:
 2. Każda fala kończy się bootowalnym przyrostem — brak „big bang".
 3. Bezpieczeństwo wbudowane w każdą falę (nie osobny „security sprint" na końcu).
 4. Użyteczność rośnie iteracyjnie — TTE i historia można zacząć przed pełnym userland.
-5. Elementy P3 (GUI, WASM, SMP) pozostają odroczone do stabilizacji P0–P1.
+5. Elementy P3 (GUI, WASM, SMP) pozostają odroczone do stabilizacji P0–P1. Desktop został usunięty z drzewa, a nie odroczony jako scaffold.
 
 ---
 

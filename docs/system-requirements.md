@@ -6,8 +6,8 @@ This document records the current tested runtime envelope. It is intentionally s
 
 - CPU: `i686` compatible 32-bit processor.
 - Boot path: GRUB Multiboot ISO on a BIOS-style PC platform.
-- RAM: 32 MiB tested by `make test-minimal`.
-- Experimental low-memory RAM probe: the desktop-capable ISO currently reaches `2561K`; the physical terminal-only profile currently reaches `2529K`; `2528K` and `64K` do not reach TinyOS serial output.
+- RAM: 32 MiB tested by `make test-minimal`. The frame allocator manages the full detected pool: `make test-memory-scaling` boots at 32M, 512M and 2G and requires the managed pool to track the machine's RAM. Verified manually up to 3 GiB (3071 MiB managed).
+- Experimental low-memory RAM probe: the current ISO reaches `2561K` and fails at `2560K` and `64K` with no TinyOS serial output. The kernel links at `1M`, so a `64K` machine cannot run this image regardless of the memory allocator.
 - Display: VGA text mode, 80x25 cells.
 - Input: PS/2 keyboard controller.
 - Timer: 8253/8254 PIT configured at 100 Hz.
@@ -26,7 +26,7 @@ This document records the current tested runtime envelope. It is intentionally s
 The current tested install media is still the QEMU ISO path for `i686`. The target install matrix is:
 
 - `i686` / QEMU PC: current boot reference, installer planned.
-- `x86_64` / QEMU PC: planned after the 32-bit reference path is stable.
+- `x86_64` / QEMU PC: long-mode bring-up path (`make ARCH=x86_64 iso`, `make test-boot-x86_64`). Runs the boot contract, not the kernel.
 - `aarch64` / QEMU `virt`: planned after architecture and platform contracts are stable.
 - Disk install: planned after persistent block storage and filesystem support exist.
 - Terminal installer: planned, documented in `docs/installed-system-pattern.md`.
@@ -48,6 +48,8 @@ Use these commands as the current quality gate:
 ```sh
 make prepare-test-env
 make test-boot
+make test-boot-x86_64
+make test-memory-scaling
 make test-minimal
 make test-stability
 ```
@@ -63,20 +65,16 @@ make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
 
 Record any lower passing value in this document only after the boot smoke markers, provisioning manifest, terminal UI and storage diagnostics remain stable.
 
-For very small values, use the terminal-only low-memory probe:
+For very small values, use the core-marker low-memory probe:
 
 ```sh
 make test-lowmem-probe
 make test-lowmem-probe LOWMEM_PROBE_MEMORY="4M 3M 2880K 2624K 2561K 2560K 2M 64K"
-make terminal-only-iso
-make test-terminal-lowmem-probe LOWMEM_PROBE_MEMORY="2880K 2624K 2529K 2528K 2M 64K"
 ```
 
 Current measured result on the reference QEMU/GRUB ISO path:
 
-- desktop-capable ISO: `2561K` passes core boot, system requirements and terminal UI markers; `2560K` fails before TinyOS emits serial output.
-- terminal-only ISO: `2529K` passes core boot, system requirements, terminal UI and terminal-only profile markers; `2528K` fails before TinyOS emits serial output.
-- terminal-only kernel size: about `238K` on disk, compared with about `280K` for the desktop-capable kernel in the same toolchain run.
+- `2561K` passes core boot (system requirements, terminal UI) with all boot markers present; `2560K` fails before TinyOS emits serial output.
 - `64K`: fails before TinyOS emits serial output.
 
 This result is not a supported baseline yet. The kernel is linked at `1M`, so a `64K` machine cannot run the current Multiboot image without a different boot/link/load architecture. Nearby KiB values can also be non-monotonic under QEMU/GRUB because the failure occurs before TinyOS serial logging begins.

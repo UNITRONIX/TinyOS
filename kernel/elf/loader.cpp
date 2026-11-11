@@ -4,6 +4,7 @@
 #include <tinyos/kernel/elf/loader.hpp>
 #include <tinyos/kernel/initrd/modules.hpp>
 #include <tinyos/kernel/klog.hpp>
+#include <tinyos/kernel/memory/paging.hpp>
 
 namespace
 {
@@ -17,6 +18,10 @@ namespace
     constexpr unsigned char ElfCurrentVersion = 1;
     constexpr uint16_t ElfTypeExecutable = 2;
     constexpr uint16_t ElfMachineI386 = 3;
+    constexpr uint32_t ElfProgramTypeLoad = 1;
+
+    extern "C" char __kernel_start;
+    extern "C" char __kernel_end;
 
     struct [[gnu::packed]] Elf32Header
     {
@@ -64,6 +69,46 @@ namespace
         }
 
         return size <= module_size - offset;
+    }
+
+    // Reject program segments that would be written over the kernel image, the
+    // low identity window or the boot module itself. Without this check a
+    // crafted ELF can simply overwrite kernel memory through p_vaddr.
+    bool segment_destination_is_safe(const Elf32ProgramHeader& program_header, const tinyos::kernel::initrd::modules::Module& module)
+    {
+        if (program_header.p_memsz == 0)
+        {
+            return false;
+        }
+
+        if (program_header.p_vaddr < tinyos::kernel::memory::paging::BootstrapIdentityLimit)
+        {
+            return false;
+        }
+
+        const uint64_t destination_begin = program_header.p_vaddr;
+        if (destination_begin > 0xFFFFFFFFull - program_header.p_memsz)
+        {
+            return false;
+        }
+
+        const uint64_t destination_end = destination_begin + program_header.p_memsz;
+
+        const uint64_t kernel_begin = reinterpret_cast<uintptr_t>(&__kernel_start);
+        const uint64_t kernel_end = reinterpret_cast<uintptr_t>(&__kernel_end);
+        if (destination_begin < kernel_end && kernel_begin < destination_end)
+        {
+            return false;
+        }
+
+        const uint64_t module_begin = module.start;
+        const uint64_t module_end = module.end;
+        if (destination_begin < module_end && module_begin < destination_end)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     bool has_elf_magic(const tinyos::kernel::initrd::modules::Module& module)
@@ -277,22 +322,49 @@ namespace tinyos::kernel::elf::loader
         const auto* program_headers = reinterpret_cast<const Elf32ProgramHeader*>(
             static_cast<uintptr_t>(module->start) + header->e_phoff);
 
+        // Validate the whole program header table up front so a partially applied
+        // image can never be left behind.
         for (uint16_t ph = 0; ph < header->e_phnum; ++ph)
         {
-            if (program_headers[ph].p_type != 1)
+            const Elf32ProgramHeader& program_header = program_headers[ph];
+            if (program_header.p_type != ElfProgramTypeLoad)
             {
                 continue;
             }
 
-            auto* destination = reinterpret_cast<unsigned char*>(program_headers[ph].p_vaddr);
+            if (program_header.p_filesz > program_header.p_memsz)
+            {
+                return false;
+            }
+
+            if (!range_within_module(program_header.p_offset, program_header.p_filesz, module->size))
+            {
+                return false;
+            }
+
+            if (!segment_destination_is_safe(program_header, *module))
+            {
+                return false;
+            }
+        }
+
+        for (uint16_t ph = 0; ph < header->e_phnum; ++ph)
+        {
+            const Elf32ProgramHeader& program_header = program_headers[ph];
+            if (program_header.p_type != ElfProgramTypeLoad)
+            {
+                continue;
+            }
+
+            auto* destination = reinterpret_cast<unsigned char*>(static_cast<uintptr_t>(program_header.p_vaddr));
             const auto* source = reinterpret_cast<const unsigned char*>(
-                static_cast<uintptr_t>(module->start) + program_headers[ph].p_offset);
-            for (uint32_t byte_index = 0; byte_index < program_headers[ph].p_filesz; ++byte_index)
+                static_cast<uintptr_t>(module->start) + program_header.p_offset);
+            for (uint32_t byte_index = 0; byte_index < program_header.p_filesz; ++byte_index)
             {
                 destination[byte_index] = source[byte_index];
             }
 
-            for (uint32_t byte_index = program_headers[ph].p_filesz; byte_index < program_headers[ph].p_memsz; ++byte_index)
+            for (uint32_t byte_index = program_header.p_filesz; byte_index < program_header.p_memsz; ++byte_index)
             {
                 destination[byte_index] = 0;
             }

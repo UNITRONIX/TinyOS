@@ -7,6 +7,9 @@ namespace tinyos::arch::context
 {
     inline constexpr uint32_t ContextMagic = 0x54435831;
     inline constexpr uintptr_t RequiredStackAlignment = 4;
+    // Stack depth the entry trampoline needs before it calls the task entry
+    // function: two stored arguments plus the call frame it builds itself.
+    inline constexpr uintptr_t EntryReserveBytes = 16;
 
     struct Context
     {
@@ -18,6 +21,7 @@ namespace tinyos::arch::context
         uint32_t eip;
         uint32_t argument;
         uint32_t eflags;
+        uint32_t trampoline;
         uint32_t magic;
     };
 
@@ -30,5 +34,6 @@ namespace tinyos::arch::context
     const char* abi_name();
     size_t context_size();
     bool context_switch_available();
+    bool entry_trampoline_ready();
     bool validation_self_test();
 }

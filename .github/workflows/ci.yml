@@ -1,0 +1,94 @@
+name: TinyOS
+
+# The project has no CI today, which is why regressions like a hardcoded 256 MiB
+# memory ceiling and boot tests asserting on a non-functional desktop survived
+# in the tree. This workflow enforces the same gate a developer runs locally.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang lld nasm make grub-pc-bin grub-common \
+            xorriso qemu-system-x86 mtools python3
+
+      - name: Show tool versions
+        run: |
+          clang++ --version | head -1
+          ld.lld --version
+          nasm -v
+          qemu-system-i386 --version | head -1
+          python3 --version
+
+      - name: Toolchain preflight
+        run: make prepare-test-env
+
+      # Fast feedback: pure-logic unit tests need no emulator.
+      - name: Host unit tests
+        run: make test-host
+
+      # i686 is the reference kernel: every boot marker in
+      # tests/boot-markers.txt must appear.
+      - name: Build i686 ISO
+        run: make iso
+
+      - name: i686 boot smoke test
+        run: make test-boot
+
+      - name: i686 minimum memory envelope
+        run: make test-minimal
+
+      # The frame pool must follow installed RAM. This is the regression test for
+      # the old fixed memory ceiling.
+      - name: Memory scaling
+        run: make test-memory-scaling
+
+      # The 64-bit backend is a bring-up path; it must still enter long mode and
+      # load its GDT/TSS/IDT.
+      - name: Build x86_64 ISO
+        run: make ARCH=x86_64 iso
+
+      - name: x86_64 boot smoke test
+        run: make test-boot-x86_64
+
+      # Storage paths that depend on real block devices.
+      - name: VirtIO block boot test
+        run: make test-virtio-block
+
+      - name: ATA/FAT boot test
+        run: make test-ata-block
+
+      # Non-destructive host-side contract checks.
+      - name: Install profile contract
+        run: make install-profile-check
+
+      - name: Package trust scaffold
+        run: make tapp-trust-test
+
+      - name: Upload boot logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-logs
+          path: |
+            build/boot-smoke.log
+            build/boot-minimal.log
+            build/boot-x86_64.log
+            build/boot-virtio.log
+            build/boot-ata.log
+            build/ram-scaling-*.log
+          if-no-files-found: ignore
+          retention-days: 14

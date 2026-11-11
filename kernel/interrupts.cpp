@@ -2,9 +2,6 @@
 
 #include <tinyos/arch/hal.hpp>
 #include <tinyos/drivers/keyboard.hpp>
-#if !defined(TINYOS_TERMINAL_ONLY)
-#include <tinyos/drivers/mouse.hpp>
-#endif
 #include <tinyos/drivers/pic.hpp>
 #include <tinyos/drivers/pit.hpp>
 #include <tinyos/drivers/serial.hpp>
@@ -68,6 +65,31 @@ namespace
         }
 
         buffer[10] = '\0';
+    }
+
+    uint32_t read_cr2()
+    {
+        uint32_t value = 0;
+        asm volatile ("mov %%cr2, %0" : "=r"(value));
+        return value;
+    }
+
+    // Report the faulting address for page faults. Without CR2 a paging fault
+    // is untriageable from serial output alone.
+    void dump_fault_address(uint32_t vector)
+    {
+        if (vector != 14)
+        {
+            return;
+        }
+
+        char address_buffer[11];
+        to_hex(read_cr2(), address_buffer);
+
+        tinyos::drivers::vga::write("CR2   : ");
+        tinyos::drivers::vga::write_line(address_buffer);
+        tinyos::drivers::serial::write("CR2   : ");
+        tinyos::drivers::serial::write_line(address_buffer);
     }
 
 }
@@ -143,13 +165,19 @@ namespace tinyos::kernel::interrupts
     }
 }
 
-extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code)
+extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code, uint32_t eip, uint32_t cs, uint32_t eflags)
 {
     char vector_buffer[11];
     char error_buffer[11];
+    char eip_buffer[11];
+    char cs_buffer[11];
+    char flags_buffer[11];
 
     to_hex(vector, vector_buffer);
     to_hex(error_code, error_buffer);
+    to_hex(eip, eip_buffer);
+    to_hex(cs, cs_buffer);
+    to_hex(eflags, flags_buffer);
 
     tinyos::drivers::vga::set_color(tinyos::drivers::vga::Color::White, tinyos::drivers::vga::Color::Red);
     tinyos::drivers::vga::write_line("CPU EXCEPTION");
@@ -170,11 +198,25 @@ extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code)
     tinyos::drivers::vga::write_line(vector_buffer);
     tinyos::drivers::vga::write("Error : ");
     tinyos::drivers::vga::write_line(error_buffer);
+    tinyos::drivers::vga::write("EIP   : ");
+    tinyos::drivers::vga::write_line(eip_buffer);
+    tinyos::drivers::vga::write("CS    : ");
+    tinyos::drivers::vga::write_line(cs_buffer);
+    tinyos::drivers::vga::write("EFLAGS: ");
+    tinyos::drivers::vga::write_line(flags_buffer);
+    dump_fault_address(vector);
 
     tinyos::drivers::serial::write("Vector: ");
     tinyos::drivers::serial::write_line(vector_buffer);
     tinyos::drivers::serial::write("Error : ");
     tinyos::drivers::serial::write_line(error_buffer);
+    tinyos::drivers::serial::write("EIP   : ");
+    tinyos::drivers::serial::write_line(eip_buffer);
+    tinyos::drivers::serial::write("CS    : ");
+    tinyos::drivers::serial::write_line(cs_buffer);
+    tinyos::drivers::serial::write("EFLAGS: ");
+    tinyos::drivers::serial::write_line(flags_buffer);
+    dump_fault_address(vector);
 
     tinyos::arch::halt();
 }
@@ -192,11 +234,6 @@ extern "C" void irq_dispatch(uint32_t irq)
     case 1:
         tinyos::drivers::keyboard::handle_irq();
         break;
-#if !defined(TINYOS_TERMINAL_ONLY)
-    case 12:
-        tinyos::drivers::mouse::handle_irq();
-        break;
-#endif
     default:
         break;
     }

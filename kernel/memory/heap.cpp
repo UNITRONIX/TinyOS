@@ -4,6 +4,7 @@
 #include <tinyos/kernel/memory/frame_allocator.hpp>
 #include <tinyos/kernel/memory/heap.hpp>
 #include <tinyos/kernel/panic.hpp>
+#include <tinyos/kernel/sync.hpp>
 
 namespace
 {
@@ -28,6 +29,15 @@ namespace
     size_t g_double_free_count = 0;
     size_t g_corrupt_block_count = 0;
     bool g_initialized = false;
+
+    // Guards the block list. Held with interrupts disabled via IrqGuard, because
+    // drivers allocate and free from interrupt context.
+    tinyos::kernel::sync::Spinlock g_heap_lock;
+
+    tinyos::kernel::sync::Spinlock* heap_lock()
+    {
+        return &g_heap_lock;
+    }
 
     size_t align_up(size_t value)
     {
@@ -189,6 +199,13 @@ namespace tinyos::kernel::memory::heap
             return nullptr;
         }
 
+        // The heap is shared between kernel tasks and interrupt-driven code (for
+        // example a driver allocating a buffer in its IRQ path). Without this
+        // guard an interrupt that allocates in the middle of another allocation
+        // corrupts the block list, so the lock is not optional hardening.
+        tinyos::kernel::sync::IrqGuard guard;
+        tinyos::kernel::sync::Spinlock* lock = heap_lock();
+        lock->lock();
         if (!g_initialized)
         {
             initialize();
@@ -204,6 +221,7 @@ namespace tinyos::kernel::memory::heap
                 if (!block_header_valid(block))
                 {
                     ++g_corrupt_block_count;
+                    lock->unlock();
                     TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap metadata corruption detected during allocation.");
                     return nullptr;
                 }
@@ -213,7 +231,9 @@ namespace tinyos::kernel::memory::heap
                     split_block(block, aligned_size);
                     block->is_free = false;
                     ++g_allocation_count;
-                    return reinterpret_cast<void*>(payload_address(block));
+                    void* result = reinterpret_cast<void*>(payload_address(block));
+                    lock->unlock();
+                    return result;
                 }
 
                 block = block->next;
@@ -221,6 +241,7 @@ namespace tinyos::kernel::memory::heap
 
             if (append_region(aligned_size) == nullptr)
             {
+                lock->unlock();
                 return nullptr;
             }
         }
@@ -233,9 +254,16 @@ namespace tinyos::kernel::memory::heap
             return;
         }
 
+        // Same guard as allocate(): freeing from an IRQ while a task is
+        // mid-allocation would otherwise corrupt the block list.
+        tinyos::kernel::sync::IrqGuard guard;
+        tinyos::kernel::sync::Spinlock* lock = heap_lock();
+        lock->lock();
+
         if ((reinterpret_cast<uintptr_t>(pointer) & (Alignment - 1)) != 0)
         {
             ++g_invalid_free_count;
+            lock->unlock();
             TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected an unaligned free pointer.");
             return;
         }
@@ -244,6 +272,7 @@ namespace tinyos::kernel::memory::heap
         if (block == nullptr)
         {
             ++g_invalid_free_count;
+            lock->unlock();
             TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected an unknown free pointer.");
             return;
         }
@@ -251,6 +280,7 @@ namespace tinyos::kernel::memory::heap
         if (block->is_free)
         {
             ++g_double_free_count;
+            lock->unlock();
             TINYOS_WARN_ON_CATEGORY(true, tinyos::kernel::klog::WarningCategory::Memory, "Kernel heap rejected a double free.");
             return;
         }
@@ -258,6 +288,7 @@ namespace tinyos::kernel::memory::heap
         block->is_free = true;
         ++g_free_count;
         coalesce();
+        lock->unlock();
     }
 
     size_t total_bytes()

@@ -1,2 +1,7 @@
-# Shell scripts must use LF line endings on all platforms.
+# Shell scripts, Python helpers and test data must use LF line endings on all
+# platforms. Profiles and manifests are parsed by awk/shell inside WSL, where a
+# stray CR turns a valid value into an invalid one.
 *.sh text eol=lf
+*.py text eol=lf
+*.profile text eol=lf
+tests/*.txt text eol=lf

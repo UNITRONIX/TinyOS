@@ -1,0 +1,64 @@
+TinyOS booted successfully
+Kernel synchronization primitives ready.
+User memory access checks ready.
+Ring-3 init rejected kernel pointer as expected (user buffer validation active).
+Frame pool:
+PIT IRQ0 stable at 100 Hz
+Keyboard IRQ1 enabled with polling fallback
+Kernel task stack ownership scaffold ready
+Kernel task stack guard pages ready
+i686 context switch active
+Active context switch validation passed
+Task watchdog diagnostics ready
+IRQ preemption active on PIT time slices
+Scheduler scaffold receiving PIT ticks
+Scheduler round-robin policy ready
+Scheduler sleep wake contract ready
+Boot module metadata validated
+ELF loader validation scaffold ready
+RAMFS file tools scaffold ready
+Syscall argument validation scaffold ready
+Syscall boundary policy contract ready
+Syscall definition table ready
+Syscall filter policy ready
+Syscall resource limit policy ready
+Syscall scheduling primitives ready
+Initial process contract ready
+Language runtime manifest ready
+Application capability profile scaffold ready
+TAPP package registry scaffold ready
+TAPP trust store scaffold ready
+TAPP package verification scaffold ready
+Application launch policy scaffold ready
+System management tools manifest ready
+Secure image provisioning manifest ready
+Device registry scaffold ready
+Block device scaffold ready
+Block VFS mount scaffold ready
+Framebuffer surface scaffold ready
+Linear framebuffer boot contract ready
+Renderer scaffold ready
+Renderer primitive scaffold ready
+Pixel renderer contract ready
+Terminal UI scaffold ready
+Terminal panel scaffold ready
+Terminal style contract ready
+TUI widget scaffold ready
+TUI widget event bridge ready
+UI event queue scaffold ready
+System requirements manifest ready
+Platform compatibility manifest ready
+PC platform initialization contract ready
+PC required device classes ready
+Device RAMFS metadata scaffold ready
+Architecture capability manifest ready
+Address space scaffold ready
+Address space protection flag scaffold ready
+Kernel section protection contract ready
+Boot module address-space regions ready
+Address-space paging policy gap diagnostics ready
+Address-space paging policy applied to bootstrap tables
+Runtime paging enabled with protected bootstrap map
+Runtime paging policy self-test ready
+Paging structures prepared for bootstrap identity map
+Paging protection flag scaffold ready

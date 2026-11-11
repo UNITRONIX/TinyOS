@@ -23,9 +23,8 @@ TinyOS currently provides:
 - [x] Phase 6 - syscall ABI with int 0x80 path and ring-3 embedded init
 - [x] Device model - static device registry; VirtIO block/net probe; USB HID UHCI probe
 - [~] Phase 7 - graphics foundation
-- [~] Phase 8 - UI stack
-- [ ] Phase 9 - multi-architecture growth
-- [x] Graphics slice - optional GRUB framebuffer boot and pixel desktop preview
+- [x] Phase 8 - UI stack (terminal UI, TUI widgets, event queue; desktop stack removed)
+- [x] Phase 9 - multi-architecture growth (x86_64 long-mode bring-up; kernel port in progress)
 - [x] Boot media - hybrid disk image script + Multiboot2 header for UEFI GRUB
 
 ## Security segment - high priority
@@ -54,7 +53,7 @@ TinyOS currently provides:
 2. Separate CPU-specific code from platform-specific code early.
 3. Prefer stable internal abstractions before expanding features.
 4. Ship incremental milestones that remain bootable.
-5. Build GUI only after timer, memory, scheduler, input and diagnostics are stable.
+5. Do not build a desktop until memory, tasking, drivers and processes are stable.
 
 ## Target layer split
 
@@ -122,12 +121,12 @@ TinyOS currently provides:
 19. [x] add syscall definition table contract
 20. [x] add syscall filter policy scaffold
 21. [x] add syscall resource limit policy scaffold
-22. [x] add text-grid window manager scaffold
-23. [x] add desktop shell prototype over text-grid window manager
-24. [x] add desktop icons, app windows and keyboard/mouse event dispatch scaffold
-25. [x] add fullscreen desktop mode with keyboard navigation
+22. [x] add text-grid window manager scaffold (removed with the desktop stack)
+23. [x] add desktop shell prototype over text-grid window manager (removed)
+24. [x] add desktop icons, app windows and keyboard/mouse event dispatch scaffold (removed)
+25. [x] add fullscreen desktop mode with keyboard navigation (removed)
 26. [x] add linear framebuffer metadata contract and pixel renderer primitives
-27. [x] add cursor scaffold for desktop pointer feedback
+27. [x] add cursor scaffold for desktop pointer feedback (removed)
 28. [x] add terminal style/color contract with segmented text rendering and boot marker
 29. [x] add scheduler round-robin policy self-test before active context switching
 30. [x] add runtime paging policy self-test after enabling protected bootstrap paging
@@ -214,7 +213,7 @@ TinyOS currently provides:
 - [~] add `make test-minimal-probe` for lower-memory experiments before changing the documented baseline
 - [x] add `make test-lowmem-probe` for terminal-marker KiB-scale RAM experiments
 - [x] add `TERMINAL_ONLY=1`, `make terminal-only-iso` and `make test-terminal-lowmem-probe` to physically omit desktop/window-manager/cursor/mouse paths from low-memory builds
-- [x] add compact terminal dashboard through `status`
+- [x] keep the boot contract in `tests/boot-markers.txt` instead of chained grep expressions
 - [x] add TinyOS system information page through `sysinfo`
 - [x] add non-destructive system health checks through `syscheck`
 - [x] add terminal risk listing through `riskinfo`
@@ -247,25 +246,31 @@ TinyOS currently provides:
 - [ ] add color terminal panels for provisioning status and budget diagnostics
 - [ ] add target-side verify and rollback activation after storage and permissions are ready
 
-### Phase 8 - UI stack
+### Phase 8 - UI stack (terminal, no desktop)
 - [x] add first terminal UI state scaffold
 - [x] add UI-facing event queue
 - [x] add first TUI widgets
-- [x] add simple window manager
-- [x] add desktop shell prototype
-- [x] add desktop icons and app windows
-- [x] add keyboard and mouse event dispatch for desktop mode
-- [x] add fullscreen desktop mode with top panel and desktop-only navigation
+- [x] add text-grid window manager scaffold (removed)
+- [x] add desktop shell prototype (removed)
+- [x] add desktop icons and app windows (removed)
+- [x] add keyboard event dispatch scaffold
 - [x] add linear framebuffer metadata contract with text-grid fallback
 - [x] add pixel renderer primitive contract
-- [x] add cursor scaffold for pointer feedback
-- add reusable GUI widgets
-- add PS/2 mouse hardware driver
+- [x] remove the desktop stack (window manager, desktop shell, cursor, PS/2 mouse, graphical terminal)
+- add reusable GUI widgets (only after processes and a framebuffer driver exist)
+- add PS/2 mouse hardware driver (only when a userland desktop exists)
 
 ### Phase 9 - multi-architecture growth
 - keep `i686` as reference target
-- add `x86_64` CPU backend
-- add `platform/qemu-x86_64`
+- [x] `ARCH=` build matrix with per-arch object dirs, linker scripts, QEMU binary and boot markers
+- [x] `arch/x86_64/` long mode bring-up: 32-bit stub to 64-bit entry, 1 GiB identity map with 2 MiB pages
+- [x] `arch/x86_64/` CPUID feature probe (NX, APIC, x2APIC, SMEP, SMAP, FSGSBASE, VMX, SVM, 1 GiB pages, INVPCID, PCID)
+- [x] `arch/x86_64/` 64-bit GDT with TSS and IST stacks for double fault, NMI and machine check
+- [x] `arch/x86_64/` 256-vector IDT with per-vector stubs and full fault frames (rip/cs/rflags/rsp/cr2)
+- [x] `make test-boot-x86_64` boot marker contract, wired into `make test-gate`
+- add higher-half kernel mapping and a direct physical map
+- port the portable kernel sources to x86_64 (scheduler, memory, VFS, shell)
+- add `x86_64` SMP bring-up with ACPI MADT and APIC
 - add `aarch64` through `QEMU virt`
 - defer physical boards until emulator targets are stable
 
@@ -274,7 +279,7 @@ TinyOS currently provides:
 - no scheduler before timer
 - no userspace before paging and syscall ABI
 - no GUI before allocator, events and framebuffer
-- no cross-platform expansion before `arch/` and `platform/` contracts are stable
+- no desktop before allocator, events, processes and a framebuffer driver
 
 ## Immediate implementation order
 
@@ -322,7 +327,7 @@ TinyOS currently provides:
 - add event queue
 - add software 2D primitives
 - add TUI then GUI layers
-
+- add TUI layers now, GUI only after processes exist
 ### Milestone G - portability
 - add `x86_64`
 - add `qemu-x86_64`
@@ -363,4 +368,4 @@ TinyOS currently provides:
 - x86_64 backend bootstrap
 
 ### v1.0
-- stable demo system with userland shell and minimal GUI stack
+- stable demo system with a userland shell

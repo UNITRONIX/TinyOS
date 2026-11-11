@@ -18,7 +18,7 @@ The long-term system should provide:
 - kernel tasks, then user processes;
 - VFS, initrd and persistent block storage support;
 - a syscall boundary with strict user pointer validation;
-- an optional GUI path built on framebuffer, events and a 2D renderer.
+- a terminal-first system with VGA text output and an optional future graphical surface.
 
 ## Development rules
 
@@ -26,9 +26,30 @@ The long-term system should provide:
 2. Prefer small contracts over large global subsystems.
 3. Keep architecture-specific code out of generic kernel modules.
 4. Add diagnostics before enabling risky runtime behavior.
-5. Treat GUI as optional until memory, tasking, input and storage are stable.
+5. Do not build a desktop until memory, tasking, drivers and processes are stable.
 6. Add tests or boot checks for every infrastructure milestone.
 7. Do not introduce dynamic module loading before static module contracts are stable.
+
+## Stage 3A - synchronization (current, before SMP)
+
+The kernel originally had no locks at all, which is a correctness bug rather
+than a missing feature: the heap, VFS and device registry were shared by task
+and interrupt context with no protection.
+
+Implemented:
+
+- `kernel/sync.cpp`: `IrqGuard` (saves/restores the interrupt flag and tracks
+  critical-section nesting) and an atomic `Spinlock`;
+- the kernel heap holds a lock with interrupts disabled in both `allocate` and
+  `free`, because a driver allocating in its IRQ path would otherwise corrupt the
+  block list mid-allocation.
+
+Remaining before SMP can start:
+
+- convert VFS, device registry and scheduler globals to the same discipline;
+- add a lock-order checker (lockdep-lite) so the first real SMP bug is a logged
+  violation rather than a silent hang.
+
 
 ## Quality gates
 
@@ -168,7 +189,7 @@ Tasks:
 - define `.tapp` as the TinyOS app package contract before real installers and dynamic loading;
 - expose package install-gate diagnostics before accepting external app payloads;
 - plan sandbox runtimes such as WASM, bytecode and scripts after paging and syscall validation mature;
-- keep GUI applications dependent on UI/event/syscall contracts, not direct device access.
+- keep applications dependent on syscall and device contracts, not direct hardware access.
 
 Completion criteria:
 
@@ -297,46 +318,26 @@ Current groundwork:
 - runtime paging policy self-test validates CR3 and kernel/module page flags before shell entry;
 - userspace isolation and permission enforcement remain future work.
 
-## Stage 9 - optional GUI path
+## Stage 9 - graphics, removed from the product path
 
-Goal: add graphical capability without making it required for debugging.
+The desktop, window manager, framebuffer terminal, cursor and PS/2 mouse stack
+was removed rather than kept in the tree. It never implemented a working
+surface, but it cost boot memory, claimed "ready" log markers during boot and
+made the boot smoke tests assert on systems that did nothing. Keeping a
+non-functional GUI also hid the real work that had to happen first: memory,
+SMP, driver binding and processes.
 
-Tasks:
+What remains from that work and is still used:
 
-- add a framebuffer abstraction;
-- add a tiny software 2D renderer;
-- add bitmap font rendering;
-- route keyboard and future mouse input through event queues;
-- build a graphical terminal first;
-- add TUI widgets before a window manager;
-- keep VGA text mode available as a fallback.
+- the text-grid renderer on the active VGA surface, with `renderinfo`, `rendertest` and `renderfilltest`;
+- terminal UI regions, panel/clear helpers and the style contract;
+- TUI widget scaffold with label/button drawing and an activation-key event bridge;
+- the UI event queue over the generic input queue;
+- `terminalinfo`, `terminaltest`, `terminalclear`, `terminalpaneltest`, `widgetinfo`, `widgettest`, `widgetdispatch`, `widgetactiontest`, `uieventinfo`, `uieventpump`, `uieventpeek` and `uieventtest`.
 
-Completion criteria:
-
-- text mode remains usable;
-- graphical mode can render a terminal and receive input;
-- GUI code depends on device and event contracts, not raw hardware.
-
-Current groundwork:
-
-- text-grid renderer scaffold on the active VGA surface;
-- text-grid fill/clear renderer primitives;
-- `renderinfo`, `rendertest` and `renderfilltest` shell diagnostics;
-- terminal UI scaffold with a status row and content region;
-- terminal-first operational diagnostics through `sysinfo`, `status`, `syscheck`, `riskinfo`, `profileinfo`, `profilecheck`, `pathcheck` and `helpsearch`;
-- current `filemgr` two-pane RAMFS manager with view, create, edit, remove, copy-to-other-pane and move-to-other-pane actions;
-- current `textedit` interactive RAMFS editor with load, replace, append, clear, save, reload and metadata actions;
-- lighter `fileui` RAMFS browser with view, create, edit, remove, copy and move actions;
-- terminal clear/panel helpers over renderer primitives;
-- `terminalinfo`, `terminaltest`, `terminalclear` and `terminalpaneltest` shell diagnostics;
-- terminal style/color contract with segmented text rendering and `terminalstyle` diagnostics;
-- first TUI widget scaffold with label and button drawing;
-- widget event dispatch bridge for activation keys;
-- `widgetinfo`, `widgettest`, `widgetdispatch` and `widgetactiontest` shell diagnostics;
-- UI event queue scaffold over the generic input queue;
-- `uieventinfo`, `uieventpump`, `uieventpeek` and `uieventtest` shell diagnostics;
-- color terminal themes for provisioning and diagnostics are planned on top of the stable text-grid style helpers;
-- framebuffer-backed higher-resolution terminal modes remain future work.
+A graphical surface can return later, but only after the kernel has real
+processes, a working driver model and a framebuffer driver with a defined
+memory budget. It will then be an ordinary userland client, not kernel code.
 
 ## Stage 9B - project provisioning workbench
 
@@ -370,7 +371,7 @@ Current tested minimum:
 - 8259 PIC and 8253/8254 PIT;
 - ISO boot media plus RAM-backed block storage scaffold.
 
-The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the low-memory smoke markers. The `make test-minimal-probe` target can probe lower values such as 24 MiB and 16 MiB before the documented baseline is changed. The `make test-lowmem-probe` target uses terminal markers for sub-16 MiB and KiB-scale experiments; the current desktop-capable reference ISO passes at `2561K` and fails at `2560K` and `64K` before TinyOS serial output begins. The `TERMINAL_ONLY=1` profile, available through `make terminal-only-iso` and `make test-terminal-lowmem-probe`, omits desktop/window-manager/cursor/mouse objects and currently reaches `2529K` while `2528K` and `64K` still fail before TinyOS serial output begins.
+The `make test-minimal` target boots the current ISO with `MINIMAL_TEST_MEMORY=32M` and checks the markers in `tests/boot-markers.txt`. The `make test-minimal-probe` target can probe lower values such as 24 MiB and 16 MiB before the documented baseline is changed. The `make test-lowmem-probe` target uses core boot markers for sub-16 MiB and KiB-scale experiments; the current reference ISO passes at `2561K` and fails at `2560K` and `64K` before TinyOS serial output begins.
 
 ## Stage 10 - portability
 

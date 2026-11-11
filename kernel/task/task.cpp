@@ -34,6 +34,11 @@ namespace
     {
         for (;;)
         {
+            // Hand the CPU back immediately instead of only waiting for a timer
+            // tick. The idle task can legitimately run before the PIT is
+            // configured (scheduler self-tests yield into it), and blocking on
+            // a tick that will never arrive deadlocks the whole kernel.
+            tinyos::kernel::sched::yield();
             tinyos::kernel::sched::poll_reschedule();
             asm volatile ("hlt");
         }
@@ -61,14 +66,19 @@ namespace tinyos::kernel::task
         g_tasks[0].entry = nullptr;
         g_tasks[0].argument = nullptr;
         g_tasks[0].guard_page = guard_page_for(g_bootstrap_stack);
+        // The bootstrap task is the live kernel control flow: it already runs
+        // on the boot stack, not on g_bootstrap_stack, and it has no resumable
+        // frame until it is switched away from for the first time. Handing it a
+        // captured frame from inside initialize() would make the first switch
+        // back jump into a stack frame that has long since returned.
         g_tasks[0].kernel_stack_base = stack_base(g_bootstrap_stack);
         g_tasks[0].kernel_stack_top = stack_top(g_bootstrap_stack);
         g_tasks[0].kernel_stack_size = UsableStackSize;
         g_tasks[0].runtime_ticks = 0;
         g_tasks[0].wake_tick = 0;
         g_tasks[0].ticks_on_cpu = 0;
-        tinyos::arch::context::capture_current(g_tasks[0].context);
-        g_tasks[0].context_ready = tinyos::arch::context::is_valid(g_tasks[0].context);
+        tinyos::arch::context::clear(g_tasks[0].context);
+        g_tasks[0].context_ready = false;
 
         g_tasks[1].id = 1;
         g_tasks[1].name = "idle";
@@ -211,7 +221,24 @@ namespace tinyos::kernel::task
 
     bool contexts_ready()
     {
-        return g_task_count > 0 && prepared_context_count() == g_task_count;
+        if (g_task_count == 0)
+        {
+            return false;
+        }
+
+        // Task 0 is the bootstrap task: it is the live kernel control flow and
+        // deliberately has no prepared frame until the first switch away from
+        // it. Every other task must own a valid frame before the scheduler may
+        // run.
+        for (size_t index = 1; index < g_task_count; ++index)
+        {
+            if (!g_tasks[index].context_ready || !tinyos::arch::context::is_valid(g_tasks[index].context))
+            {
+                return false;
+            }
+        }
+
+        return g_tasks[0].kernel_stack_base != 0 && g_tasks[0].kernel_stack_top != 0;
     }
 
     bool guard_pages_ready()

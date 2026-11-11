@@ -31,6 +31,11 @@ namespace tinyos::kernel::task
         uint64_t wake_tick;
         uint64_t ticks_on_cpu;
         tinyos::arch::context::Context context;
+        // True when `context` holds a frame that arch_context_switch() may
+        // legitimately restore. A freshly created task gets one from
+        // prepare_kernel_context(); the bootstrap task gets one the first time
+        // it is switched away from, because until then it is simply the live
+        // kernel control flow and has no resumable frame of its own.
         bool context_ready;
     };
 

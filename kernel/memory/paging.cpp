@@ -3,14 +3,23 @@
 #include <tinyos/arch/hal.hpp>
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/memory/frame_allocator.hpp>
+#include <tinyos/kernel/memory/memory_map.hpp>
 #include <tinyos/kernel/memory/paging.hpp>
 #include <tinyos/kernel/panic.hpp>
 
 namespace
 {
     constexpr size_t EntriesPerTable = 1024;
-    constexpr size_t BootstrapPageTables = 16;
     constexpr size_t PageOffsetMask = tinyos::kernel::memory::frames::FrameSize - 1;
+
+    // Computed in 64-bit: the 4 GiB ceiling does not fit in a 32-bit size_t, and
+    // expressing it in size_t wraps to zero before the division happens.
+    constexpr uint64_t IdentityTableCeiling64 =
+        tinyos::kernel::memory::paging::BootstrapIdentityLimit /
+        (static_cast<uint64_t>(EntriesPerTable) * static_cast<uint64_t>(tinyos::kernel::memory::frames::FrameSize));
+    constexpr size_t IdentityTableCeiling = static_cast<size_t>(IdentityTableCeiling64);
+    static_assert(IdentityTableCeiling64 > 0 && IdentityTableCeiling64 <= 1024,
+        "Bootstrap identity map must fit in one page directory.");
     constexpr uint32_t EntryAddressMask = 0xFFFFF000;
     constexpr uint32_t PagePresent = 0x001;
     constexpr uint32_t PageWritable = 0x002;
@@ -19,8 +28,23 @@ namespace
 
     alignas(4096) uint32_t* g_page_directory = nullptr;
     size_t g_mapped_pages = 0;
+    size_t g_identity_table_count = 0;
     bool g_ready = false;
     bool g_runtime_enabled = false;
+
+    // Chunk of RAM the bootstrap identity map is grown by at a time. Mapping the
+    // whole ceiling up front costs (ceiling / 4 MiB) page tables and their
+    // pages, which is wasteful on the small targets TinyOS also runs on.
+    constexpr size_t IdentityChunkBytes = tinyos::kernel::memory::paging::IdentityMapChunkBytes;
+
+    // One page table maps 4 MiB (1024 entries x 4096 bytes).
+    constexpr size_t BytesPerTable = EntriesPerTable * tinyos::kernel::memory::frames::FrameSize;
+
+    size_t bytes_to_tables(size_t bytes)
+    {
+        const size_t tables = (bytes + BytesPerTable - 1) / BytesPerTable;
+        return tables > IdentityTableCeiling ? IdentityTableCeiling : tables;
+    }
 
     void zero_page(uint32_t* page)
     {
@@ -75,6 +99,82 @@ namespace
 
 namespace tinyos::kernel::memory::paging
 {
+    size_t planned_identity_bytes(size_t detected_bytes)
+    {
+        // Round up only to the next page-table granularity (4 MiB), never to a
+        // large fixed chunk: mapping memory the machine does not have wastes page
+        // tables and pushes the boot path over its frame budget on small
+        // machines.
+        //
+        // All arithmetic is 64-bit because the 4 GiB ceiling does not fit in a
+        // 32-bit size_t.
+        constexpr uint64_t Granularity = 4ull * 1024ull * 1024ull;
+
+        uint64_t desired = detected_bytes != 0 ? static_cast<uint64_t>(detected_bytes) : Granularity;
+        desired = ((desired + Granularity - 1) / Granularity) * Granularity;
+        if (desired > BootstrapIdentityLimit)
+        {
+            desired = BootstrapIdentityLimit;
+        }
+
+        return static_cast<size_t>(desired);
+    }
+
+    namespace
+    {
+        // Maps more physical memory into the identity window. Returns the number
+        // of pages added. Growing on demand keeps boot memory proportional to the
+        // RAM actually present instead of to the ceiling.
+        //
+        // Note: this must not test g_ready. It runs during initialize(), before
+        // g_ready is set, so checking it here made the very first call a no-op
+        // that reported zero pages.
+        size_t grow_identity_map(size_t additional_tables)
+        {
+            if (g_page_directory == nullptr || additional_tables == 0)
+            {
+                return 0;
+            }
+
+            const size_t target_tables = g_identity_table_count + additional_tables > IdentityTableCeiling
+                ? IdentityTableCeiling
+                : g_identity_table_count + additional_tables;
+
+            const uint32_t bootstrap_entry_bits = flags_to_entry_bits(BootstrapFlags);
+            size_t added_pages = 0;
+
+            for (size_t directory_index = g_identity_table_count; directory_index < target_tables; ++directory_index)
+            {
+                const uintptr_t table_address = frames::allocate_pages(1);
+                if (table_address == 0)
+                {
+                    break;
+                }
+
+                auto* table = reinterpret_cast<uint32_t*>(table_address);
+                zero_page(table);
+
+                for (size_t entry_index = 0; entry_index < EntriesPerTable; ++entry_index)
+                {
+                    const uintptr_t physical = ((directory_index * EntriesPerTable) + entry_index) * frames::FrameSize;
+                    table[entry_index] = static_cast<uint32_t>(physical) | bootstrap_entry_bits;
+                    ++g_mapped_pages;
+                    ++added_pages;
+                }
+
+                g_page_directory[directory_index] = static_cast<uint32_t>(table_address) | bootstrap_entry_bits;
+                ++g_identity_table_count;
+            }
+
+            if (added_pages != 0 && g_runtime_enabled)
+            {
+                arch::load_page_directory(page_directory_address());
+            }
+
+            return added_pages;
+        }
+    }
+
     void initialize()
     {
         if (g_ready)
@@ -90,27 +190,18 @@ namespace tinyos::kernel::memory::paging
 
         g_page_directory = reinterpret_cast<uint32_t*>(directory_address);
         zero_page(g_page_directory);
+        g_identity_table_count = 0;
+        g_mapped_pages = 0;
 
-        const uint32_t bootstrap_entry_bits = flags_to_entry_bits(BootstrapFlags);
-        for (size_t directory_index = 0; directory_index < BootstrapPageTables; ++directory_index)
+        // Cover the memory the machine actually has, rounded up to the chunk
+        // size, instead of a fixed 16 MiB window.
+        const size_t detected_bytes = static_cast<size_t>(map::total_bytes());
+        const size_t desired_bytes = planned_identity_bytes(detected_bytes);
+
+        const size_t tables = bytes_to_tables(desired_bytes);
+        if (grow_identity_map(tables) == 0)
         {
-            const uintptr_t table_address = frames::allocate_pages(1);
-            if (table_address == 0)
-            {
-                kernel::panic("Failed to allocate page table.");
-            }
-
-            auto* table = reinterpret_cast<uint32_t*>(table_address);
-            zero_page(table);
-
-            for (size_t entry_index = 0; entry_index < EntriesPerTable; ++entry_index)
-            {
-                const uintptr_t physical = ((directory_index * EntriesPerTable) + entry_index) * frames::FrameSize;
-                table[entry_index] = static_cast<uint32_t>(physical) | bootstrap_entry_bits;
-                ++g_mapped_pages;
-            }
-
-            g_page_directory[directory_index] = static_cast<uint32_t>(table_address) | bootstrap_entry_bits;
+            kernel::panic("Failed to build the bootstrap identity map.");
         }
 
         g_ready = true;
@@ -162,7 +253,7 @@ namespace tinyos::kernel::memory::paging
 
     size_t bootstrap_identity_bytes()
     {
-        return BootstrapPageTables * EntriesPerTable * frames::FrameSize;
+        return g_identity_table_count * BytesPerTable;
     }
 
     size_t mapped_pages()

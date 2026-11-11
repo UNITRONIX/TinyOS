@@ -54,22 +54,9 @@
 #include <tinyos/drivers/console.hpp>
 #include <tinyos/shell/completion.hpp>
 #include <tinyos/ui/gfx_scrollback.hpp>
-#if !defined(TINYOS_TERMINAL_ONLY)
-#include <tinyos/ui/cursor.hpp>
-#include <tinyos/ui/desktop.hpp>
-#include <tinyos/ui/graphical_desktop.hpp>
-#include <tinyos/ui/gfx_terminal.hpp>
-#include <tinyos/ui/gfx_anim.hpp>
-#include <tinyos/ui/gfx_picker.hpp>
-#include <tinyos/ui/gfx_theme.hpp>
-#include <tinyos/kernel/device/framebuffer.hpp>
-#endif
 #include <tinyos/ui/events.hpp>
 #include <tinyos/ui/renderer.hpp>
 #include <tinyos/ui/terminal.hpp>
-#if !defined(TINYOS_TERMINAL_ONLY)
-#include <tinyos/ui/window_manager.hpp>
-#endif
 #include <tinyos/ui/widgets.hpp>
 
 namespace
@@ -846,11 +833,7 @@ namespace
         tinyos::drivers::vga::write("Boot media   : ");
         tinyos::drivers::vga::write_line("GRUB Multiboot ISO");
         tinyos::drivers::vga::write("Build profile: ");
-    #if defined(TINYOS_TERMINAL_ONLY)
-        tinyos::drivers::vga::write_line("terminal-only low-memory");
-    #else
-        tinyos::drivers::vga::write_line("desktop-capable terminal-first");
-    #endif
+        tinyos::drivers::vga::write_line("terminal-only");
         tinyos::drivers::vga::write("Shell        : ");
         tinyos::drivers::vga::write_line("kernel terminal shell");
         tinyos::drivers::vga::write("File manager : ");
@@ -925,12 +908,6 @@ namespace
         record_self_test_result("gfx scrollback contract", tinyos::ui::gfx_scrollback::validation_self_test(), passed, failed);
         record_self_test_result("shell completion contract", tinyos::shell::completion::validation_self_test(), passed, failed);
         record_self_test_result("console contract", tinyos::drivers::console::validation_self_test(), passed, failed);
-#if !defined(TINYOS_TERMINAL_ONLY)
-        record_self_test_result("gfx terminal contract", tinyos::ui::gfx_terminal::validation_self_test(), passed, failed);
-        record_self_test_result("gfx theme contract", tinyos::ui::gfx_theme::validation_self_test(), passed, failed);
-        record_self_test_result("gfx anim contract", tinyos::ui::gfx_anim::validation_self_test(), passed, failed);
-        record_self_test_result("gfx picker contract", tinyos::ui::gfx_picker::validation_self_test(), passed, failed);
-#endif
         tinyos::drivers::vga::write("Passed: ");
         write_uint64(passed);
         tinyos::drivers::vga::write(" Failed: ");
@@ -2041,39 +2018,6 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::renderer::pixel_contract_validation_self_test() ? "ok" : "failed");
     }
 
-#if !defined(TINYOS_TERMINAL_ONLY)
-    void print_cursor_info()
-    {
-        const auto* state = tinyos::ui::cursor::state();
-        tinyos::drivers::vga::write("Cursor ready  : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::cursor::is_ready() ? "yes" : "no");
-        tinyos::drivers::vga::write("Visible       : ");
-        tinyos::drivers::vga::write_line(state != nullptr && state->visible ? "yes" : "no");
-        tinyos::drivers::vga::write("Position      : ");
-        write_uint64(state != nullptr ? state->column : 0);
-        tinyos::drivers::vga::write(",");
-        write_uint64(state != nullptr ? state->row : 0);
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Bounds        : ");
-        write_uint64(state != nullptr ? state->max_columns : 0);
-        tinyos::drivers::vga::write("x");
-        write_uint64(state != nullptr ? state->max_rows : 0);
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Movements     : ");
-        write_uint64(tinyos::ui::cursor::movement_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Renders       : ");
-        write_uint64(tinyos::ui::cursor::render_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Rejected ops  : ");
-        write_uint64(tinyos::ui::cursor::rejected_operation_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Self-test     : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::cursor::validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Render test   : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::cursor::render_validation_self_test() ? "ok" : "failed");
-    }
-#endif
 
     void print_terminal_info()
     {
@@ -2777,218 +2721,6 @@ namespace
         tinyos::drivers::vga::write_line(tinyos::ui::widgets::event_bridge_validation_self_test() ? "ok" : "failed");
     }
 
-#if !defined(TINYOS_TERMINAL_ONLY)
-    void print_window_manager_info()
-    {
-        const auto* state = tinyos::ui::window_manager::state();
-        tinyos::drivers::vga::write("WM ready      : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::is_ready() ? "yes" : "no");
-        tinyos::drivers::vga::write("Grid          : ");
-        write_uint64(state != nullptr ? state->columns : 0);
-        tinyos::drivers::vga::write("x");
-        write_uint64(state != nullptr ? state->rows : 0);
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Windows       : ");
-        write_uint64(tinyos::ui::window_manager::window_count());
-        tinyos::drivers::vga::put_char('\n');
-        const auto* focused = tinyos::ui::window_manager::focused_window();
-        tinyos::drivers::vga::write("Focused       : ");
-        tinyos::drivers::vga::write_line(focused != nullptr && focused->title != nullptr ? focused->title : "none");
-        tinyos::drivers::vga::write("Compositions  : ");
-        write_uint64(tinyos::ui::window_manager::composition_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Focus changes : ");
-        write_uint64(tinyos::ui::window_manager::focus_change_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Rejected ops  : ");
-        write_uint64(tinyos::ui::window_manager::rejected_operation_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Self-test     : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Composition   : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::window_manager::composition_validation_self_test() ? "ok" : "failed");
-        for (size_t index = 0; index < tinyos::ui::window_manager::window_count(); ++index)
-        {
-            const auto* window = tinyos::ui::window_manager::window_at(index);
-            tinyos::drivers::vga::write("  - ");
-            tinyos::drivers::vga::write(window != nullptr && window->title != nullptr ? window->title : "invalid");
-            tinyos::drivers::vga::write(" role=");
-            tinyos::drivers::vga::write(window != nullptr ? tinyos::ui::window_manager::role_name(window->role) : "unknown");
-            tinyos::drivers::vga::write(" focused=");
-            tinyos::drivers::vga::write_line(window != nullptr && window->focused ? "yes" : "no");
-        }
-    }
-
-    void print_desktop_info()
-    {
-        const auto* state = tinyos::ui::desktop::state();
-        tinyos::drivers::vga::write("Desktop ready : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::is_ready() ? "yes" : "no");
-        tinyos::drivers::vga::write("Grid          : ");
-        write_uint64(state != nullptr ? state->columns : 0);
-        tinyos::drivers::vga::write("x");
-        write_uint64(state != nullptr ? state->rows : 0);
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Launcher items: ");
-        write_uint64(tinyos::ui::desktop::launcher_item_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Icons         : ");
-        write_uint64(tinyos::ui::desktop::icon_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("App windows   : ");
-        write_uint64(tinyos::ui::desktop::open_app_window_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Pointer       : ");
-        write_uint64(state != nullptr ? state->pointer_column : 0);
-        tinyos::drivers::vga::write(",");
-        write_uint64(state != nullptr ? state->pointer_row : 0);
-        tinyos::drivers::vga::put_char('\n');
-        const auto* selected = tinyos::ui::desktop::selected_launcher_item();
-        tinyos::drivers::vga::write("Selected      : ");
-        tinyos::drivers::vga::write_line(selected != nullptr && selected->title != nullptr ? selected->title : "none");
-        tinyos::drivers::vga::write("Renders       : ");
-        write_uint64(tinyos::ui::desktop::render_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Selections    : ");
-        write_uint64(tinyos::ui::desktop::selection_change_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Launches      : ");
-        write_uint64(tinyos::ui::desktop::launch_request_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Events        : ");
-        write_uint64(tinyos::ui::desktop::handled_event_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Pointer events: ");
-        write_uint64(tinyos::ui::desktop::pointer_event_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Rejected ops  : ");
-        write_uint64(tinyos::ui::desktop::rejected_operation_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Self-test     : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Launcher      : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::launcher_validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Interaction   : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::interaction_validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Fullscreen    : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::fullscreen_validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Input         : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::desktop::input_validation_self_test() ? "ok" : "failed");
-        for (size_t index = 0; index < tinyos::ui::desktop::icon_count(); ++index)
-        {
-            const auto* item = tinyos::ui::desktop::icon_at(index);
-            tinyos::drivers::vga::write("  - ");
-            tinyos::drivers::vga::write(item != nullptr && item->title != nullptr ? item->title : "invalid");
-            tinyos::drivers::vga::write(" -> ");
-            tinyos::drivers::vga::write(item != nullptr && item->command != nullptr ? item->command : "none");
-            tinyos::drivers::vga::write(" at ");
-            write_uint64(item != nullptr ? item->column : 0);
-            tinyos::drivers::vga::write(",");
-            write_uint64(item != nullptr ? item->row : 0);
-            tinyos::drivers::vga::write_line(item != nullptr && item->selected ? " selected" : "");
-        }
-        for (size_t index = 0; index < tinyos::ui::desktop::app_window_count(); ++index)
-        {
-            const auto* window = tinyos::ui::desktop::app_window_at(index);
-            if (window != nullptr && window->open)
-            {
-                tinyos::drivers::vga::write("  window ");
-                tinyos::drivers::vga::write(window->title != nullptr ? window->title : "invalid");
-                tinyos::drivers::vga::write(" -> ");
-                tinyos::drivers::vga::write_line(window->command != nullptr ? window->command : "none");
-            }
-        }
-    }
-
-    void print_gfxterm_info()
-    {
-        tinyos::drivers::vga::write("Linear FB     : ");
-        tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "yes" : "no");
-        tinyos::drivers::vga::write("Renders       : ");
-        write_uint64(tinyos::ui::gfx_terminal::render_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Handled keys  : ");
-        write_uint64(tinyos::ui::gfx_terminal::handled_key_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Commands      : ");
-        write_uint64(tinyos::ui::gfx_terminal::command_count());
-        tinyos::drivers::vga::put_char('\n');
-        tinyos::drivers::vga::write("Font contract : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::font::validation_self_test() ? "ok" : "failed");
-        tinyos::drivers::vga::write("Gfx contract  : ");
-        tinyos::drivers::vga::write_line(tinyos::ui::gfx_terminal::validation_self_test() ? "ok" : "failed");
-    }
-
-    void run_gfx_terminal_mode()
-    {
-        if (!tinyos::kernel::device::framebuffer::has_linear_framebuffer())
-        {
-            tinyos::drivers::vga::write_line("No linear framebuffer. Run QEMU with -vga std (make run-gfxterm).");
-            return;
-        }
-
-        if (!tinyos::ui::gfx_terminal::run_session(g_current_directory))
-        {
-            tinyos::drivers::vga::write_line("Gfx terminal mode failed.");
-            return;
-        }
-
-        tinyos::ui::renderer::initialize();
-        tinyos::ui::terminal::initialize();
-        tinyos::drivers::vga::clear();
-        tinyos::drivers::vga::write_line("Returned from gfx terminal.");
-    }
-
-    void run_desktop_mode()
-    {
-        if (tinyos::kernel::device::framebuffer::has_linear_framebuffer())
-        {
-            if (!tinyos::ui::graphical_desktop::run_session())
-            {
-                tinyos::drivers::vga::write_line("Graphical desktop mode failed.");
-                return;
-            }
-
-            tinyos::ui::renderer::initialize();
-            tinyos::ui::terminal::initialize();
-            tinyos::drivers::vga::clear();
-            tinyos::drivers::vga::write_line("Returned from graphical desktop mode.");
-            return;
-        }
-
-        if (!tinyos::ui::desktop::render_fullscreen())
-        {
-            tinyos::drivers::vga::write_line("Desktop mode failed.");
-            return;
-        }
-
-        for (;;)
-        {
-            const char character = tinyos::drivers::keyboard::read_char();
-            if (character == 27 || character == 'q' || character == 'Q')
-            {
-                tinyos::drivers::vga::clear();
-                tinyos::ui::terminal::initialize();
-                tinyos::ui::terminal::clear_content();
-                tinyos::drivers::vga::write_line("Returned from desktop mode.");
-                return;
-            }
-
-            tinyos::ui::events::Event event;
-            event.type = tinyos::ui::events::EventType::Key;
-            event.source = tinyos::ui::events::Source::Keyboard;
-            event.character = character;
-            event.pressed = true;
-            event.column = 0;
-            event.row = 0;
-            event.delta_column = 0;
-            event.delta_row = 0;
-            event.button = 0;
-            event.sequence = 0;
-            tinyos::ui::desktop::handle_event(event);
-        }
-    }
-#endif
 
     void print_requirements()
     {
@@ -3141,6 +2873,8 @@ namespace
         { "widgettest", "draw TUI widget demo", "widgettest", "widgettest" },
         { "widgetdispatch", "dispatch queued UI events to widgets", "widgetdispatch", "widgetdispatch" },
         { "widgetactiontest", "inject and dispatch widget action", "widgetactiontest", "widgetactiontest" },
+        { "terminaltheme", "show terminal style options", "terminaltheme", "terminaltheme" },
+        { "videomode", "show console video mode", "videomode", "videomode" },
         { "uieventinfo", "show UI event queue state", "uieventinfo", "uieventinfo" },
         { "uieventpump", "move input events into UI queue", "uieventpump", "uieventpump" },
         { "uieventpeek", "read one UI event", "uieventpeek", "uieventpeek" },
@@ -3148,24 +2882,6 @@ namespace
         { "inputinfo", "show generic input queue state", "inputinfo", "inputinfo" },
         { "inputpeek", "read one generic input event", "inputpeek", "inputpeek" },
         { "keyboardinfo", "show keyboard IRQ/input state", "keyboardinfo", "keyboardinfo" }
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        ,{ "cursorinfo", "show cursor scaffold state", "cursorinfo", "cursorinfo" },
-        { "wminfo", "show window manager scaffold state", "wminfo", "wminfo" },
-        { "wmtest", "draw window manager demo", "wmtest", "wmtest" },
-        { "wmfocus", "cycle window focus", "wmfocus", "wmfocus" },
-        { "desktopinfo", "Alpha: show desktop shell prototype state", "desktopinfo", "desktopinfo" },
-        { "desktop", "Alpha: enter fullscreen desktop mode", "desktop", nullptr },
-        { "desktoptest", "Alpha: draw fullscreen desktop prototype", "desktoptest", nullptr },
-        { "desktopnext", "Alpha: select next desktop launcher item", "desktopnext", nullptr },
-        { "desktoplaunch", "Alpha: render selected launch request", "desktoplaunch", nullptr },
-        { "desktopdispatch", "Alpha: dispatch desktop input events", "desktopdispatch", nullptr },
-        { "desktopkeytest", "Alpha: test desktop keyboard flow", "desktopkeytest", nullptr },
-        { "desktopmousetest", "Alpha: test desktop mouse click flow", "desktopmousetest", nullptr },
-        { "gfxterm", "enter Copilot-style framebuffer terminal", "gfxterm", nullptr },
-        { "gfxterminfo", "show gfx terminal scaffold state", "gfxterminfo", "gfxterminfo" },
-        { "terminaltheme", "set or show gfx terminal theme", "terminaltheme [copilot|dracula|solarized]", "terminaltheme" },
-        { "videomode", "show or select console video mode", "videomode [vga|gfx|auto]", "videomode" }
-    #endif
     };
 
     const HelpCommand DiagnosticsHelp[] = {
@@ -3429,11 +3145,6 @@ namespace
         tinyos::drivers::vga::write_line("  helplist - print this classic command list");
         tinyos::drivers::vga::write_line("  status   - compact terminal system dashboard");
         tinyos::drivers::vga::write_line("  syscheck - run non-destructive system checks");
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        tinyos::drivers::vga::write_line("  desktop* - Alpha desktop prototypes; development only, incomplete");
-    #else
-        tinyos::drivers::vga::write_line("  terminal-only - desktop/window manager commands are not linked");
-    #endif
         tinyos::drivers::vga::write_line("  help     - show this help");
         tinyos::drivers::vga::write_line("  clear    - clear the screen");
         tinyos::drivers::vga::write_line("  pwd      - show current directory");
@@ -3461,9 +3172,6 @@ namespace
         tinyos::drivers::vga::write_line("  umount    - remove bind mount");
         tinyos::drivers::vga::write_line("  fbinfo   - show framebuffer surface scaffold");
         tinyos::drivers::vga::write_line("  renderinfo - show renderer scaffold state");
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        tinyos::drivers::vga::write_line("  cursorinfo - show cursor scaffold state");
-    #endif
         tinyos::drivers::vga::write_line("  rendertest - draw a renderer test label");
         tinyos::drivers::vga::write_line("  renderfilltest - draw a renderer filled strip");
         tinyos::drivers::vga::write_line("  terminalinfo - show terminal UI scaffold state");
@@ -3473,25 +3181,10 @@ namespace
         tinyos::drivers::vga::write_line("  terminalstyle - draw styled terminal sections");
         tinyos::drivers::vga::write_line("  widgetinfo - show TUI widget scaffold state");
         tinyos::drivers::vga::write_line("  widgettest - draw TUI widget demo");
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        tinyos::drivers::vga::write_line("  wminfo   - show window manager scaffold state");
-        tinyos::drivers::vga::write_line("  wmtest   - draw window manager demo");
-        tinyos::drivers::vga::write_line("  wmfocus  - cycle window focus");
-        tinyos::drivers::vga::write_line("  desktopinfo - show desktop shell prototype state");
-        tinyos::drivers::vga::write_line("  desktop   - enter fullscreen desktop mode");
-        tinyos::drivers::vga::write_line("  desktoptest - draw fullscreen desktop prototype");
-        tinyos::drivers::vga::write_line("  desktopnext - select next desktop launcher item");
-        tinyos::drivers::vga::write_line("  desktoplaunch - render selected launch request");
-        tinyos::drivers::vga::write_line("  desktopdispatch - dispatch desktop input events");
-        tinyos::drivers::vga::write_line("  desktopkeytest - test desktop keyboard flow");
-        tinyos::drivers::vga::write_line("  desktopmousetest - test desktop mouse click flow");
-        tinyos::drivers::vga::write_line("  gfxterm  - enter Copilot-style framebuffer terminal");
-        tinyos::drivers::vga::write_line("  gfxterminfo - show gfx terminal scaffold state");
-        tinyos::drivers::vga::write_line("  terminaltheme - set or show gfx terminal theme");
-        tinyos::drivers::vga::write_line("  videomode - show or select console video mode");
-    #endif
         tinyos::drivers::vga::write_line("  widgetdispatch - dispatch queued UI events to widgets");
         tinyos::drivers::vga::write_line("  widgetactiontest - inject and dispatch widget action");
+        tinyos::drivers::vga::write_line("  terminaltheme - show terminal style options");
+        tinyos::drivers::vga::write_line("  videomode - show console video mode");
         tinyos::drivers::vga::write_line("  uieventinfo - show UI event queue state");
         tinyos::drivers::vga::write_line("  uieventpump - move input events into UI queue");
         tinyos::drivers::vga::write_line("  uieventpeek - read one UI event");
@@ -4008,13 +3701,6 @@ namespace tinyos::shell
             return;
         }
 
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        if (core::string::compare(command, "cursorinfo") == 0)
-        {
-            print_cursor_info();
-            return;
-        }
-    #endif
 
         if (core::string::compare(command, "rendertest") == 0)
         {
@@ -4074,178 +3760,20 @@ namespace tinyos::shell
             return;
         }
 
-    #if !defined(TINYOS_TERMINAL_ONLY)
-        if (core::string::compare(command, "wminfo") == 0)
-        {
-            print_window_manager_info();
-            return;
-        }
-
-        if (core::string::compare(command, "wmtest") == 0)
-        {
-            drivers::vga::write_line(tinyos::ui::window_manager::render_demo() ? "Window manager demo drawn." : "Window manager demo failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "wmfocus") == 0)
-        {
-            const bool focused = tinyos::ui::window_manager::focus_next();
-            const bool drawn = focused && tinyos::ui::window_manager::compose();
-            drivers::vga::write_line(focused && drawn ? "Window focus changed." : "Window focus failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "desktopinfo") == 0)
-        {
-            print_desktop_info();
-            return;
-        }
-
-        if (core::string::compare(command, "desktop") == 0)
-        {
-            run_desktop_mode();
-            return;
-        }
-
-        if (core::string::compare(command, "gfxterm") == 0)
-        {
-            run_gfx_terminal_mode();
-            return;
-        }
-
-        if (core::string::compare(command, "gfxterminfo") == 0)
-        {
-            print_gfxterm_info();
-            return;
-        }
 
         if (core::string::compare(command, "terminaltheme") == 0 || core::string::starts_with(command, "terminaltheme "))
         {
-            const char* argument = command;
-            if (core::string::starts_with(command, "terminaltheme "))
-            {
-                argument = command + 14;
-                argument = core::string::skip_spaces(argument);
-            }
-
-            if (argument[0] == '\0')
-            {
-                tinyos::drivers::vga::write("Active theme: ");
-                tinyos::drivers::vga::write_line(tinyos::ui::gfx_theme::preset_name(tinyos::ui::gfx_theme::active_preset()));
-                return;
-            }
-
-            tinyos::ui::gfx_theme::Preset preset = tinyos::ui::gfx_theme::Preset::Copilot;
-            if (core::string::compare(argument, "dracula") == 0)
-            {
-                preset = tinyos::ui::gfx_theme::Preset::Dracula;
-            }
-            else if (core::string::compare(argument, "solarized") == 0)
-            {
-                preset = tinyos::ui::gfx_theme::Preset::Solarized;
-            }
-            else if (core::string::compare(argument, "copilot") != 0)
-            {
-                tinyos::drivers::vga::write_line("Usage: terminaltheme [copilot|dracula|solarized]");
-                return;
-            }
-
-            drivers::vga::write_line(tinyos::ui::gfx_theme::set_preset(preset) ? "Theme updated." : "Theme update failed.");
+            tinyos::drivers::vga::write_line("Terminal style: monochrome VGA text.");
+            tinyos::drivers::vga::write_line("Theme presets need a framebuffer terminal, which is not part of this build.");
             return;
         }
 
         if (core::string::compare(command, "videomode") == 0 || core::string::starts_with(command, "videomode "))
         {
-            const char* argument = command;
-            if (core::string::starts_with(command, "videomode "))
-            {
-                argument = command + 9;
-                argument = core::string::skip_spaces(argument);
-            }
-
-            if (argument[0] == '\0')
-            {
-                tinyos::drivers::vga::write("Linear FB : ");
-                tinyos::drivers::vga::write_line(tinyos::kernel::device::framebuffer::has_linear_framebuffer() ? "yes" : "no");
-                tinyos::drivers::vga::write("Console   : ");
-                tinyos::drivers::vga::write_line(tinyos::drivers::console::active_backend() == tinyos::drivers::console::Backend::GfxCapture ? "gfx-capture" : "vga");
-                return;
-            }
-
-            if (core::string::compare(argument, "gfx") == 0)
-            {
-                run_gfx_terminal_mode();
-                return;
-            }
-
-            if (core::string::compare(argument, "vga") == 0 || core::string::compare(argument, "auto") == 0)
-            {
-                tinyos::drivers::vga::write_line("Video mode preference stored in /system/tinyos.conf (ramfs).");
-                return;
-            }
-
-            tinyos::drivers::vga::write_line("Usage: videomode [vga|gfx|auto]");
+            tinyos::drivers::vga::write_line("Display: VGA text mode, 80x25.");
+            tinyos::drivers::vga::write_line("Linear framebuffer: absent in this build.");
             return;
         }
-
-        if (core::string::compare(command, "desktoptest") == 0)
-        {
-            drivers::vga::write_line(tinyos::ui::desktop::render_demo() ? "Fullscreen desktop demo drawn." : "Fullscreen desktop demo failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "desktopnext") == 0)
-        {
-            const bool selected = tinyos::ui::desktop::select_next();
-            const bool drawn = selected && tinyos::ui::desktop::render_fullscreen();
-            drivers::vga::write_line(selected && drawn ? "Desktop launcher selection changed." : "Desktop launcher selection failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "desktoplaunch") == 0)
-        {
-            drivers::vga::write_line(tinyos::ui::desktop::launch_selected() ? "Desktop launch request rendered." : "Desktop launch request failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "desktopdispatch") == 0)
-        {
-            tinyos::ui::events::pump_from_input(tinyos::ui::events::queue_capacity());
-            drivers::vga::write("Desktop events dispatched: ");
-            write_uint64(tinyos::ui::desktop::dispatch_events(tinyos::ui::events::queue_capacity()));
-            drivers::vga::put_char('\n');
-            return;
-        }
-
-        if (core::string::compare(command, "desktopkeytest") == 0)
-        {
-            const bool tab_queued = tinyos::ui::events::push_key_event('\t', true);
-            const size_t tab_dispatched = tinyos::ui::desktop::dispatch_events(1);
-            const bool enter_queued = tinyos::ui::events::push_key_event('\n', true);
-            const size_t enter_dispatched = tinyos::ui::desktop::dispatch_events(1);
-            drivers::vga::write_line(tab_queued && tab_dispatched == 1 && enter_queued && enter_dispatched == 1 ? "Desktop keyboard flow dispatched." : "Desktop keyboard flow failed.");
-            return;
-        }
-
-        if (core::string::compare(command, "desktopmousetest") == 0)
-        {
-            const tinyos::ui::desktop::DesktopIcon* icon = nullptr;
-            for (size_t index = 0; index < tinyos::ui::desktop::icon_count(); ++index)
-            {
-                const auto* current = tinyos::ui::desktop::icon_at(index);
-                if (current != nullptr && current->selected)
-                {
-                    icon = current;
-                    break;
-                }
-            }
-
-            const bool queued = icon != nullptr && tinyos::ui::events::push_mouse_button_event(icon->column + 1, icon->row + 1, 1, true);
-            const size_t dispatched = queued ? tinyos::ui::desktop::dispatch_events(1) : 0;
-            drivers::vga::write_line(queued && dispatched == 1 ? "Desktop mouse click dispatched." : "Desktop mouse click failed.");
-            return;
-        }
-#endif
 
         if (core::string::compare(command, "widgetdispatch") == 0)
         {
@@ -4839,10 +4367,12 @@ namespace tinyos::shell
 
         if (core::string::compare(command, "useradd") == 0)
         {
-            drivers::vga::write_line("Usage: useradd is interactive-stub; bootstrap accounts: root/user");
+            drivers::vga::write_line("Usage: useradd is not wired to a create path yet.");
             drivers::vga::write("Accounts: ");
             write_uint64(kernel::security::accounts::count());
             drivers::vga::put_char('\n');
+            drivers::vga::write("Development credentials: ");
+            drivers::vga::write_line(kernel::security::accounts::development_credentials_active() ? "ACTIVE (build-time opt-in)" : "disabled");
             for (size_t index = 0; index < kernel::security::accounts::count(); ++index)
             {
                 const auto* account = kernel::security::accounts::at(index);

@@ -11,6 +11,26 @@ namespace tinyos::kernel::memory::paging
     inline constexpr uint32_t PageFlagUser = 1u << 2;
     inline constexpr uint32_t PageFlagExecute = 1u << 3;
 
+    // Upper bound for the identity map on the 32-bit kernel. The map is sized at
+    // runtime from the detected memory, so this is a ceiling rather than the
+    // configured size. The previous fixed 16 MiB value silently discarded RAM on
+    // any machine with more memory than that.
+    //
+    // Declared as uint64_t: on the 32-bit kernel size_t is 32 bits wide, so a
+    // 4 GiB ceiling expressed in size_t wraps to zero and every derived table
+    // count silently becomes zero as well.
+    inline constexpr uint64_t BootstrapIdentityLimit = 4ull * 1024ull * 1024ull * 1024ull;
+
+    // Granularity the identity map grows in. Exposed because the address-space
+    // bookkeeping is built before paging initialises and must predict the same
+    // size the paging layer will map.
+    inline constexpr size_t IdentityMapChunkBytes = 64ull * 1024ull * 1024ull;
+
+    // Computes the identity-map size the paging layer will produce for a machine
+    // with `detected_bytes` of physical memory. Kept in one place so the two
+    // layers cannot disagree.
+    size_t planned_identity_bytes(size_t detected_bytes);
+
     struct PageMapping
     {
         uintptr_t virtual_address;

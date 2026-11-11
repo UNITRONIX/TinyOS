@@ -18,5 +18,7 @@ namespace tinyos::kernel::interrupts
 	void set_hardware_irq_enabled(bool enabled);
 }
 
-extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code);
+// The full interrupted frame is passed so fault reports can include EIP, CS and
+// EFLAGS. Without them a page fault or triple-fault candidate is untriageable.
+extern "C" void interrupt_dispatch(uint32_t vector, uint32_t error_code, uint32_t eip, uint32_t cs, uint32_t eflags);
 extern "C" void irq_dispatch(uint32_t irq);

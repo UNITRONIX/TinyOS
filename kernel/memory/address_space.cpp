@@ -5,12 +5,13 @@
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/memory/address_space.hpp>
 #include <tinyos/kernel/memory/frame_allocator.hpp>
+#include <tinyos/kernel/memory/memory_map.hpp>
 #include <tinyos/kernel/memory/paging.hpp>
 
 namespace
 {
     constexpr size_t MaxRegions = 16;
-    constexpr uintptr_t BootstrapIdentityLimit = 16 * 1024 * 1024;
+    constexpr uintptr_t BootstrapIdentityLimit = tinyos::kernel::memory::paging::BootstrapIdentityLimit;
     constexpr uint32_t KernelRegionFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagWrite | tinyos::kernel::memory::paging::PageFlagExecute;
     constexpr uint32_t KernelMetadataFlags = tinyos::kernel::memory::paging::PageFlagRead;
     constexpr uint32_t KernelTextFlags = tinyos::kernel::memory::paging::PageFlagRead | tinyos::kernel::memory::paging::PageFlagExecute;
@@ -275,11 +276,17 @@ namespace tinyos::kernel::memory::address_space
         g_total_mapped_bytes = 0;
         g_ready = false;
 
+        // The identity region must describe the map that will exist, so it is
+        // computed with the same helper the paging layer uses. Reporting the
+        // ceiling here would claim protections for memory that is not mapped.
+        const size_t identity_bytes = tinyos::kernel::memory::paging::planned_identity_bytes(
+            static_cast<size_t>(tinyos::kernel::memory::map::total_bytes()));
+
         add_region(
             "identity-lowmem",
             0,
             0,
-            BootstrapIdentityLimit,
+            identity_bytes,
             KernelRegionFlags,
             RegionType::IdentityMapped);
 

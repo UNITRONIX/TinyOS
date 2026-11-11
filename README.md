@@ -12,10 +12,10 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 
 ## Current Project Knowledge
 
-- The current reference target is `i686` on QEMU PC hardware, booted as a `GRUB` Multiboot ISO.
-- The documented minimum runtime envelope is still 32 MiB RAM; lower-memory runs are experimental probes before any baseline change. The desktop-capable ISO has reached `2561K` on QEMU/GRUB. The physical terminal-only build profile currently reaches `2529K`, while `2528K` and `64K` do not reach TinyOS serial output.
-- TinyOS is terminal-first today, with VGA text output, PS/2 keyboard input, `sysinfo`, `status`/`syscheck` diagnostics, risk listing, active profile checks, path inspection, `filemgr`, `textedit`, `fileui` and RAMFS metadata. A `TERMINAL_ONLY=1` build profile can omit the desktop, window manager, cursor and PS/2 mouse paths from the linked kernel.
-- The GUI path is planned incrementally through renderer, terminal, widget and event scaffolds before a richer desktop becomes the default.
+- The current reference target is `i686` on QEMU PC hardware, booted as a `GRUB` Multiboot ISO. A second `x86_64` backend exists as a bring-up path: it enters long mode, probes CPU capabilities, loads a 64-bit GDT/TSS with IST stacks and a full 256-vector IDT, and reports memory from the Multiboot2 tag list. It does not run the kernel yet.
+- The documented minimum runtime envelope is still 32 MiB RAM; lower-memory runs are experimental probes before any baseline change. The reference ISO has reached `2561K` on QEMU/GRUB, while `2560K` and `64K` do not reach TinyOS serial output.
+- TinyOS is a terminal-first OS: VGA text output, PS/2 keyboard input, `sysinfo`, `status`/`syscheck` diagnostics, risk listing, active profile checks, path inspection, `filemgr`, `textedit`, `fileui` and RAMFS metadata.
+- The desktop, window manager, graphical terminal, cursor and PS/2 mouse stack was removed. It never implemented a working surface, consumed boot memory and forced boot tests to assert on non-functional systems. A graphical surface returns only after the kernel has processes, a driver model and a framebuffer driver.
 - Security work is treated as a high-priority track: trusted package metadata, image/provisioning contracts, integrity diagnostics and password-hashing policy are documented before broader runtime privileges are enabled.
 - Project provisioning is host-first for now, with signed/encrypted artifacts, isolated project workspaces, device variants and remote access kept behind explicit opt-in policy.
 - Installed-system support is currently a ready contract plus a RAMFS mock: `examples/install.profile`, `install-plan`, `check-install-profile`, `/system/install.txt`, `/system/profile.txt`, `installinfo`, `installcheck`, `install`, `profileinfo`, `profilecheck` and `/receipts/install.receipt` exist, while real disk installation is planned after persistent storage and filesystem contracts mature.
@@ -46,7 +46,7 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 - installed-system contract with `installinfo`, `installcheck`, RAMFS `install` mock, active RAMFS profile checks and host install-profile validation
 - project provisioning workbench plan for isolated workspaces, device variants, resource budgets and remote access
 - host `.tapp` signing helpers: `keygen-app`, `trust-app`, `sign-app` and `verify-app`
-- documented minimum runtime target: `i686`, Multiboot ISO, VGA text mode, PS/2 keyboard and 32 MiB RAM, with experimental terminal-only probes down to `2529K`
+- documented minimum runtime target: `i686`, Multiboot ISO, VGA text mode, PS/2 keyboard and 32 MiB RAM, with experimental low-memory probes down to `2561K`
 - simple system API layer
 - `Makefile` build and `QEMU` run targets
 - editable from `Visual Studio Community` as a `Makefile` project
@@ -57,10 +57,11 @@ AI assistance is not a runtime dependency. The current TinyOS kernel does not in
 make iso
 ```
 
-Build the experimental terminal-only ISO without the desktop/window-manager/mouse objects:
+Build the `x86_64` bring-up image:
 
 ```powershell
-make terminal-only-iso
+make ARCH=x86_64 iso
+make test-boot-x86_64
 ```
 
 ## Quick run
@@ -69,7 +70,7 @@ make terminal-only-iso
 make run
 ```
 
-The default boot path starts the TinyOS terminal. The framebuffer desktop remains an optional preview through `make run-framebuffer-preview`.
+The default and only boot path starts the TinyOS terminal.
 
 ## Roadmaps
 
@@ -80,6 +81,8 @@ The default boot path starts the TinyOS terminal. The framebuffer desktop remain
 - `docs/provisioning-workbench.md` - project provisioning workflow and tool plan.
 - `docs/system-requirements.md` - minimum and recommended runtime/build requirements.
 - `docs/plan-dojrzalosci-systemu.md` - plan wdrożenia dojrzałości (funkcjonalność, bezpieczeństwo, użyteczność).
+- `docs/x86_64-migration.md` - 64-bit port: arch/platform split, boot path, staged gates.
+- `docs/virtualization-foundations.md` - prerequisites and staging for VT-x/EPT, IOMMU and GPU passthrough.
 - `docs/licensing.md` - GPL-3.0 policy and third-party boundary notes.
 
 ## License
@@ -99,13 +102,14 @@ Or directly with Make:
 ```powershell
 make prepare-test-env
 make test-boot
+make test-boot-x86_64
 make test-minimal
 ```
 
-The boot smoke test runs QEMU headlessly and writes serial output to `build/boot-smoke.log`.
+The boot smoke test runs QEMU headlessly, writes serial output to `build/boot-smoke.log` and verifies every marker listed in `tests/boot-markers.txt`. The `x86_64` target does the same against `tests/boot-markers-x86_64.txt`.
 If the build toolchain is not installed yet but `build/tinyos.iso` already exists, use `make test-existing-iso`.
 For a longer runtime check, use `make test-stability`.
-For experimental low-memory measurements, use `make test-lowmem-probe` for the default ISO or `make test-terminal-lowmem-probe` for the physical terminal-only profile.
+For experimental low-memory measurements, use `make test-lowmem-probe`.
 
 ## Visual Studio note
 

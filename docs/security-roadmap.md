@@ -88,8 +88,10 @@ This roadmap tracks a gradual security program for `TinyOS` with low overhead, s
 - [x] secure image/provisioning manifest
 - [x] boot module metadata validation scaffold
 - [x] ELF metadata validation scaffold
+- [x] user pointer validation by page-table walk (`kernel/memory/user_access.cpp`): rejects null range, unmapped pages, kernel-only pages, non-writable destinations and oversized transfers; verified at runtime by a ring-3 process that attempts to pass a kernel pointer and is rejected
+- [x] kernel synchronization primitives (`kernel/sync.cpp`): `IrqGuard` (interrupt-flag save/restore plus critical-section depth) and atomic `Spinlock`; the kernel heap now holds a lock with interrupts disabled, because drivers allocate from interrupt context
 - [~] runtime paging protection policy self-test for the bootstrap identity map
-- [ ] userspace isolation
+- [ ] userspace isolation (per-process address spaces)
 - [ ] permission model
 - [ ] password hashing and install-time credential policy
 - [~] trusted module policy

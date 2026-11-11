@@ -1,4 +1,5 @@
 #include <tinyos/arch/context.hpp>
+#include <tinyos/drivers/serial.hpp>
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/sched/scheduler.hpp>
 #include <tinyos/kernel/task/task.hpp>
@@ -8,6 +9,54 @@ namespace
 {
     constexpr uint64_t TimeSliceTicks = 5;
     constexpr uint64_t TaskWatchdogTicks = 500;
+
+#if defined(TINYOS_DEBUG_BOOT)
+    void trace_switch(const char* phase, const tinyos::kernel::task::Task* from, const tinyos::kernel::task::Task* to)
+    {
+        char buffer[96];
+        size_t length = 0;
+
+        auto append = [&buffer, &length](const char* text) {
+            while (*text != '\0' && length + 1 < sizeof(buffer))
+            {
+                buffer[length++] = *text++;
+            }
+        };
+        auto append_hex = [&buffer, &length](uint32_t value) {
+            constexpr char Digits[] = "0123456789ABCDEF";
+            if (length + 11 >= sizeof(buffer))
+            {
+                return;
+            }
+
+            buffer[length++] = '0';
+            buffer[length++] = 'x';
+            for (int shift = 28; shift >= 0; shift -= 4)
+            {
+                buffer[length++] = Digits[(value >> shift) & 0x0F];
+            }
+        };
+
+        append("[sched] ");
+        append(phase);
+        append(" from=");
+        append_hex(from != nullptr ? static_cast<uint32_t>(from->id) : 0xFFFFFFFFu);
+        append(" to=");
+        append_hex(to != nullptr ? static_cast<uint32_t>(to->id) : 0xFFFFFFFFu);
+        if (to != nullptr)
+        {
+            append(" esp=");
+            append_hex(to->context.esp);
+            append(" eip=");
+            append_hex(to->context.eip);
+            append(" valid=");
+            append_hex(to->context_ready ? 1u : 0u);
+        }
+
+        buffer[length] = '\0';
+        tinyos::drivers::serial::write_line(buffer);
+    }
+#endif
 
     tinyos::kernel::task::Task* g_current_task = nullptr;
     tinyos::kernel::task::Task* g_last_selected_task = nullptr;
@@ -91,34 +140,50 @@ namespace
             return;
         }
 
-        if (from != nullptr && from->state == tinyos::kernel::task::State::Running)
+        if (!to->context_ready)
+        {
+            // Only the live bootstrap task can lack a frame, and it can never
+            // be a switch target: a task is a valid target exactly when it has
+            // a frame to resume. Refusing here keeps the CPU from restoring a
+            // stack pointer that was never captured.
+            return;
+        }
+
+#if defined(TINYOS_DEBUG_BOOT)
+        trace_switch("switch", from, to);
+#endif
+
+        if (from != nullptr)
         {
             from->state = tinyos::kernel::task::State::Ready;
+            // arch_context_switch() stores `from`'s resume frame before loading
+            // `to`. The magic tag is a C++ field the assembly does not know
+            // about, so it must be set here: without it is_valid() rejects the
+            // frame and the switch is silently skipped, leaving this task
+            // spinning in its own idle loop.
+            from->context.magic = tinyos::arch::context::ContextMagic;
+            from->context_ready = true;
         }
 
-        if (to->state == tinyos::kernel::task::State::Ready || to->state == tinyos::kernel::task::State::Idle)
-        {
-            to->state = tinyos::kernel::task::State::Running;
-        }
+        to->state = tinyos::kernel::task::State::Running;
 
-        tinyos::kernel::task::Task* const resume_task = from;
         g_current_task = to;
         g_last_selected_task = to;
         g_ticks_since_switch = 0;
         g_watchdog_episode_active = false;
         to->ticks_on_cpu = 0;
         ++g_context_switch_count;
+
         tinyos::arch::context::switch_context(from != nullptr ? &from->context : nullptr, &to->context);
 
-        g_current_task = resume_task;
-        if (resume_task != nullptr)
+        // Execution resumes here inside the *previous* task once another task
+        // switches back to it. The scheduler had already marked it Running
+        // before performing that switch, so only the current-task pointer needs
+        // to be re-established.
+        g_current_task = from;
+        if (from != nullptr)
         {
-            resume_task->state = tinyos::kernel::task::State::Running;
-        }
-
-        if (to->state == tinyos::kernel::task::State::Running)
-        {
-            to->state = tinyos::kernel::task::State::Ready;
+            from->state = tinyos::kernel::task::State::Running;
         }
     }
 
@@ -289,9 +354,10 @@ namespace tinyos::kernel::sched
         g_reschedule_pending = false;
         ++g_preempt_from_irq_count;
 
-        // Interrupts were disabled by the interrupt gate; enable before switching so
-        // the next task resumes with IF=1. EOI has already been sent.
-        asm volatile ("sti");
+        // arch_context_switch() restores the target task's EFLAGS, so the
+        // preempted task resumes with its own interrupt state and no bare `sti`
+        // is needed here. Issuing one before the switch is what allowed a
+        // nested IRQ to run on a half-switched stack.
         dispatch_selected_task(selected);
     }
 
@@ -515,7 +581,13 @@ namespace tinyos::kernel::sched
         }
 
         const uint64_t switches_before = g_context_switch_count;
+#if defined(TINYOS_DEBUG_BOOT)
+        tinyos::drivers::serial::write_line("[sched] selftest: before yield");
+#endif
         yield();
+#if defined(TINYOS_DEBUG_BOOT)
+        tinyos::drivers::serial::write_line("[sched] selftest: after yield");
+#endif
 
         auto* probe = tinyos::kernel::task::sched_probe_task();
         if (probe != nullptr)

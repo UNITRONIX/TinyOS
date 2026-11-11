@@ -188,7 +188,7 @@ The highest-impact pending work is:
 | Serial-only headless console profile | Partial | Serial logging exists; not primary interactive console |
 | USB HID keyboard driver | Not started | PS/2 only; insufficient for many PCs |
 | VirtIO input driver | Not started | Useful for QEMU and cloud targets |
-| PS/2 mouse hardware driver completion | Partial | Mouse scaffold exists in desktop builds |
+| PS/2 mouse hardware driver | Not started | Deleted with the desktop stack; needed only when a userland desktop exists |
 | Keyboard layout / locale selection | Not started | Installer expects this later |
 | Language selection in installer | Not started | Documented in installed-system-pattern |
 
@@ -329,18 +329,22 @@ The highest-impact pending work is:
 | Move `filemgr` / `textedit` onto shared widget toolkit | Partial | Functional but hand-drawn |
 | Serial mirror for interactive console output | Not started | klog uses serial; shell output does not mirror |
 
-### 9.3 GUI stack — P3
+### 9.3 GUI stack — removed, not scheduled
+
+The desktop stack (window manager, desktop shell, graphical desktop, framebuffer terminal, cursor, PS/2 mouse and the `gfx_*` helpers) was deleted rather than left in the tree as scaffolding. It did not implement a working surface, yet it consumed boot memory, published "ready" boot markers and forced the smoke tests to assert on non-functional systems.
+
+A graphical surface returns only after the kernel has processes, a working driver model and a framebuffer driver with a defined memory budget; it will then be a userland client rather than kernel code.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Complete 2D software renderer primitives | Partial | Basic primitives exist |
-| Text rendering on framebuffer | Not started | Open item in implementation-roadmap Phase 7 |
+| 2D software renderer primitives | Partial | Text-grid primitives used by the terminal UI |
+| Text rendering on framebuffer | Not started | Requires a framebuffer driver with a memory budget |
 | Reusable GUI widget set | Not started | TUI widget demo only |
-| Production window manager | Scaffold only | Alpha text-grid WM |
-| Production desktop shell | Scaffold only | Optional preview build |
-| Graphical terminal | Not started | Planned in os-roadmap Stage 9 |
-| Color terminal themes for provisioning UI | Not started | Style helpers exist; theme system missing |
-| Framebuffer-backed higher-resolution terminal modes | Not started | |
+| Window manager | Removed | Deleted; will be userland |
+| Desktop shell | Removed | Deleted; will be userland |
+| Graphical terminal | Removed | Deleted with the desktop stack |
+| Framebuffer-backed higher-resolution terminal | Not started | |
+| Color terminal themes | Not started | Style helpers exist; theme system missing |
 
 ---
 
@@ -480,7 +484,7 @@ Reference: implementation-roadmap Phase 9, os-roadmap Stage 10
 | Multi-arch boot test matrix | Not started | |
 | Disk-boot CI smoke test | Not started | |
 | `make compat-report` generation | Not started | Proposed compatibility summary |
-| Test boot profile split for terminal-only vs desktop builds | Partial | Desktop markers checked even in some infra tests |
+| Test boot markers centralised in `tests/boot-markers.txt` | Done | Desktop markers removed from boot contracts |
 | Visual Studio project alignment with all Make targets | Partial | VS Makefile project exists |
 
 ---
@@ -493,7 +497,7 @@ These items are intentionally not scheduled until earlier contracts are stable:
 |------|--------|
 | Dynamic kernel module loading | Deferred in os-roadmap development rules |
 | WASM / bytecode / script runtimes | After paging, syscalls and native launch work |
-| Full GUI as default boot path | Terminal-first product direction |
+| Any desktop or window manager | Terminal-first; desktop stack removed until processes, drivers and a framebuffer driver exist |
 | Physical ARM boards | After QEMU `virt` repeatable tests |
 | Custom bootloader replacement | GRUB/Limine evaluation deferred |
 | SMP | After single-core scheduler is complete |
@@ -561,13 +565,12 @@ This order respects the phase dependencies documented in `docs/implementation-ro
 34. Host provisioning workbench commands
 35. TinyLink transport
 
-### Wave 8 — applications and optional GUI (P2–P3)
+### Wave 8 — applications (P2)
 
 36. Native app launch and `tappinstall`
 37. `ps`, `kill`, `service`
-38. Framebuffer text rendering and graphical terminal
-39. Sandbox runtimes (WASM, bytecode, script)
-40. Production GUI widget set and desktop shell
+38. Sandbox runtimes (WASM, bytecode, script)
+39. (removed) Desktop shell and window manager: deleted from the tree; a graphical surface returns as a userland client after the kernel has processes, drivers and a framebuffer driver
 
 ---
 

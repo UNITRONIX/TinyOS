@@ -5,6 +5,7 @@
 #include <tinyos/kernel/vfs/mount.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 #include <tinyos/kernel/vfs/vfs.hpp>
+#include <tinyos/libk/path.hpp>
 
 namespace
 {
@@ -79,27 +80,6 @@ namespace
 
         return tinyos::kernel::vfs::validate_path(resolved);
     }
-
-    bool is_allowed_path_char(char value)
-    {
-        return (value >= 'a' && value <= 'z') ||
-            (value >= 'A' && value <= 'Z') ||
-            (value >= '0' && value <= '9') ||
-            value == '-' ||
-            value == '_' ||
-            value == '.';
-    }
-
-    bool is_dot_segment(const char* path, size_t segment_start, size_t segment_length)
-    {
-        return (segment_length == 1 && path[segment_start] == '.') ||
-            (segment_length == 2 && path[segment_start] == '.' && path[segment_start + 1] == '.');
-    }
-
-    bool segment_ok(const char* path, size_t segment_start, size_t segment_length)
-    {
-        return segment_length != 0 && segment_length <= MaxSegmentBytes && !is_dot_segment(path, segment_start, segment_length);
-    }
 }
 
 namespace tinyos::kernel::vfs
@@ -126,56 +106,11 @@ namespace tinyos::kernel::vfs
         return g_ready && blockfs::is_ready();
     }
 
+    // The canonical-path rules live in libk so they can be unit tested on the
+    // host; this wrapper keeps the kernel call site unchanged.
     bool validate_path(const char* path)
     {
-        if (path == nullptr || path[0] != '/')
-        {
-            return false;
-        }
-
-        if (path[1] == '\0')
-        {
-            return true;
-        }
-
-        size_t index = 1;
-        size_t segment_start = 1;
-        size_t segment_length = 0;
-        while (path[index] != '\0')
-        {
-            if (index >= MaxPathBytes)
-            {
-                return false;
-            }
-
-            if (path[index] == '/')
-            {
-                if (!segment_ok(path, segment_start, segment_length))
-                {
-                    return false;
-                }
-
-                segment_start = index + 1;
-                segment_length = 0;
-                ++index;
-                continue;
-            }
-
-            if (!is_allowed_path_char(path[index]))
-            {
-                return false;
-            }
-
-            ++segment_length;
-            if (segment_length > MaxSegmentBytes)
-            {
-                return false;
-            }
-
-            ++index;
-        }
-
-        return segment_ok(path, segment_start, segment_length);
+        return tinyos::libk::path::is_valid(path);
     }
 
     bool validation_self_test()

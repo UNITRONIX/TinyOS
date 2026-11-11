@@ -22,19 +22,24 @@ The gate runs, in order:
 | Step | Target | Purpose |
 |------|--------|---------|
 | 1 | `prepare-test-env` | Toolchain present |
-| 2 | `test-stability` | Boot smoke + longer QEMU window (`STABILITY_TEST_TIMEOUT`, default 20s) |
-| 3 | `test-terminal-boot` | Terminal-only profile still boots |
-| 4 | `install-profile-check` | Install profile contract (non-destructive) |
-| 5 | `tapp-trust-test` | Package trust / verification scaffold |
+| 2 | `test-host` | Host unit tests for pure-logic modules (path canonicalisation) |
+| 3 | `test-stability` | Boot smoke + longer QEMU window (`STABILITY_TEST_TIMEOUT`, default 20s) |
+| 4 | `test-boot-x86_64` | 64-bit bring-up still reaches long mode with a valid GDT/TSS/IDT |
+| 5 | `test-memory-scaling` | Frame pool tracks installed RAM at 32M, 512M and 2G |
+| 6 | `test-minimal` | Minimum RAM envelope still boots |
+| 7 | `test-disk-boot` | Raw disk boot path still works |
+| 8 | `install-profile-check` | Install profile contract (non-destructive) |
+| 9 | `tapp-trust-test` | Package trust / verification scaffold |
 
 Add wave-specific targets when the change touches those areas:
 
 | Change area | Extra automated tests |
 |-------------|----------------------|
-| Memory / paging / low RAM | `make test-minimal`, optionally `make test-minimal-probe` |
-| Graphical desktop | `make test-gui-boot` |
+| Memory / paging / low RAM | `make test-memory-scaling`, `make test-minimal`, optionally `make test-minimal-probe` |
 | Image / provisioning | `make image-deploy-check-test`, `make tapp-sign-test` |
-| Scheduler / preemption | grep boot log for context-switch and watchdog markers (see Fala 1 in `docs/plan-dojrzalosci-systemu.md`) |
+| Scheduler / preemption | `make test-boot` verifies the context-switch and watchdog markers via `tests/boot-markers.txt` |
+| Storage / block devices | `make test-virtio-block`, `make test-ata-block` |
+| x86_64 backend | `make test-boot-x86_64` (contract in `tests/boot-markers-x86_64.txt`) |
 
 ### Manual security checks (required in shell)
 
@@ -61,6 +66,32 @@ A change scope is **done** only when:
 2. Manual `syscheck`, `securityinfo` and `integritycheck` show no regressions
 3. Wave-specific acceptance criteria from `docs/plan-dojrzalosci-systemu.md` are met
 4. New boot markers or shell commands introduced by the change are covered by `make test-boot` or documented in this file
+
+## Host unit tests
+
+`make test-host` compiles pure-logic modules for the host and runs them, with no
+emulator involved. They exist because security-relevant validators used to be
+testable only by booting the kernel and typing at a shell.
+
+| File | Covers |
+|------|--------|
+| `tests/host/test_path.cpp` | `libk/path.cpp`: canonical absolute paths, dot segments, repeated and trailing separators, shell metacharacters, embedded control characters, segment and path limits, prefix rules |
+
+Anything that is a pure function over data belongs here rather than in a boot
+marker. If a parser has no kernel dependency, extract it into `libk/` and add a
+host test.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the same sequence locally:
+
+```sh
+scripts/ci-local.sh
+```
+
+CI executes host unit tests, both architecture builds and boot smoke tests,
+memory scaling, VirtIO and ATA storage boot tests, and the host-side install and
+package-trust contracts. Boot logs are uploaded as artefacts on every run.
 
 ---
 
@@ -123,14 +154,9 @@ Run a headless boot smoke test in QEMU:
 make test-boot
 ```
 
-The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and the boot, architecture capability manifest, platform compatibility manifest, PC platform initialization contract, PC required device classes, kernel section protection contract, boot-module validation, boot-module address-space tracking, ELF validation, RAMFS file tools, syscall validation, syscall boundary policy, syscall definition table, syscall filter policy, syscall resource limit policy, syscall scheduling primitives, initial process contract, device registry, RAM block device, block VFS mount, framebuffer surface, linear framebuffer boot contract, device RAMFS metadata, renderer, pixel renderer contract, cursor scaffold, terminal UI, terminal style contract, TUI widgets, window manager, desktop shell prototype, fullscreen desktop mode, desktop input interactions, UI event queue, address-space, address-space protection flag, address-space paging policy diagnostics, bootstrap paging policy application, runtime paging, runtime paging policy self-test, paging, paging protection flag, PIT IRQ0, keyboard IRQ1, task stack ownership, active context switch, scheduler tick, scheduler round-robin policy and scheduler sleep/wake markers appear.
+The smoke test captures serial output through QEMU's serial file backend in `build/boot-smoke.log` and passes when QEMU keeps running until the timeout and every marker listed in `tests/boot-markers.txt` appears.
 
-Run a lighter terminal-only boot smoke test:
-
-```sh
-scripts/tinyos-dev.sh test-terminal
-# or: make test-terminal-boot
-```
+That marker file is the single source of truth for boot contracts. Add a line to it whenever a new subsystem starts publishing a `klog` readiness marker, and remove the line when the subsystem goes away. Keeping the list in a file avoids the unmaintainable chained `grep` expressions the Makefile used to carry.
 
 Run a longer runtime stability check:
 
@@ -157,24 +183,14 @@ make test-minimal-probe MINIMAL_PROBE_MEMORY="32M 24M 16M"
 
 This target runs `test-minimal` once per memory value and writes separate logs such as `build/boot-minimal-24M.log`.
 
-Probe sub-16 MiB and KiB-scale RAM values with terminal-only boot markers:
+Probe sub-16 MiB and KiB-scale RAM values with core boot markers:
 
 ```sh
 make test-lowmem-probe
 make test-lowmem-probe LOWMEM_PROBE_MEMORY="3M 2624K 2561K 2560K 2M 64K"
 ```
 
-This target checks only the core boot, system requirements and terminal UI markers. It intentionally does not require desktop markers. The current desktop-capable QEMU/GRUB ISO probe passes at `2561K` and fails at `2560K` and `64K` with no TinyOS serial output.
-
-Build and test the physical terminal-only profile, which omits the desktop, window manager, cursor and PS/2 mouse objects from the linked kernel:
-
-```sh
-make terminal-only-iso
-make test-terminal-lowmem-probe
-make test-terminal-lowmem-probe LOWMEM_PROBE_MEMORY="2880K 2624K 2529K 2528K 2M 64K"
-```
-
-The current terminal-only kernel is about `238K` on disk versus about `280K` for the desktop-capable kernel. The reference QEMU/GRUB probe reaches `2529K`; `2528K`, `2M` and `64K` fail before TinyOS emits serial output. Some nearby values can be non-monotonic on the GRUB/QEMU ISO path, so treat this as a boot-path probe rather than a supported RAM baseline.
+This target checks only the core boot, system requirements and terminal UI markers. The reference QEMU/GRUB ISO probe currently passes at `2561K` and fails at `2560K` and `64K` with no TinyOS serial output. The kernel links at `1M`, so a `64K` machine cannot run this image at all; nearby KiB values can also be non-monotonic because the failure happens inside GRUB before TinyOS logging starts.
 
 Validate install-profile safety rules without writing disks:
 
@@ -224,29 +240,14 @@ Run interactively with VGA output:
 make run
 ```
 
-Run TinyOS and start the optional desktop from the terminal:
+Run headless with the serial console on stdout:
 
 ```sh
-make run-gui
+make run-headless
+# or: scripts/tinyos-dev.sh run-serial
 ```
 
-This uses the safe text console boot path. Start the desktop with `desktop`; use `q` to return to the terminal.
-
-The framebuffer desktop preview is kept separate because TinyOS does not yet have a full framebuffer text console:
-
-```sh
-make run-framebuffer-preview
-```
-
-That target boots the linear framebuffer build and autostarts the graphical desktop directly. It is the current path for the pixel renderer, PS/2 mouse cursor, dock, draggable windows and clickable app launchers. Use `q` to leave the graphical session; the normal `make run-gui` path remains the safe terminal-first boot.
-
-Run the graphical boot smoke test:
-
-```sh
-make test-gui-boot
-```
-
-Run the debug boot image:
+Run the debug boot image with serial checkpoints:
 
 ```sh
 make debug-run
@@ -254,4 +255,4 @@ make debug-run
 
 ## Current limitation
 
-The project currently builds an ISO image. A USB or microSD-friendly raw `.img` workflow is planned after the boot media design and storage assumptions are made explicit.
+The project builds an ISO image. `make disk-image` produces a hybrid boot disk image, and `make virtio-disk-image` produces a data disk for the VirtIO block test path.

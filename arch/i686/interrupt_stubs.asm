@@ -28,12 +28,24 @@ isr_stub_%1:
 
 isr_common:
     pusha
+    ; Layout after pusha, push error and push vector:
+    ;   [esp+32] vector, [esp+36] error code, [esp+40] eip,
+    ;   [esp+44] cs,     [esp+48] eflags
+    ; Capture into registers before pushing: every push shifts the remaining
+    ; offsets, so reading them lazily would forward garbage frame fields.
+    ; pusha already saved ebx/esi, and popa restores them afterwards.
     mov eax, [esp + 32]
     mov edx, [esp + 36]
+    mov ecx, [esp + 40]
+    mov ebx, [esp + 44]
+    mov esi, [esp + 48]
+    push esi
+    push ebx
+    push ecx
     push edx
     push eax
     call interrupt_dispatch
-    add esp, 8
+    add esp, 20
     popa
     add esp, 8
     iretd

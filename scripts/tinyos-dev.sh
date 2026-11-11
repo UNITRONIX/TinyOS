@@ -22,7 +22,6 @@ Commands:
   check             Verify build and test toolchain (make prepare-test-env)
   build             Build kernel only (make all)
   iso               Build bootable ISO (make iso)
-  terminal-iso      Build terminal-only ISO (make terminal-only-iso)
   run               Run TinyOS interactively with VGA (make run)
   run-serial        Run headless with serial on stdout (make run-headless)
   debug-run         Run debug ISO with serial checkpoints (make debug-run)
@@ -32,7 +31,6 @@ Commands:
   test-disk-boot    Raw disk boot test (requires disk-image)
   disk-image        Create bootable raw disk image (build/tinyos.img)
   virtio-disk-image Create VirtIO data disk image (build/tinyos-disk.img)
-  test-terminal     Terminal-only boot smoke test
   test-stability    Longer boot smoke test (make test-stability)
   test-minimal      Minimum RAM envelope test (make test-minimal)
   clean             Remove build artifacts (make clean)
@@ -86,9 +84,6 @@ case "$cmd" in
     iso)
         run_make iso
         ;;
-    terminal-iso)
-        run_make terminal-only-iso
-        ;;
     run)
         run_make run
         ;;
@@ -115,9 +110,6 @@ case "$cmd" in
         ;;
     virtio-disk-image|virtio-disk)
         run_make virtio-disk-image
-        ;;
-    test-terminal|test-terminal-boot)
-        run_make test-terminal-boot
         ;;
     test-stability|stability)
         run_make test-stability

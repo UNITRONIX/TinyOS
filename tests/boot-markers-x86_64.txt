@@ -1,0 +1,7 @@
+TinyOS x86_64 bootstrap
+Long mode entered.
+GDT and TSS loaded.
+IDT loaded.
+x86_64 long mode active.
+x86_64 bootstrap complete.
+TinyOS booted successfully.

@@ -14,6 +14,7 @@ namespace tinyos::kernel::security::accounts
 
     void initialize();
     bool is_ready();
+    bool development_credentials_active();
     size_t count();
     const Account* at(size_t index);
     bool authenticate(const char* name, const char* password);

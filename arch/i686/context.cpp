@@ -11,6 +11,11 @@ namespace
         return flags;
     }
 
+    bool interrupts_enabled()
+    {
+        return (read_eflags() & 0x00000200u) != 0;
+    }
+
     uint32_t read_eip_marker()
     {
         uint32_t value = 0;
@@ -24,6 +29,7 @@ namespace
     }
 }
 
+extern "C" void tinyos_context_entry_trampoline();
 namespace tinyos::arch::context
 {
     void clear(Context& context)
@@ -36,6 +42,7 @@ namespace tinyos::arch::context
         context.eip = 0;
         context.argument = 0;
         context.eflags = 0;
+        context.trampoline = 0;
         context.magic = 0;
     }
 
@@ -67,6 +74,7 @@ namespace tinyos::arch::context
         context.eip = read_eip_marker();
         context.argument = 0;
         context.eflags = read_eflags();
+        context.trampoline = 0;
         context.magic = ContextMagic;
     }
 
@@ -85,14 +93,20 @@ namespace tinyos::arch::context
             return false;
         }
 
+        // The trampoline reads its two arguments from the top of the new stack
+        // and then builds a real call frame, so it does not depend on the task
+        // entry function returning.
         auto* stack_pointer = reinterpret_cast<uint32_t*>(aligned_stack_top);
         *--stack_pointer = reinterpret_cast<uint32_t>(argument);
-        *--stack_pointer = 0;
+        *--stack_pointer = reinterpret_cast<uint32_t>(entry);
 
         context.esp = reinterpret_cast<uint32_t>(stack_pointer);
-        context.eip = reinterpret_cast<uint32_t>(entry);
+        context.eip = reinterpret_cast<uint32_t>(&tinyos_context_entry_trampoline);
         context.argument = reinterpret_cast<uint32_t>(argument);
+        // Interrupts must be enabled for a new task: the trampoline relies on
+        // this flag being restored by the context switch.
         context.eflags = 0x00000202;
+        context.trampoline = reinterpret_cast<uint32_t>(&tinyos_context_entry_trampoline);
         context.magic = ContextMagic;
         return true;
     }
@@ -125,6 +139,11 @@ namespace tinyos::arch::context
         return true;
     }
 
+    bool entry_trampoline_ready()
+    {
+        return reinterpret_cast<uintptr_t>(&tinyos_context_entry_trampoline) != 0;
+    }
+
     void switch_context(Context* from, Context* to)
     {
         if (to == nullptr || !is_valid(*to))
@@ -132,11 +151,31 @@ namespace tinyos::arch::context
             return;
         }
 
+        // Keep the switch inside a critical section and store this task's
+        // interrupt flag in its own saved frame. A resumed task restores the
+        // flag from `from->eflags`, so no register or stack trick is needed and
+        // no IRQ can fire while ESP is being rewritten.
+        const bool interrupts_were_enabled = interrupts_enabled();
+        asm volatile ("cli" ::: "memory");
+        if (from != nullptr)
+        {
+            from->eflags = read_eflags();
+        }
+
         arch_context_switch(from, to);
+
+        // Resumed: `from` is this task again. Its saved frame already carries
+        // the flag value from the moment it was switched out.
+        if (interrupts_were_enabled)
+        {
+            asm volatile ("sti" ::: "memory");
+        }
     }
 
     bool validation_self_test()
     {
-        return context_switch_available();
+        return context_switch_available() &&
+            entry_trampoline_ready() &&
+            ContextMagic == 0x54435831;
     }
 }

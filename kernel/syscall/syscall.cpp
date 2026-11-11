@@ -1,6 +1,7 @@
 #include <tinyos/arch/gdt.hpp>
 #include <tinyos/drivers/vga.hpp>
 #include <tinyos/kernel/klog.hpp>
+#include <tinyos/kernel/memory/user_access.hpp>
 #include <tinyos/kernel/sched/scheduler.hpp>
 #include <tinyos/kernel/syscall/syscall.hpp>
 #include <tinyos/kernel/user/transition.hpp>
@@ -34,7 +35,7 @@ namespace
 
     tinyos::kernel::syscall::Definition g_definitions[] = {
         { tinyos::kernel::syscall::Number::Write, "write", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
-        { tinyos::kernel::syscall::Number::Read, "read", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferWrite, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
+        { tinyos::kernel::syscall::Number::Read, "read", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferWrite, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
         { tinyos::kernel::syscall::Number::Open, "open", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
         { tinyos::kernel::syscall::Number::Close, "close", 1, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, true },
         { tinyos::kernel::syscall::Number::Spawn, "spawn", 2, tinyos::kernel::syscall::ArgumentKind::UserBufferRead, tinyos::kernel::syscall::ArgumentKind::Scalar, tinyos::kernel::syscall::ArgumentKind::None, tinyos::kernel::syscall::ArgumentKind::None, false },
@@ -61,7 +62,11 @@ namespace
 
     bool validate_buffer(uintptr_t address, size_t length, bool count_failure)
     {
-        if (address < NullPageLimit)
+        // Delegate to the page-table walker rather than range-checking: a range
+        // check accepts unmapped addresses, kernel pages and guard pages as long
+        // as the numbers look plausible.
+        const auto status = tinyos::kernel::memory::user_access::probe(address, length, false);
+        if (status != tinyos::kernel::memory::user_access::Status::Ok)
         {
             if (count_failure)
             {
@@ -70,16 +75,7 @@ namespace
             return false;
         }
 
-        if (length == 0 || length > MaxUserBufferBytes)
-        {
-            if (count_failure)
-            {
-                ++g_validation_failure_count;
-            }
-            return false;
-        }
-
-        if (range_overflows(address, length))
+        if (length == 0)
         {
             if (count_failure)
             {
@@ -312,29 +308,12 @@ namespace tinyos::kernel::syscall
         }
         case Number::Read:
         {
-            if (request.arg0 < 3 || request.arg0 - 3 >= MaxOpenFiles)
-            {
-                return make_result(Status::InvalidPointer);
-            }
-
-            const auto* node = g_open_files[request.arg0 - 3];
-            if (node == nullptr || node->directory)
-            {
-                return make_result(Status::Unsupported);
-            }
-
-            const char* data = nullptr;
-            size_t size = 0;
-            if (!tinyos::kernel::vfs::read_file(node, data, size) || data == nullptr)
-            {
-                return make_result(Status::Unsupported);
-            }
-
-            auto* out = reinterpret_cast<char*>(static_cast<uintptr_t>(request.arg0)); // wrong - arg0 is buffer for Read
-            (void)out;
-            // Read ABI: arg0=buffer, arg1=length. Open fds are separate; for now copy from /users/notes.txt if no fd model.
-            // Reinterpret: TinyOS Read uses buffer+length only; source is stdin stub (empty).
-            return make_result(Status::Ok, 0);
+            // The current ABI defines read(buffer, length) with no file
+            // descriptor, so there is no way to name a source object. Reporting
+            // Unsupported keeps the table honest instead of pretending to
+            // succeed while copying nothing. Phase E replaces this with a
+            // descriptor-based read(fd, buffer, length) once processes exist.
+            return make_result(Status::Unsupported);
         }
         case Number::Open:
         {
@@ -436,30 +415,37 @@ namespace tinyos::kernel::syscall
     {
         const size_t failures_before = g_validation_failure_count;
         const size_t rejected_before = g_rejected_call_count;
+
+        // This runs during boot, before any user process has mappings, so there
+        // is no guaranteed user-accessible address to test against. The test
+        // therefore covers the rejection paths, which are the ones that protect
+        // the kernel, and validates acceptance indirectly through the boundary
+        // policy contract.
         const Request unknown_request = { count(), 0, 0, 0, 0 };
         const Request null_write_request = { static_cast<uint32_t>(Number::Write), 0, 8, 0, 0 };
         const Request oversized_write_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, MaxUserBufferBytes + 1, 0, 0 };
-        const Request accepted_shape_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, 16, 0, 0 };
-        const Request accepted_open_shape_request = { static_cast<uint32_t>(Number::Open), NullPageLimit, 16, 0, 0 };
+        const Request kernel_buffer_request = {
+            static_cast<uint32_t>(Number::Write),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_ready)),
+            16, 0, 0
+        };
 
-        const bool direct_valid = validate_buffer(NullPageLimit, 16, false);
         const bool direct_null_rejected = !validate_buffer(0, 16, false);
+        const bool direct_kernel_rejected = !validate_buffer(reinterpret_cast<uintptr_t>(&g_ready), 16, false);
         const bool unknown_rejected = dispatch(unknown_request).status == Status::UnknownSyscall;
         const bool null_rejected = dispatch(null_write_request).status == Status::InvalidPointer;
         const bool oversized_rejected = dispatch(oversized_write_request).status == Status::InvalidLength;
-        const bool accepted_write = dispatch(accepted_shape_request).status == Status::Ok;
-        const bool open_shape_validated = validate_request_shape(accepted_open_shape_request) == Status::Ok;
+        const bool kernel_buffer_rejected = dispatch(kernel_buffer_request).status == Status::InvalidPointer;
 
         g_validation_failure_count = failures_before;
         g_rejected_call_count = rejected_before;
 
-        return direct_valid
-            && direct_null_rejected
+        return direct_null_rejected
+            && direct_kernel_rejected
             && unknown_rejected
             && null_rejected
             && oversized_rejected
-            && accepted_write
-            && open_shape_validated
+            && kernel_buffer_rejected
             && boundary_policy_validation_self_test()
             && definition_validation_self_test()
             && filter_policy_validation_self_test()
@@ -512,14 +498,14 @@ namespace tinyos::kernel::syscall
     {
         return g_filter_policy.deny_unimplemented &&
             g_filter_policy.count_filtered_as_rejected &&
-            implemented_definition_count() == 7;
+            implemented_definition_count() == 6;
     }
 
     bool resource_policy_validation_self_test()
     {
         const size_t rejected_before = g_rejected_call_count;
         g_rejected_call_count = g_resource_policy.max_rejected_calls_before_throttle;
-        const Request valid_shape_request = { static_cast<uint32_t>(Number::Write), NullPageLimit, 16, 0, 0 };
+        const Request valid_shape_request = { static_cast<uint32_t>(Number::Write), static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_ready)), 16, 0, 0 };
         const bool throttled = throttle_active() && dispatch(valid_shape_request).status == Status::RateLimited;
         g_rejected_call_count = rejected_before;
 
