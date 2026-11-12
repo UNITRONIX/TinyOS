@@ -15,6 +15,22 @@ namespace tinyos::kernel::sched
     void irq_leave();
     void irq_preempt_tail();
     void sleep_ticks(uint64_t ticks);
+
+    // Marks the current task as waiting for an external event (keyboard, serial)
+    // rather than executing.
+    //
+    // The preemption watchdog measures ticks since the last context switch, so a
+    // task blocked in `hlt` waiting for input looked identical to a task stuck in
+    // a loop. That produced a "Task watchdog: task exceeded time slice without
+    // yield" warning every time the shell sat at the prompt. Entering an idle
+    // wait excludes those ticks from the watchdog budget; leaving it restarts the
+    // budget without counting the wait as a failure.
+    void begin_idle_wait();
+    void end_idle_wait();
+    bool idle_wait_active();
+
+    // Number of times a task entered an idle wait. Diagnostic only.
+    uint64_t idle_wait_enter_count();
     const tinyos::kernel::task::Task* current_task();
     uint64_t tick_count();
     uint64_t yield_count();

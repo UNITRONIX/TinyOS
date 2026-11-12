@@ -1,161 +1,74 @@
-#include <stddef.h>
-#include <stdint.h>
+// Compatibility projection of the command registry.
+//
+// See the header for why this file no longer owns a table. The important
+// property here is that there is exactly one list of commands in the binary:
+// libshell::registry. Everything below reads from it.
 
 #include <tinyos/kernel/admin/tools.hpp>
 #include <tinyos/kernel/klog.hpp>
+#include <tinyos/libshell/registry.hpp>
 
 namespace
 {
-    using tinyos::kernel::admin::tools::Category;
-    using tinyos::kernel::admin::tools::State;
-    using tinyos::kernel::admin::tools::Tool;
-
-    const Tool g_tools[] = {
-        { "help", "show shell commands", Category::Shell, State::Ready, false, false },
-        { "helpui", "open interactive command browser", Category::Shell, State::Ready, true, false },
-        { "helpsearch", "search terminal command help", Category::Shell, State::Ready, false, false },
-        { "helplist", "print classic command list", Category::Shell, State::Ready, false, false },
-        { "fileui", "open terminal file browser", Category::Files, State::Ready, true, false },
-        { "filemgr", "open two-pane terminal file manager", Category::Files, State::Ready, true, false },
-        { "textedit", "open interactive RAMFS text editor", Category::Files, State::Ready, true, false },
-        { "tools", "list management tools", Category::Shell, State::Ready, false, false },
-        { "toolinfo", "show management tool manifest summary", Category::Shell, State::Ready, false, false },
-        { "tool", "show one management tool", Category::Shell, State::Ready, false, false },
-        { "status", "show compact terminal system dashboard", Category::Shell, State::Ready, false, false },
-        { "sysinfo", "show TinyOS system information", Category::Shell, State::Ready, false, false },
-        { "syscheck", "run non-destructive system health checks", Category::Security, State::Ready, false, false },
-        { "riskinfo", "list state-writing and high-risk tools", Category::Security, State::Ready, false, false },
-        { "profileinfo", "show active system profile", Category::Security, State::Ready, false, false },
-        { "profilecheck", "validate active system profile", Category::Security, State::Ready, false, false },
-        { "aliases", "show compatibility aliases", Category::Shell, State::Ready, false, false },
-        { "clear", "clear console screen", Category::Shell, State::Ready, true, false },
-        { "pwd", "show current shell directory", Category::Files, State::Ready, false, false },
-        { "cd", "change current shell directory", Category::Files, State::Ready, true, false },
-        { "mkdir", "create RAMFS directory", Category::Files, State::Ready, true, false },
-        { "touch", "create writable RAMFS file", Category::Files, State::Ready, true, false },
-        { "chmod", "change RAMFS access mode", Category::Files, State::Ready, true, true },
-        { "files", "list RAMFS directory", Category::Files, State::Ready, false, false },
-        { "fsmap", "show RAMFS tree", Category::Files, State::Ready, false, false },
-        { "show", "print RAMFS file", Category::Files, State::Ready, false, false },
-        { "describe", "show RAMFS node metadata", Category::Files, State::Ready, false, false },
-        { "pathcheck", "validate and inspect a VFS path", Category::Files, State::Ready, false, false },
-        { "write", "overwrite writable RAMFS file", Category::Files, State::Ready, true, true },
-        { "edit", "compatibility alias for writable RAMFS edit", Category::Files, State::Ready, true, true },
-        { "copy", "copy readable RAMFS file", Category::Files, State::Ready, true, false },
-        { "move", "move runtime RAMFS node", Category::Files, State::Ready, true, true },
-        { "remove", "remove runtime RAMFS node", Category::Files, State::Ready, true, true },
-        { "fstest", "run RAMFS file operation self-test", Category::Files, State::Ready, true, false },
-        { "ramfsinfo", "show RAMFS state", Category::Files, State::Ready, false, false },
-        { "vfsinfo", "show VFS state", Category::Files, State::Ready, false, false },
-        { "blockinfo", "show RAM block device", Category::Storage, State::Ready, false, false },
-        { "storageinfo", "show block VFS mount", Category::Storage, State::Ready, false, false },
-        { "devices", "list device registry", Category::Devices, State::Ready, false, false },
-        { "device", "show one device", Category::Devices, State::Ready, false, false },
-        { "fbinfo", "show framebuffer surface", Category::Devices, State::Ready, false, false },
-        { "meminfo", "show parsed memory map", Category::Memory, State::Ready, false, false },
-        { "frameinfo", "show physical frame allocator", Category::Memory, State::Ready, false, false },
-        { "heapinfo", "show kernel heap", Category::Memory, State::Ready, false, false },
-        { "heaptest", "run heap self-test", Category::Memory, State::Ready, true, false },
-        { "paginginfo", "show paging scaffold", Category::Memory, State::Ready, false, false },
-        { "addrspaceinfo", "show address-space scaffold", Category::Memory, State::Ready, false, false },
-        { "runtimeinfo", "show language runtime manifest", Category::Runtime, State::Ready, false, false },
-        { "appinfo", "show app capability profiles", Category::Runtime, State::Ready, false, false },
-        { "launchinfo", "show launch policy counters", Category::Runtime, State::Ready, false, false },
-        { "launchcheck", "dry-check app launch policy", Category::Runtime, State::Ready, true, false },
-        { "tappinfo", "show TAPP package registry summary", Category::Runtime, State::Ready, false, false },
-        { "tapps", "list TAPP packages", Category::Runtime, State::Ready, false, false },
-        { "tapp", "show one TAPP package", Category::Runtime, State::Ready, false, false },
-        { "tappcheck", "dry-check TAPP launch readiness", Category::Runtime, State::Ready, true, false },
-        { "tappverify", "verify TAPP install gate policy", Category::Security, State::Ready, true, false },
-        { "trustinfo", "show TAPP trust store", Category::Security, State::Ready, false, false },
-        { "trust", "show one TAPP trust anchor", Category::Security, State::Ready, false, false },
-        { "imageinfo", "show secure image pipeline", Category::Runtime, State::Ready, false, false },
-        { "provisioninfo", "show provisioning workflow", Category::Runtime, State::Ready, false, false },
-        { "deployinfo", "show remote deployment plan", Category::Runtime, State::Ready, false, false },
-        { "installinfo", "show installed-system contract", Category::Runtime, State::Ready, false, false },
-        { "installcheck", "validate installer mock preflight", Category::Development, State::Ready, false, false },
-        { "install", "write mock install receipt to RAMFS", Category::Development, State::Ready, true, false },
-        { "syscallinfo", "show syscall ABI scaffold", Category::Runtime, State::Ready, false, false },
-        { "userinfo", "show user transition scaffold", Category::Runtime, State::Ready, false, false },
-        { "elfinfo", "show ELF loader scaffold", Category::Runtime, State::Ready, false, false },
-        { "modulesinfo", "show boot modules", Category::Runtime, State::Ready, false, false },
-        { "securityinfo", "show security scaffold", Category::Security, State::Ready, false, false },
-        { "integritycheck", "run allocator integrity check", Category::Security, State::Ready, true, false },
-        { "requirements", "show platform requirements", Category::Security, State::Ready, false, false },
-        { "platforminfo", "show platform compatibility manifest", Category::Devices, State::Ready, false, false },
-        { "pcinfo", "show PC platform init contract", Category::Devices, State::Ready, false, false },
-        { "archinfo", "show architecture capability manifest", Category::Devices, State::Ready, false, false },
-        { "renderinfo", "show renderer state", Category::Ui, State::Ready, false, false },
-        { "cursorinfo", "show cursor scaffold state", Category::Ui, State::Ready, false, false },
-        { "terminalinfo", "show terminal UI state", Category::Ui, State::Ready, false, false },
-        { "terminalstyle", "draw styled terminal sections", Category::Ui, State::Ready, true, false },
-        { "widgetinfo", "show widget state", Category::Ui, State::Ready, false, false },
-        { "wminfo", "show window manager state", Category::Ui, State::Ready, false, false },
-        { "desktopinfo", "show desktop shell state", Category::Ui, State::Ready, false, false },
-        { "uieventinfo", "show UI event queue", Category::Ui, State::Ready, false, false },
-        { "inputinfo", "show input queue", Category::Ui, State::Ready, false, false },
-        { "keyboardinfo", "show keyboard driver", Category::Ui, State::Ready, false, false },
-        { "schedinfo", "show scheduler policy state", Category::Scheduling, State::Ready, false, false },
-        { "taskinfo", "show kernel tasks", Category::Scheduling, State::Ready, false, false },
-        { "contextinfo", "show context switch ABI", Category::Scheduling, State::Ready, false, false },
-        { "timerinfo", "show PIT timer", Category::Scheduling, State::Ready, false, false },
-        { "uptime", "show PIT ticks", Category::Scheduling, State::Ready, false, false },
-        { "reboot", "reboot machine", Category::Power, State::Ready, true, true },
-        { "int3", "trigger breakpoint exception", Category::Development, State::Ready, true, true },
-        { "panic", "trigger kernel panic", Category::Development, State::Ready, true, true },
-        { "mount", "mount storage volumes", Category::Storage, State::Planned, true, false },
-        { "ps", "list kernel tasks", Category::Scheduling, State::Ready, false, false },
-        { "kill", "stop a process", Category::Scheduling, State::Planned, true, true },
-        { "service", "manage system services", Category::Scheduling, State::Planned, true, true },
-        { "useradd", "create user identity", Category::Security, State::Ready, true, true },
-        { "hostname", "set installed device name", Category::Devices, State::Planned, true, false },
-        { "netconfig", "configure network profile", Category::Devices, State::Planned, true, true },
-        { "passwd", "rotate account credential", Category::Security, State::Planned, true, true },
-        { "whoami", "show active identity", Category::Security, State::Ready, false, false },
-        { "id", "show identity and permissions", Category::Security, State::Ready, false, false },
-        { "package", "manage system packages", Category::Development, State::Planned, true, true },
-        { "tappinstall", "install a TAPP package", Category::Development, State::Planned, true, true },
-        { "tappremove", "remove a TAPP package", Category::Development, State::Planned, true, true },
-        { "imagebuild", "build a bootable TinyOS image", Category::Development, State::Planned, true, false },
-        { "imagesign", "sign a TinyOS image or manifest", Category::Security, State::Planned, true, true },
-        { "imageencrypt", "encrypt a TinyOS image for a target", Category::Security, State::Planned, true, true },
-        { "keygen", "create deployment keys", Category::Security, State::Planned, true, true },
-        { "provisionui", "open provisioning workbench UI", Category::Development, State::Planned, true, false },
-        { "provisioninit", "create isolated project workspace", Category::Development, State::Planned, true, false },
-        { "provisionconfig", "configure project provisioning defaults", Category::Development, State::Planned, true, true },
-        { "provisionvariant", "manage provisioning device variants", Category::Development, State::Planned, true, false },
-        { "provisionapi", "show project API and capability surface", Category::Runtime, State::Planned, false, false },
-        { "provisionresources", "estimate project RAM and ROM budget", Category::Memory, State::Planned, false, false },
-        { "remoteaccess", "manage remote access to project workspace", Category::Security, State::Planned, true, true },
-        { "terminaltheme", "manage terminal color theme", Category::Ui, State::Planned, true, false },
-        { "videomode", "select console or framebuffer mode", Category::Ui, State::Planned, true, true },
-        { "deploy", "send image through a remote transport", Category::Development, State::Planned, true, true },
-        { "provision", "activate an image on a target", Category::Development, State::Planned, true, true },
-        { "rollback", "restore previous image slot", Category::Power, State::Planned, true, true },
-        { "netinfo", "show network state", Category::Devices, State::Ready, false, false }
-    };
-
     bool g_ready = false;
 
-    bool strings_equal(const char* left, const char* right)
+    // Scratch slot for at(). A caller that holds the pointer across another
+    // registry query sees the newer entry, which is documented in the header.
+    tinyos::kernel::admin::tools::Tool g_scratch = {};
+
+    tinyos::kernel::admin::tools::Category map_category(tinyos::libshell::Category category)
     {
-        if (left == nullptr || right == nullptr)
+        using Source = tinyos::libshell::Category;
+        using Target = tinyos::kernel::admin::tools::Category;
+
+        switch (category)
         {
-            return left == right;
+        case Source::Shell:
+            return Target::Shell;
+        case Source::Files:
+            return Target::Files;
+        case Source::Storage:
+            return Target::Storage;
+        case Source::Devices:
+            return Target::Devices;
+        case Source::Memory:
+            return Target::Memory;
+        case Source::Runtime:
+            return Target::Runtime;
+        case Source::Security:
+            return Target::Security;
+        case Source::Ui:
+            return Target::Ui;
+        case Source::Scheduling:
+            return Target::Scheduling;
+        case Source::Power:
+            return Target::Power;
+        case Source::Provisioning:
+        case Source::Development:
+            return Target::Development;
         }
 
-        while (*left != '\0' && *right != '\0')
-        {
-            if (*left != *right)
-            {
-                return false;
-            }
+        return Target::Shell;
+    }
 
-            ++left;
-            ++right;
-        }
+    tinyos::kernel::admin::tools::State map_state(tinyos::libshell::Availability availability)
+    {
+        // Only a command that can run right now is Ready. Everything else is
+        // Planned regardless of which blocker it has, which is the honest
+        // collapse of a five-state availability onto the historical pair.
+        return tinyos::libshell::is_available(availability)
+            ? tinyos::kernel::admin::tools::State::Ready
+            : tinyos::kernel::admin::tools::State::Planned;
+    }
 
-        return *left == '\0' && *right == '\0';
+    void fill(tinyos::kernel::admin::tools::Tool& tool, const tinyos::libshell::Command& command)
+    {
+        tool.command = command.name;
+        tool.purpose = command.summary;
+        tool.category = map_category(command.category);
+        tool.state = map_state(command.availability);
+        tool.writes_state = command.risk != tinyos::libshell::Risk::ReadOnly;
+        tool.high_risk = command.risk == tinyos::libshell::Risk::Dangerous;
     }
 }
 
@@ -163,8 +76,21 @@ namespace tinyos::kernel::admin::tools
 {
     void initialize()
     {
-        g_ready = true;
-        tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info, "System management tools manifest initialized.");
+        // The registry is populated by the shell's command modules, which run
+        // before this. If it is still empty the manifest has nothing truthful to
+        // report, so say that instead of counting zero silently.
+        const size_t registered = tinyos::libshell::command_count();
+        g_ready = registered > 0;
+
+        if (g_ready)
+        {
+            tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Info,
+                "Tool manifest projected from the command registry.");
+            return;
+        }
+
+        tinyos::kernel::klog::write_line(tinyos::kernel::klog::Level::Warn,
+            "Tool manifest has no commands: the registry is empty.");
     }
 
     bool is_ready()
@@ -174,15 +100,16 @@ namespace tinyos::kernel::admin::tools
 
     size_t count()
     {
-        return sizeof(g_tools) / sizeof(g_tools[0]);
+        return tinyos::libshell::command_count();
     }
 
     size_t ready_count()
     {
         size_t ready = 0;
-        for (size_t index = 0; index < count(); ++index)
+        for (size_t index = 0; index < tinyos::libshell::command_count(); ++index)
         {
-            if (g_tools[index].state == State::Ready)
+            const auto* command = tinyos::libshell::command_at(index);
+            if (command != nullptr && tinyos::libshell::is_available(command->availability))
             {
                 ++ready;
             }
@@ -193,24 +120,16 @@ namespace tinyos::kernel::admin::tools
 
     size_t planned_count()
     {
-        size_t planned = 0;
-        for (size_t index = 0; index < count(); ++index)
-        {
-            if (g_tools[index].state == State::Planned)
-            {
-                ++planned;
-            }
-        }
-
-        return planned;
+        return count() - ready_count();
     }
 
     size_t write_tool_count()
     {
         size_t writes = 0;
-        for (size_t index = 0; index < count(); ++index)
+        for (size_t index = 0; index < tinyos::libshell::command_count(); ++index)
         {
-            if (g_tools[index].writes_state)
+            const auto* command = tinyos::libshell::command_at(index);
+            if (command != nullptr && command->risk != tinyos::libshell::Risk::ReadOnly)
             {
                 ++writes;
             }
@@ -221,73 +140,93 @@ namespace tinyos::kernel::admin::tools
 
     size_t high_risk_count()
     {
-        size_t risky = 0;
-        for (size_t index = 0; index < count(); ++index)
+        size_t dangerous = 0;
+        for (size_t index = 0; index < tinyos::libshell::command_count(); ++index)
         {
-            if (g_tools[index].high_risk)
+            const auto* command = tinyos::libshell::command_at(index);
+            if (command != nullptr && command->risk == tinyos::libshell::Risk::Dangerous)
             {
-                ++risky;
+                ++dangerous;
             }
         }
 
-        return risky;
+        return dangerous;
     }
 
     const Tool* at(size_t index)
     {
-        return index < count() ? &g_tools[index] : nullptr;
-    }
-
-    const Tool* find(const char* command)
-    {
-        for (size_t index = 0; index < count(); ++index)
+        const auto* command = tinyos::libshell::command_at(index);
+        if (command == nullptr)
         {
-            if (strings_equal(g_tools[index].command, command))
-            {
-                return &g_tools[index];
-            }
+            return nullptr;
         }
 
-        return nullptr;
+        fill(g_scratch, *command);
+        return &g_scratch;
+    }
+
+    const Tool* find(const char* command_name)
+    {
+        const auto* command = tinyos::libshell::find(command_name);
+        if (command == nullptr)
+        {
+            return nullptr;
+        }
+
+        fill(g_scratch, *command);
+        return &g_scratch;
     }
 
     bool validation_self_test()
     {
-        return g_ready &&
-            count() >= 50 &&
-            ready_count() >= 40 &&
-            planned_count() >= 8 &&
-            write_tool_count() >= 8 &&
-            high_risk_count() >= 5 &&
-            find("files") != nullptr &&
-            find("helpsearch") != nullptr &&
-            find("status") != nullptr &&
-            find("sysinfo") != nullptr &&
-            find("syscheck") != nullptr &&
-            find("riskinfo") != nullptr &&
-            find("profileinfo") != nullptr &&
-            find("profilecheck") != nullptr &&
-            find("pathcheck") != nullptr &&
-            find("runtimeinfo") != nullptr &&
-            find("syscallinfo") != nullptr &&
-            find("appinfo") != nullptr &&
-            find("launchcheck") != nullptr &&
-            find("tappinfo") != nullptr &&
-            find("tappverify") != nullptr &&
-            find("trustinfo") != nullptr &&
-            find("imageinfo") != nullptr &&
-            find("installinfo") != nullptr &&
-            find("install") != nullptr &&
-            find("imageencrypt") != nullptr &&
-            find("installcheck") != nullptr &&
-            find("provisioninit") != nullptr &&
-            find("provisionresources") != nullptr &&
-            find("remoteaccess") != nullptr &&
-            find("deploy") != nullptr &&
+        if (!g_ready || count() == 0)
+        {
+            return false;
+        }
+
+        // The projection must agree with the registry it claims to describe.
+        // These are the invariants that the old hand-maintained table violated.
+        const size_t total = count();
+        const size_t ready = ready_count();
+
+        if (ready > total)
+        {
+            return false;
+        }
+
+        // Every command the projection reports as Ready must resolve through the
+        // registry and must be runnable. This is the check that would have caught
+        // `useradd` claiming Ready while printing "not wired to a create path".
+        for (size_t index = 0; index < total; ++index)
+        {
+            const auto* command = tinyos::libshell::command_at(index);
+            if (command == nullptr)
+            {
+                return false;
+            }
+
+            const auto* tool = find(command->name);
+            if (tool == nullptr)
+            {
+                return false;
+            }
+
+            if (tool->state == State::Ready && !tinyos::libshell::is_available(command->availability))
+            {
+                return false;
+            }
+        }
+
+        // A representative sample must exist, because the shell registers these
+        // unconditionally. If one is missing the registration order broke.
+        return find("files") != nullptr &&
+            find("help") != nullptr &&
             find("tools") != nullptr &&
-            find("filemgr") != nullptr &&
-            find("textedit") != nullptr &&
-            find("mount") != nullptr;
+            find("riskinfo") != nullptr &&
+            find("ps") != nullptr &&
+            find("meminfo") != nullptr &&
+            find("cd") != nullptr &&
+            find("whoami") != nullptr;
     }
 
     const char* category_name(Category category)

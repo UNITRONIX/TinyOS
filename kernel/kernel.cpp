@@ -183,6 +183,12 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     tinyos::drivers::vga::initialize();
     tinyos::drivers::console::initialize();
     tinyos::drivers::serial::initialize();
+
+    // Register the command surface before anything that reads it. The tool
+    // manifest, /system/tools.txt and the shell prompt all query the registry,
+    // so it must be populated before those run. Previously registration happened
+    // lazily at the first prompt, which left the manifest empty at boot.
+    tinyos::shell::initialize();
     debug_boot_checkpoint("serial ready");
     tinyos::kernel::klog::initialize();
     debug_boot_checkpoint("kernel logger ready");
@@ -378,8 +384,7 @@ extern "C" void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_ad
     TINYOS_ASSERT(tinyos::kernel::app::launcher::validation_self_test(), "Application launch policy validation failed.");
     tinyos::kernel::admin::tools::initialize();
     debug_boot_checkpoint("system management tools manifest ready");
-    TINYOS_ASSERT(tinyos::kernel::admin::tools::validation_self_test(), "System management tools manifest validation failed.");
-    tinyos::kernel::provision::image::initialize();
+    TINYOS_ASSERT(tinyos::kernel::admin::tools::validation_self_test(), "System management tools manifest validation failed.");    tinyos::kernel::provision::image::initialize();
     debug_boot_checkpoint("secure image provisioning manifest ready");
     TINYOS_ASSERT(tinyos::kernel::provision::image::validation_self_test(), "Secure image provisioning manifest validation failed.");
     tinyos::kernel::user::transition::initialize();

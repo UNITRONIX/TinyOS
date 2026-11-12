@@ -1,6 +1,9 @@
 #include <tinyos/kernel/klog.hpp>
 #include <tinyos/kernel/vfs/ramfs.hpp>
 
+#include <tinyos/libk/text.hpp>
+#include <tinyos/libshell/registry.hpp>
+
 namespace
 {
     constexpr size_t MaxRuntimeDirectories = 8;
@@ -15,7 +18,6 @@ namespace
     constexpr char AppsText[] = "ready=system-shell\nplanned=example-system-tool,desktop-shell,web-gui-host,selfhost-toolchain,bytecode-service\npolicy=runtime-capability-subset\nlauncher=profile-check-only\nsecurity=least-privilege-before-launch\ncommands=appinfo,launchinfo,launchcheck\n";
     constexpr char TappText[] = "extension=.tapp\nformat=tinyos-tapp-v0\nsignature=detached-rsa-sha256\nreceipt=.sig.receipt\nready=system-shell.tapp\nvalid=example-system-tool.tapp\nplanned=desktop-shell.tapp,web-gui-host.tapp,selfhost-toolchain.tapp\ncommands=tappinfo,tapps,tapp,tappcheck,tappverify\nhost-tools=keygen-app,trust-app,sign-app,verify-app\npolicy=signed-manifest-required,payload-hash-required,capability-subset-required\nverifier=install-gate-contract\n";
     constexpr char TrustText[] = "store=tapp-trust-v0\nready=tinyos-dev-app-signing\nplanned=tinyos-release-app-root,tinyos-image-signing-root,tinyos-recovery-root\nrevoked=tinyos-revoked-test-key\nalgorithm=rsa-sha256\ndev-key=build/keys/tapp-dev-public.pem\nhost-tool=scripts/tinyos-image.sh trust-app\ncommands=trustinfo,trust\npolicy=development-key-not-for-release,revoked-keys-never-match\n";
-    constexpr char ToolsText[] = "ready=help,helpui,helpsearch,helplist,fileui,filemgr,textedit,sysinfo,status,syscheck,riskinfo,profileinfo,profilecheck,tools,toolinfo,tool,pwd,cd,files,fsmap,show,describe,pathcheck,mkdir,touch,chmod,write,edit,copy,move,remove,fstest,devices,device,blockinfo,storageinfo,meminfo,frameinfo,heapinfo,paginginfo,addrspaceinfo,runtimeinfo,syscallinfo,appinfo,launchinfo,launchcheck,tappinfo,tapps,tapp,tappcheck,tappverify,trustinfo,trust,imageinfo,provisioninfo,deployinfo,installinfo,installcheck,install,securityinfo,integritycheck,renderinfo,terminalinfo,terminalstyle,widgetinfo,uieventinfo,schedinfo,taskinfo,timerinfo,uptime,reboot,ps,whoami,id,useradd,netinfo\nplanned=mount,kill,service,hostname,netconfig,passwd,package,tappinstall,tappremove,imagebuild,imagesign,imageencrypt,keygen,provisionui,provisioninit,provisionconfig,provisionvariant,provisionapi,provisionresources,remoteaccess,terminaltheme,videomode,deploy,provision,rollback\npolicy=high-risk-tools-must-be-explicit\n";
     constexpr char ProvisioningText[] = "pipeline=project-workspace,provision-config,device-variants,project-api,resource-budget,app-bundle,app-signature,system-profile,encryption-default,image-manifest,image-build,image-sign,image-encrypt,remote-folder-access,deploy-check,deploy-ssh,target-verify,rollback-slot\nhost-tool=scripts/tinyos-image.sh\nready-contracts=app-bundle,app-signature,system-profile,encryption-default,image-manifest,deploy-check,deploy-receipt\nplanned-host-tools=provisioninit,provisionconfig,provisionvariant,provisionresources,imagebuild,imagesign,imageencrypt,keygen,remoteaccess,deploy\nplanned-kernel=provisionapi,provisionui,terminaltheme,videomode,target-verify,rollback-slot\ntransport=ssh-sftp-now,tinylink-later\npolicy=isolated-workspace,sign-before-deploy,encrypt-by-default,deploy-check-before-transport,remote-access-opt-in,rollback-before-activate\n";
     constexpr char InstallText[] = "state=ready-contract,ready-mock\nmedia=iso-current,disk-install-planned\nprofile=examples/install.profile\nhost-tools=install-plan,check-install-profile\ncommands=installinfo,installcheck,install\nreceipt=/receipts/install.receipt\ninputs=device.name,network.mode,user.name,credential.bootstrap,admin.mode\nmock-policy=ramfs-receipt-only,no-disk-writes\ncredential-policy=prompt-only,password-hashing-required,no-plaintext-secrets\nadmin-policy=shared-bootstrap-development-only,separate-secret-or-key-release\nprovisioning=available-after-first-boot\n";
     constexpr char ProfileText[] = "tinyos.profile.version=0\nstate=ramfs-default\nsource=/system/profile.txt\ndevice.name=tinyos-dev-vm\ndevice.variant=qemu-i686-terminal\nboot.target=i686-pc-qemu\nnetwork.mode=disabled\nuser.bootstrap=developer\ncredential.bootstrap=prompt\nadmin.mode=same-bootstrap-secret\nsecurity.password_hashing=required\nsecurity.plaintext_secrets=forbidden\nprovisioning.encryption=required\nprovisioning.remote_access=disabled\nstorage.persistence=ramfs-only\ninstall.state=mock\n";
@@ -45,7 +47,19 @@ namespace
     tinyos::kernel::vfs::Node g_apps_info = { "apps.txt", false, AppsText, nullptr, sizeof(AppsText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_tapp_info = { "tapp.txt", false, TappText, nullptr, sizeof(TappText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_trust_info = { "trust.txt", false, TrustText, nullptr, sizeof(TrustText) - 1, 0, false, &g_system };
-    tinyos::kernel::vfs::Node g_tools_info = { "tools.txt", false, ToolsText, nullptr, sizeof(ToolsText) - 1, 0, false, &g_system };
+    // tools.txt is generated at initialisation from the command registry rather
+    // than being a hand-written literal. The old literal listed commands that
+    // had been deleted (filemgr, fileui, helpsearch) and omitted commands that
+    // existed (echo, umount), which made it actively misleading (defect D22).
+    //
+    // Size is derived, not guessed: 96 commands x ~88 bytes per line is about
+    // 8.5 KiB. The first attempt used 2048 bytes, which silently cut the file
+    // mid-line once the registry passed ~24 entries — the same truncation
+    // failure this rewrite exists to remove, so build_tools_catalogue() also
+    // appends an explicit marker if the buffer ever fills. (defect D44)
+    char g_tools_info_buffer[10240] = {};
+
+    tinyos::kernel::vfs::Node g_tools_info = { "tools.txt", false, nullptr, g_tools_info_buffer, 0, sizeof(g_tools_info_buffer) - 1, false, &g_system };
     tinyos::kernel::vfs::Node g_provisioning_info = { "provisioning.txt", false, ProvisioningText, nullptr, sizeof(ProvisioningText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_install_info = { "install.txt", false, InstallText, nullptr, sizeof(InstallText) - 1, 0, false, &g_system };
     tinyos::kernel::vfs::Node g_profile_info = { "profile.txt", false, ProfileText, nullptr, sizeof(ProfileText) - 1, 0, false, &g_system };
@@ -449,6 +463,108 @@ namespace
 
         return false;
     }
+    // Rebuilds the /system/tools.txt payload from the command registry.
+    //
+    // Format is line oriented and machine readable, matching the other contract
+    // files in /system: one `command=<name>` line per registered command, then
+    // summary counts. A reader that wants availability asks the shell; this file
+    // exists so the list itself has exactly one source.
+    void build_tools_catalogue()
+    {
+        size_t used = 0;
+        bool overflowed = false;
+
+        // Appends with an explicit overflow flag. The previous version silently
+        // dropped the rest of the file once the buffer filled, which produced a
+        // tools.txt that ended mid-word and looked like a formatting bug rather
+        // than truncation (defect D44).
+        auto append = [&used, &overflowed](const char* value) {
+            if (value == nullptr)
+            {
+                return;
+            }
+
+            for (size_t index = 0; value[index] != '\0'; ++index)
+            {
+                if (used + 1 >= sizeof(g_tools_info_buffer))
+                {
+                    overflowed = true;
+                    return;
+                }
+
+                g_tools_info_buffer[used] = value[index];
+                ++used;
+            }
+        };
+
+        auto append_number = [&append](size_t value) {
+            char digits[21];
+            size_t position = sizeof(digits);
+            digits[--position] = '\0';
+
+            do
+            {
+                digits[--position] = static_cast<char>('0' + (value % 10));
+                value /= 10;
+            } while (value != 0 && position > 0);
+
+            append(&digits[position]);
+        };
+
+        append("format=tinyos-tools-v1\n");
+        append("source=libshell-registry\n");
+
+        size_t ready = 0;
+        size_t written = 0;
+        for (size_t index = 0; index < tinyos::libshell::command_count(); ++index)
+        {
+            const auto* command = tinyos::libshell::command_at(index);
+            if (command == nullptr || command->name == nullptr)
+            {
+                continue;
+            }
+
+            if (tinyos::libshell::is_available(command->availability))
+            {
+                ++ready;
+            }
+
+            if (overflowed)
+            {
+                continue;
+            }
+
+            append("command=");
+            append(command->name);
+            append(" availability=");
+            append(tinyos::libshell::availability_name(command->availability));
+            append(" risk=");
+            append(tinyos::libshell::risk_name(command->risk));
+            append(" category=");
+            append(tinyos::libshell::category_name(command->category));
+            append("\n");
+            ++written;
+        }
+
+        append("total=");
+        append_number(tinyos::libshell::command_count());
+        append("\nready=");
+        append_number(ready);
+        append("\n");
+
+        // A truncated catalogue is a defect, so it says so in the file itself
+        // instead of ending abruptly.
+        if (overflowed)
+        {
+            append("\ntruncated=yes entries_written=");
+            append_number(written);
+            append("\n");
+        }
+
+        g_tools_info_buffer[used] = '\0';
+        g_tools_info.size = used;
+    }
+
 }
 
 namespace tinyos::kernel::vfs::ramfs
@@ -460,9 +576,12 @@ namespace tinyos::kernel::vfs::ramfs
             g_static_node_modes[index] = default_mode_for(g_nodes[index]);
         }
 
+        // tools.txt is regenerated from the live registry so the file cannot
+        // drift from the commands the shell actually accepts (defect D22).
+        build_tools_catalogue();
+
         for (size_t index = 0; index < MaxRuntimeDirectories; ++index)
-        {
-            g_runtime_directory_used[index] = false;
+        {            g_runtime_directory_used[index] = false;
             g_runtime_directory_names[index][0] = '\0';
             g_runtime_directory_modes[index] = 0755;
         }

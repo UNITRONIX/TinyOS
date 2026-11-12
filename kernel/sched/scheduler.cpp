@@ -75,6 +75,11 @@ namespace
     bool g_irq_preemption_enabled = false;
     bool g_ready = false;
 
+    // Depth, not a flag: a command may legitimately nest idle waits (read a
+    // character, discover an escape sequence, read the rest of it).
+    uint32_t g_idle_wait_depth = 0;
+    uint64_t g_idle_wait_enter_count = 0;
+
     bool task_is_runnable(const tinyos::kernel::task::Task* task)
     {
         return task != nullptr &&
@@ -273,6 +278,15 @@ namespace tinyos::kernel::sched
         ++g_ticks_since_switch;
 
         wake_blocked_tasks(g_tick_count);
+
+        // A task parked in an idle wait is waiting for a device, not hogging the
+        // CPU, so its ticks do not count against the watchdog budget. Without
+        // this the shell produced a watchdog warning every time it sat at the
+        // prompt waiting for a keystroke.
+        if (g_idle_wait_depth > 0)
+        {
+            g_ticks_since_switch = 0;
+        }
 
         if (g_ticks_since_switch > TaskWatchdogTicks &&
             g_current_task != nullptr &&
@@ -602,6 +616,38 @@ namespace tinyos::kernel::sched
     uint64_t watchdog_warning_count()
     {
         return g_watchdog_warning_count;
+    }
+
+    void begin_idle_wait()
+    {
+        ++g_idle_wait_depth;
+        ++g_idle_wait_enter_count;
+
+        // The wait starts now, so the time spent before it is not charged
+        // against the next stretch of work.
+        g_ticks_since_switch = 0;
+    }
+
+    void end_idle_wait()
+    {
+        if (g_idle_wait_depth > 0)
+        {
+            --g_idle_wait_depth;
+        }
+
+        // Restart the watchdog budget: the task resumed with real work to do.
+        g_ticks_since_switch = 0;
+        g_watchdog_episode_active = false;
+    }
+
+    bool idle_wait_active()
+    {
+        return g_idle_wait_depth > 0;
+    }
+
+    uint64_t idle_wait_enter_count()
+    {
+        return g_idle_wait_enter_count;
     }
 
     uint64_t watchdog_threshold_ticks()

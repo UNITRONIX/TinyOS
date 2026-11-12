@@ -22,6 +22,11 @@ namespace tinyos::drivers::keyboard
     void handle_irq();
     char read_char();
     void read_line(char* buffer, size_t max_length);
+
+    // Non-blocking single-character read. Returns false when no character is
+    // pending. Exposed so the console can arbitrate between keyboard and serial
+    // input without duplicating the scancode queue.
+    bool try_read_char(char& character);
     bool is_special_key(char character);
     size_t buffered_character_count();
     uint64_t irq_scancode_count();

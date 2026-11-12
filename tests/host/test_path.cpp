@@ -125,6 +125,67 @@ namespace
         check(tinyos::libk::path::length("/users") == 6, "path length");
         check(tinyos::libk::path::length(nullptr) == 0, "null length");
     }
+
+    // resolve()/join()/parent_of()/name_of() replaced a second, differently
+    // limited implementation inside shell/shell.cpp (defect D13). These cases
+    // pin down the behaviour the shell relied on.
+    void test_resolve()
+    {
+        std::printf("path resolution\n");
+
+        char output[tinyos::libk::path::MaxPathBufferBytes];
+        auto resolve = [&output](const char* base, const char* input) {
+            return tinyos::libk::path::resolve(base, input, output, sizeof(output));
+        };
+
+        check(resolve("/home/alice", "notes.txt") && std::strcmp(output, "/home/alice/notes.txt") == 0,
+            "relative against base");
+        check(resolve("/home/alice", "/etc/hosts") && std::strcmp(output, "/etc/hosts") == 0,
+            "absolute ignores base");
+        check(resolve("/home/alice", ".") && std::strcmp(output, "/home/alice") == 0,
+            "dot stays");
+        check(resolve("/home/alice", "..") && std::strcmp(output, "/home") == 0,
+            "dot-dot climbs");
+        check(resolve("/home/alice", "../bob/docs") && std::strcmp(output, "/home/bob/docs") == 0,
+            "dot-dot with child");
+        check(resolve("/home/alice", "../../../../etc") && std::strcmp(output, "/etc") == 0,
+            "dot-dot cannot escape root");
+        check(resolve("/", "..") && std::strcmp(output, "/") == 0, "dot-dot at root is a no-op");
+        check(resolve("/home", "//a///b") && std::strcmp(output, "/a/b") == 0,
+            "repeated separators collapse and absolute input ignores base");
+        check(resolve(nullptr, "a") && std::strcmp(output, "/a") == 0, "null base is root");
+
+        check(!resolve("/home", "a;reboot"), "metacharacter rejected");
+        // Climbing above the root clamps at "/" instead of escaping; there is no
+        // way to name anything above the root, so this stays a valid path.
+        check(resolve("/home", "a/../../..") && std::strcmp(output, "/") == 0,
+            "climbing past root clamps to root");
+    }
+
+    void test_join_and_parent()
+    {
+        std::printf("join and parent\n");
+
+        char output[tinyos::libk::path::MaxPathBufferBytes];
+
+        check(tinyos::libk::path::join("/home", "alice", output, sizeof(output)) &&
+            std::strcmp(output, "/home/alice") == 0, "join child");
+        check(tinyos::libk::path::join("/", "home", output, sizeof(output)) &&
+            std::strcmp(output, "/home") == 0, "join onto root");
+
+        check(tinyos::libk::path::parent_of("/home/alice/notes.txt", output, sizeof(output)) &&
+            std::strcmp(output, "/home/alice") == 0, "parent of file");
+        check(tinyos::libk::path::parent_of("/home/alice", output, sizeof(output)) &&
+            std::strcmp(output, "/home") == 0, "parent of dir");
+        check(tinyos::libk::path::parent_of("/home", output, sizeof(output)) &&
+            std::strcmp(output, "/") == 0, "parent of top-level");
+        check(!tinyos::libk::path::parent_of("/", output, sizeof(output)), "root has no parent");
+
+        const char* name = tinyos::libk::path::name_of("/home/alice/notes.txt");
+        check(name != nullptr && std::strcmp(name, "notes.txt") == 0, "name of file");
+        check(tinyos::libk::path::name_of("/") == nullptr, "root has no name");
+        check(tinyos::libk::path::name_of(nullptr) == nullptr, "null has no name");
+    }
 }
 
 int main()
@@ -134,6 +195,8 @@ int main()
     test_length_limits();
     test_prefix_rules();
     test_length_helper();
+    test_resolve();
+    test_join_and_parent();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

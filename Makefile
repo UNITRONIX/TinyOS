@@ -158,6 +158,12 @@ endif
 # Development-only bootstrap credentials (root/tinyos, user/user). Never enable
 # this for a release image; the credential store replaces it in the security
 # phase.
+#
+# Enabled by default for the QEMU development image: without a way to log in, the
+# shell is unusable because an unauthenticated session has no administrative
+# capabilities (defect D48). A release build must pass
+# ALLOW_DEVELOPMENT_CREDENTIALS=0, and the boot log says which build it is.
+ALLOW_DEVELOPMENT_CREDENTIALS ?= 1
 ifeq ($(ALLOW_DEVELOPMENT_CREDENTIALS),1)
 	CXXFLAGS += -DTINYOS_ALLOW_DEVELOPMENT_CREDENTIALS
 endif
@@ -165,9 +171,18 @@ endif
 KERNEL_CPP_SOURCES := \
 	api/system_api.cpp \
    core/memory.cpp \
+	core/libc.cpp \
 	core/string.cpp \
-	kernel/sync.cpp \
+	libk/text.cpp \
+	libk/sha256.cpp \
 	libk/path.cpp \
+	libshell/stream.cpp \
+	libshell/session.cpp \
+	libshell/registry.cpp \
+	libshell/parser.cpp \
+	libshell/exec.cpp \
+	libshell/capture.cpp \
+	kernel/sync.cpp \
 	drivers/input.cpp \
    drivers/pic.cpp \
 	drivers/pit.cpp \
@@ -221,8 +236,14 @@ KERNEL_CPP_SOURCES := \
 	ui/font.cpp \
 	ui/font_atlas.cpp \
 	ui/gfx_scrollback.cpp \
-	shell/completion.cpp \
-	shell/shell.cpp
+	shell/sh.cpp \
+	shell/commands/fs.cpp \
+	shell/commands/shell.cpp \
+	shell/commands/system.cpp \
+	shell/commands/scheduler.cpp \
+	shell/commands/identity.cpp \
+	shell/commands/planned.cpp \
+	shell/commands/register.cpp
 
 ASM_SOURCES := \
     arch/i686/interrupt_stubs.asm \
@@ -270,7 +291,7 @@ DISK_BOOT_TEST_LOG ?= build/boot-disk.log
 QEMU_VIRTIO_ARGS = -drive file=$(DISK_IMAGE),format=raw,if=none,id=disk0 -device virtio-blk-pci,drive=disk0
 QEMU_DISK_BOOT_ARGS = -drive file=$(BOOT_DISK_IMAGE),format=raw,if=ide,index=0,media=disk -boot order=c
 
-.PHONY: all iso run run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build disk-image virtio-disk-image ata-disk-image boot-disk-image test-boot test-boot-x86_64 test-memory-scaling test-host test-virtio-block test-ata-block test-disk-boot test-existing-iso test-minimal test-minimal-probe test-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
+.PHONY: all iso run run-headless image-plan provision-plan install-plan image-profile-check install-profile-check image-app-check image-deploy-check-test tapp-pack tapp-verify tapp-sign-test tapp-trust-test image-build disk-image virtio-disk-image ata-disk-image boot-disk-image test-boot test-boot-x86_64 test-shell-qemu test-memory-scaling test-host test-virtio-block test-ata-block test-disk-boot test-existing-iso test-minimal test-minimal-probe test-lowmem-probe test-stability test-gate debug-boot debug-run check-build-tools check-image-tools check-qemu-tools check-test-tools prepare-test-env dev-help clean
 
 all: check-build-tools $(TARGET)
 
@@ -298,15 +319,53 @@ dev-help:
 # Host unit tests: compile the pure-logic modules for the host and run them.
 # These cover security-relevant validators that used to be testable only by
 # booting the kernel and typing at the shell.
-HOST_TEST_BIN := build/host-tests
-HOST_TEST_SOURCES := \
-	tests/host/test_path.cpp \
-	libk/path.cpp
+#
+# Every tests/host/test_*.cpp becomes its own binary automatically, so adding a
+# test never requires editing this file. The previous hard-coded single-entry
+# source list actively discouraged writing tests (defect D26).
+#
+# tests/host/test_<name>.cpp links libk/*.cpp plus the pure-logic core helpers.
+# Tests that need different objects can override HOST_TEST_EXTRA_SOURCES on the
+# command line, or place their own main() and rely on the defaults below.
+HOST_TEST_DIR := tests/host
+HOST_TEST_BIN_DIR := build/host-test-bin
+# Support objects available to every host test. These must stay free of kernel
+# and driver dependencies: the registry pulls stream.hpp only for the Stream
+# pointer in Context, never the driver-backed implementations.
+HOST_TEST_SUPPORT := \
+	libk/path.cpp \
+	libk/text.cpp \
+	libk/sha256.cpp \
+	core/memory.cpp \
+	libshell/session.cpp \
+	libshell/registry.cpp \
+	libshell/parser.cpp \
+	libshell/exec.cpp \
+	libshell/capture.cpp
+HOST_TEST_NAMES := $(patsubst $(HOST_TEST_DIR)/test_%.cpp,%,$(wildcard $(HOST_TEST_DIR)/test_*.cpp))
+HOST_TEST_BINS := $(addprefix $(HOST_TEST_BIN_DIR)/,$(HOST_TEST_NAMES))
+HOST_CXXFLAGS := -std=gnu++17 -Wall -Wextra -O1 -Iinclude
 
 test-host:
-	@mkdir -p build
-	$(CLANG_CXX) -std=gnu++17 -Wall -Wextra -O1 -Iinclude $(HOST_TEST_SOURCES) -o $(HOST_TEST_BIN)
-	@$(HOST_TEST_BIN)
+	@mkdir -p $(HOST_TEST_BIN_DIR)
+	@set -e; \
+	if [ -z "$(HOST_TEST_NAMES)" ]; then \
+		echo "No host tests found in $(HOST_TEST_DIR)."; \
+		exit 1; \
+	fi; \
+	failures=0; \
+	for name in $(HOST_TEST_NAMES); do \
+		echo "=== host test: $$name ==="; \
+		$(CLANG_CXX) $(HOST_CXXFLAGS) \
+			$(HOST_TEST_DIR)/test_$$name.cpp $(HOST_TEST_SUPPORT) $(HOST_TEST_EXTRA_SOURCES) \
+			-o $(HOST_TEST_BIN_DIR)/$$name; \
+		if ! $(HOST_TEST_BIN_DIR)/$$name; then failures=$$((failures + 1)); fi; \
+	done; \
+	if [ $$failures -ne 0 ]; then \
+		echo "$$failures host test binarie(s) failed."; \
+		exit 1; \
+	fi; \
+	echo "All host tests passed."
 
 $(TARGET): $(OBJECTS)
 	$(LINK)
@@ -398,6 +457,14 @@ test-boot: check-test-tools iso
 
 test-boot-x86_64:
 	$(MAKE) ARCH=x86_64 BOOT_TEST_LOG=build/boot-x86_64.log test-boot
+
+# Shell behaviour test: drives the real shell over the serial console and
+# asserts on responses. Before this target there was no automated test of shell
+# behaviour at all, which is how commands shipped that printed "not wired to a
+# create path yet" while their manifest entry claimed Ready.
+test-shell-qemu: check-test-tools iso
+	@echo "Running TinyOS shell behaviour test over serial..."
+	python3 scripts/tinyos-shell-test.py $(ISO)
 
 # Memory scaling regression test. The frame allocator used to be clamped to
 # 16 MiB and later to a 256 MiB bitmap, so a machine with more RAM silently got
@@ -600,6 +667,7 @@ test-gate: check-test-tools check-image-tools
 	@echo "=== TinyOS change-scope gate: stability + security ==="
 	$(MAKE) prepare-test-env
 	$(MAKE) test-host
+	$(MAKE) test-shell-qemu
 	$(MAKE) test-stability
 	$(MAKE) test-boot-x86_64
 	$(MAKE) test-memory-scaling

@@ -365,6 +365,21 @@ namespace tinyos::drivers::keyboard
         }
     }
 
+    bool try_read_char(char& character)
+    {
+        if (pop_character(character))
+        {
+            return true;
+        }
+
+        if (!g_interrupt_input_enabled)
+        {
+            return try_poll_character(character);
+        }
+
+        return try_poll_character(character);
+    }
+
     void read_line(char* buffer, size_t max_length)
     {
         if (max_length == 0)

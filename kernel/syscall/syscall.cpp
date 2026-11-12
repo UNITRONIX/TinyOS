@@ -60,28 +60,40 @@ namespace
         return length > static_cast<size_t>(~static_cast<uintptr_t>(0) - address);
     }
 
+
     bool validate_buffer(uintptr_t address, size_t length, bool count_failure)
     {
+        auto fail = [count_failure]() {
+            if (count_failure)
+            {
+                ++g_validation_failure_count;
+            }
+            return false;
+        };
+
+        // Zero-length and overflowing ranges are rejected before the page walk.
+        //
+        // The order matters: user_access::probe() deliberately returns Ok for a
+        // zero-length range (a zero-byte copy is vacuous), so asking it first
+        // would accept a syscall whose buffer length is zero — the exact
+        // contradiction between the two layers recorded as defect D14.
+        if (length == 0)
+        {
+            return fail();
+        }
+
+        if (range_overflows(address, length))
+        {
+            return fail();
+        }
+
         // Delegate to the page-table walker rather than range-checking: a range
         // check accepts unmapped addresses, kernel pages and guard pages as long
         // as the numbers look plausible.
         const auto status = tinyos::kernel::memory::user_access::probe(address, length, false);
         if (status != tinyos::kernel::memory::user_access::Status::Ok)
         {
-            if (count_failure)
-            {
-                ++g_validation_failure_count;
-            }
-            return false;
-        }
-
-        if (length == 0)
-        {
-            if (count_failure)
-            {
-                ++g_validation_failure_count;
-            }
-            return false;
+            return fail();
         }
 
         return true;

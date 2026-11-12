@@ -9,8 +9,10 @@
 
 namespace
 {
-    constexpr size_t MaxPathBytes = 128;
-    constexpr size_t MaxSegmentBytes = 48;
+    // Path limits come from libk::path so the shell, the VFS and the tests all
+    // agree on what fits. Local duplicates of these constants are what let the
+    // shell clip paths the VFS considered valid (defect D13).
+    using tinyos::libk::path::MaxPathBytes;
 
     bool g_ready = false;
 

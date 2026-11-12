@@ -1,7 +1,60 @@
-# Shell scripts, Python helpers and test data must use LF line endings on all
-# platforms. Profiles and manifests are parsed by awk/shell inside WSL, where a
-# stray CR turns a valid value into an invalid one.
-*.sh text eol=lf
-*.py text eol=lf
-*.profile text eol=lf
+# Line endings are part of the source contract, not a platform preference.
+#
+# The project is developed on Windows and built inside WSL. Before this file
+# normalised C and C++ sources, every checkout produced CRLF for .cpp/.hpp while
+# the repository copy was LF, so `git diff` reported 180/180 line changes in
+# files nobody had touched. That noise hides real edits and makes review
+# unreliable (defect D39).
+#
+# Policy: everything is LF unless a tool genuinely needs CRLF.
+
+* text=auto eol=lf
+
+# C and C++ sources, headers, linker scripts and assembly. These are compiled by
+# clang and nasm inside WSL, where a stray CR inside a string literal or an
+# assembler directive is a real defect.
+*.c    text eol=lf
+*.cc   text eol=lf
+*.cpp  text eol=lf
+*.h    text eol=lf
+*.hpp  text eol=lf
+*.asm  text eol=lf
+*.ld   text eol=lf
+*.inc  text eol=lf
+
+# Build and configuration files consumed by make, bash, awk and python.
+Makefile        text eol=lf
+*.mk            text eol=lf
+*.sh            text eol=lf
+*.py            text eol=lf
+*.cfg           text eol=lf
+*.profile       text eol=lf
+*.manifest       text eol=lf
+*.tapp          text eol=lf
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
+
+# Documentation and data.
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
 tests/*.txt text eol=lf
+
+# Visual Studio files are written by the IDE and expect CRLF. Marking them
+# binary keeps git from rewriting them on every save.
+*.sln   text eol=crlf
+*.vcxproj text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.ps1   text eol=crlf
+
+# Artefacts that must never be normalised or diffed.
+*.iso   binary
+*.img   binary
+*.kernel binary
+*.o     binary
+*.a     binary
+*.pem   binary
+*.age   binary
+*.sig   binary
